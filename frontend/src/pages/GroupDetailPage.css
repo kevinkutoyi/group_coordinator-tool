@@ -77,3 +77,73 @@
 }
 .msg-ok  { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.2);  color: var(--success); }
 .msg-err { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--error);   }
+
+/* ── Fee banner ── */
+.fee-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg3);
+  border-radius: 12px;
+  padding: 14px 18px;
+  flex-wrap: wrap;
+}
+.fee-item { display: flex; flex-direction: column; gap: 3px; }
+.fee-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.fee-val { font-family: var(--font-head); font-size: 1.1rem; font-weight: 700; }
+.fee-small { font-size: 0.95rem; color: var(--warning); }
+.fee-plus, .fee-equals { font-size: 1.2rem; color: var(--muted); font-weight: 300; }
+.fee-total .fee-label { color: var(--accent); }
+.fee-highlight { color: var(--accent); font-size: 1.3rem; }
+
+/* ── PesaPal button ── */
+.pesapal-btn {
+  background: linear-gradient(135deg, #1a6f3c, #28a057);
+  color: #fff;
+  border: none;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+.pesapal-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* ── PesaPal info card ── */
+.pesapal-info-card {
+  background: var(--card);
+  border: 1px solid rgba(40,160,87,0.25);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.pesapal-logo {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #28a057;
+  margin-bottom: 8px;
+}
+.pesapal-info-card p {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.payment-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.payment-methods span {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  color: var(--text);
+}
+.fee-note {
+  font-size: 0.75rem !important;
+  background: rgba(124,106,255,0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #c4bcff !important;
+  border: 1px solid rgba(124,106,255,0.15);
+}

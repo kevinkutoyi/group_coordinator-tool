@@ -12,12 +12,17 @@ async function req(path, opts = {}) {
 }
 
 export const api = {
-  getServices:           ()         => req("/services"),
-  getGroups:             ()         => req("/groups"),
-  getGroup:              (id)       => req(`/groups/${id}`),
-  createGroup:           (body)     => req("/groups",                  { method: "POST", body }),
-  joinGroup:             (id, body) => req(`/groups/${id}/join`,       { method: "POST", body }),
-  updateGroupStatus:     (id, status) => req(`/groups/${id}/status`,   { method: "PATCH", body: { status } }),
-  recordPayment:         (groupId, body) => req(`/groups/${groupId}/payments`, { method: "POST", body }),
-  getStats:              ()         => req("/stats"),
+  getServices:       ()              => req("/services"),
+  getGroups:         ()              => req("/groups"),
+  getGroup:          (id)            => req(`/groups/${id}`),
+  createGroup:       (body)          => req("/groups",               { method: "POST", body }),
+  joinGroup:         (id, body)      => req(`/groups/${id}/join`,    { method: "POST", body }),
+  updateGroupStatus: (id, status)    => req(`/groups/${id}/status`,  { method: "PATCH", body: { status } }),
+  recordPayment:     (gid, body)     => req(`/groups/${gid}/payments`,{ method: "POST", body }),
+  getStats:          ()              => req("/stats"),
+  getEarnings:       ()              => req("/admin/earnings"),
+
+  // PesaPal
+  initiatePesapal:   (body)          => req("/pesapal/initiate",     { method: "POST", body }),
+  verifyPesapal:     (orderId)       => req(`/pesapal/verify?orderId=${orderId}`),
 };

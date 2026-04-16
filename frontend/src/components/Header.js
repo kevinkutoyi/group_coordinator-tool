@@ -12,6 +12,7 @@ export default function Header({ page, navigate }) {
         <nav className="nav">
           <button className={`nav-link ${page === "home" ? "active" : ""}`} onClick={() => navigate("home")}>Home</button>
           <button className={`nav-link ${page === "groups" ? "active" : ""}`} onClick={() => navigate("groups")}>Browse Groups</button>
+          <button className={`nav-link ${page === "earnings" ? "active" : ""}`} onClick={() => navigate("earnings")}>💰 Earnings</button>
           <button className="btn btn-primary btn-sm" onClick={() => navigate("create")}>+ Create Group</button>
         </nav>
       </div>

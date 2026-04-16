@@ -1,0 +1,19 @@
+.earnings-page { max-width: 900px; }
+
+.earnings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 700px) {
+  .earnings-grid { grid-template-columns: 1fr; }
+}
+
+.earning-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.earning-row:last-child { border-bottom: none; }
