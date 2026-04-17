@@ -58,3 +58,11 @@
 @media (max-width: 560px) {
   .nav-link:not(:last-of-type) { display: none; }
 }
+
+.admin-nav-link {
+  color: var(--muted);
+}
+.admin-nav-link:hover,
+.admin-nav-link.active {
+  color: var(--accent);
+}

@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require("uuid");
 const fs   = require("fs");
 const path = require("path");
 const pesapal = require("./pesapal");
+const { loginHandler, requireAdmin, refreshHandler } = require("./auth");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -361,26 +362,69 @@ app.post("/api/pesapal/ipn", async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  ADMIN AUTH ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/admin/login
+ * Body: { username, password }
+ * Returns: { token, expiresIn }
+ * No auth required — this IS the auth endpoint.
+ */
+app.post("/api/admin/login", loginHandler);
+
+/**
+ * POST /api/admin/refresh
+ * Requires valid Bearer token. Returns a fresh token (same expiry window).
+ */
+app.post("/api/admin/refresh", requireAdmin, refreshHandler);
+
 /**
  * GET /api/admin/earnings
- * Platform earnings dashboard — protect this with auth in production!
+ * 🔒 PROTECTED — requires valid admin JWT in Authorization header.
+ *    Authorization: Bearer <token>
  */
-app.get("/api/admin/earnings", (req, res) => {
+app.get("/api/admin/earnings", requireAdmin, (req, res) => {
   const db = loadDB();
   const total = db.platformEarnings.reduce((acc, e) => acc + (e.fee || 0), 0);
+
   const byGroup = db.groups.map((g) => {
     const fees = db.platformEarnings
       .filter((e) => e.groupId === g.id)
       .reduce((acc, e) => acc + e.fee, 0);
-    return { groupId: g.id, serviceName: g.serviceName, planName: g.planName, fees: +fees.toFixed(2) };
+    return {
+      groupId:     g.id,
+      serviceName: g.serviceName,
+      planName:    g.planName,
+      fees:        +fees.toFixed(2),
+    };
   }).filter((g) => g.fees > 0);
 
+  // Monthly breakdown (last 12 months)
+  const now = new Date();
+  const monthlyEarnings = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    const label = d.toLocaleString("default", { month: "short", year: "2-digit" });
+    const total = db.platformEarnings
+      .filter((e) => {
+        const ed = new Date(e.earnedAt);
+        return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth();
+      })
+      .reduce((acc, e) => acc + (e.fee || 0), 0);
+    return { label, total: +total.toFixed(2) };
+  });
+
   res.json({
-    totalEarned:    +total.toFixed(2),
-    feePercent:     FEE_PERCENT,
-    earningsCount:  db.platformEarnings.length,
-    pendingOrders:  db.pesapalOrders.filter((o) => o.status === "PENDING").length,
+    totalEarned:     +total.toFixed(2),
+    feePercent:      FEE_PERCENT,
+    earningsCount:   db.platformEarnings.length,
+    pendingOrders:   db.pesapalOrders.filter((o) => o.status === "PENDING").length,
+    completedOrders: db.pesapalOrders.filter((o) => o.status === "COMPLETED").length,
+    totalGroups:     db.groups.length,
+    totalMembers:    db.members.length,
     byGroup,
+    monthlyEarnings,
     recentEarnings: db.platformEarnings.slice(-20).reverse(),
   });
 });
