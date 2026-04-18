@@ -68,3 +68,15 @@
 }
 .msg-ok  { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.2);  color: var(--success); }
 .msg-err { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--error);   }
+
+/* Organizer auto-populated box */
+.organizer-info-box {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.org-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.org-name  { font-weight: 600; font-size: 0.9rem; }
+.org-email { font-size: 0.8rem; color: var(--muted); }

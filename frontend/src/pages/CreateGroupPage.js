@@ -1,63 +1,64 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, session } from "../api";
 import "./CreateGroupPage.css";
 
 export default function CreateGroupPage({ navigate }) {
-  const [services, setServices] = useState([]);
-  const [selectedService, setSelectedService] = useState(null);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
+  const [services, setServices]       = useState([]);
+  const [selectedService, setSvc]     = useState(null);
+  const [selectedPlan, setPlan]       = useState(null);
+  const [busy, setBusy]               = useState(false);
+  const [error, setError]             = useState("");
   const [form, setForm] = useState({
-    serviceId: "", planName: "", totalPrice: "",
-    maxSlots: "", organizerName: "", organizerEmail: "", description: "",
+    serviceId: "", planName: "", totalPrice: "", maxSlots: "", description: "",
   });
 
   useEffect(() => {
+    // Moderator/superadmin only
+    if (!session.isLoggedIn()) { navigate("login"); return; }
+    if (!["moderator","superadmin"].includes(session.getRole())) { navigate("groups"); return; }
     api.getServices().then(setServices).catch(() => setError("Could not load services."));
   }, []);
 
   function handleServiceChange(e) {
-    const svc = services.find((s) => s.id === e.target.value);
-    setSelectedService(svc || null);
-    setSelectedPlan(null);
-    setForm((f) => ({ ...f, serviceId: e.target.value, planName: "", totalPrice: "", maxSlots: "" }));
+    const svc = services.find(s => s.id === e.target.value);
+    setSvc(svc || null); setPlan(null);
+    setForm(f => ({ ...f, serviceId: e.target.value, planName: "", totalPrice: "", maxSlots: "" }));
   }
 
   function handlePlanChange(e) {
-    const plan = selectedService?.plans.find((p) => p.name === e.target.value);
-    setSelectedPlan(plan || null);
-    setForm((f) => ({
-      ...f, planName: e.target.value,
-      totalPrice: plan ? plan.price : "",
-      maxSlots: plan ? plan.maxSlots : "",
-    }));
+    const plan = selectedService?.plans.find(p => p.name === e.target.value);
+    setPlan(plan || null);
+    setForm(f => ({ ...f, planName: e.target.value, totalPrice: plan ? plan.price : "", maxSlots: plan ? plan.maxSlots : "" }));
   }
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const pricePerSlot =
-    form.totalPrice && form.maxSlots
-      ? (parseFloat(form.totalPrice) / parseInt(form.maxSlots)).toFixed(2)
-      : null;
+  const pricePerSlot = form.totalPrice && form.maxSlots
+    ? (parseFloat(form.totalPrice) / parseInt(form.maxSlots)).toFixed(2)
+    : null;
+
+  const feePercent = 2;
+  const memberPays = pricePerSlot
+    ? (parseFloat(pricePerSlot) * (1 + feePercent / 100)).toFixed(2)
+    : null;
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setBusy(true);
+    e.preventDefault(); setError(""); setBusy(true);
     try {
       const group = await api.createGroup({
-        ...form,
+        serviceId:  form.serviceId,
+        planName:   form.planName,
         totalPrice: parseFloat(form.totalPrice),
-        maxSlots: parseInt(form.maxSlots),
+        maxSlots:   parseInt(form.maxSlots),
+        description: form.description,
       });
       navigate("group", group.id);
     } catch (err) {
-      setError(err.message);
-      setBusy(false);
+      setError(err.message); setBusy(false);
     }
   }
+
+  const user = session.getUser();
 
   return (
     <div className="create-page fade-in">
@@ -74,7 +75,7 @@ export default function CreateGroupPage({ navigate }) {
             <label>Service</label>
             <select required value={form.serviceId} onChange={handleServiceChange}>
               <option value="">— Choose a service —</option>
-              {services.map((s) => (
+              {services.map(s => (
                 <option key={s.id} value={s.id}>{s.icon} {s.name}</option>
               ))}
             </select>
@@ -85,7 +86,7 @@ export default function CreateGroupPage({ navigate }) {
               <label>Plan</label>
               <select required value={form.planName} onChange={handlePlanChange}>
                 <option value="">— Choose a plan —</option>
-                {selectedService.plans.map((p) => (
+                {selectedService.plans.map(p => (
                   <option key={p.name} value={p.name}>
                     {p.name} — ${p.price}/mo · up to {p.maxSlots} people
                   </option>
@@ -110,27 +111,21 @@ export default function CreateGroupPage({ navigate }) {
           <div className="form-group">
             <label>Description (optional)</label>
             <textarea rows={3} value={form.description} onChange={set("description")}
-              placeholder="e.g. Looking for 3 more people. Pay monthly via M-Pesa."
-              style={{ resize: "vertical" }} />
+              placeholder="e.g. Looking for 3 more people to split Spotify Family. Pay via M-Pesa."
+              style={{ resize:"vertical" }} />
           </div>
 
-          <h2 className="create-section-title" style={{ marginTop: 8 }}>Organizer Details (You)</h2>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label>Your Name</label>
-              <input required value={form.organizerName} onChange={set("organizerName")} placeholder="John Doe" />
-            </div>
-            <div className="form-group">
-              <label>Your Email</label>
-              <input required type="email" value={form.organizerEmail} onChange={set("organizerEmail")} placeholder="john@email.com" />
-            </div>
+          {/* Organizer info — auto-populated from logged-in user */}
+          <div className="organizer-info-box">
+            <div className="org-label">👤 Group Organizer (you)</div>
+            <div className="org-name">{user?.name}</div>
+            <div className="org-email">{user?.email}</div>
           </div>
 
-          {error && <div className="msg-box msg-err" style={{ marginBottom: 8 }}>{error}</div>}
+          {error && <div className="msg-box msg-err" style={{ marginBottom:8 }}>{error}</div>}
 
-          <button type="submit" className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
-            {busy ? <><span className="spinner" /> Creating…</> : "🚀 Create Group"}
+          <button type="submit" className="btn btn-primary" style={{ width:"100%" }} disabled={busy}>
+            {busy ? <><span className="spinner"/> Creating…</> : "🚀 Create Group"}
           </button>
         </form>
 
@@ -153,6 +148,7 @@ export default function CreateGroupPage({ navigate }) {
                 <div className="preview-breakdown">
                   <div className="pb-row"><span>Full plan cost</span><span>${form.totalPrice || "—"}/mo</span></div>
                   <div className="pb-row"><span>Slots</span><span>{form.maxSlots || "—"} people</span></div>
+                  <div className="pb-row"><span>Members pay (incl. 2% fee)</span><span>{memberPays ? `$${memberPays}` : "—"}/mo</span></div>
                   <div className="pb-row pb-save">
                     <span>Each member saves</span>
                     <span>{pricePerSlot ? `$${(parseFloat(form.totalPrice) - parseFloat(pricePerSlot)).toFixed(2)}/mo` : "—"}</span>
@@ -163,7 +159,7 @@ export default function CreateGroupPage({ navigate }) {
           </div>
           <div className="info-box">
             <strong>⚖️ Organizer Responsibilities</strong><br />
-            As organizer you hold the subscription and coordinate payments. Only create groups for services with official family/group plans.
+            You hold the subscription and coordinate payments. Only create groups for official family/group plans.
           </div>
         </div>
       </div>

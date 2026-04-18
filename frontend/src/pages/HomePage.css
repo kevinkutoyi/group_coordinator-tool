@@ -110,3 +110,21 @@
 
 /* ── Legal ── */
 .legal-section { margin-bottom: 20px; }
+
+/* Role callout */
+.role-callout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 8px 0 32px;
+}
+@media (max-width: 600px) { .role-callout { grid-template-columns: 1fr; } }
+
+.rc-card {
+  text-align: center;
+  padding: 32px 24px !important;
+}
+.rc-mod { border-color: rgba(124,106,255,0.3); }
+.rc-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.rc-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.rc-card p { font-size: 0.84rem; color: var(--muted); margin-bottom: 20px; line-height: 1.55; }

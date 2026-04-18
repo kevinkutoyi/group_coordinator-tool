@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import GroupCard from "../components/GroupCard";
-import { api } from "../api";
+import { api, session } from "../api";
 
 export default function GroupsPage({ navigate }) {
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [filter, setFilter]   = useState("all");
+  const [search, setSearch]   = useState("");
 
   useEffect(() => {
     api.getGroups()
@@ -15,11 +15,14 @@ export default function GroupsPage({ navigate }) {
       .finally(() => setLoading(false));
   }, []);
 
+  const canCreate = ["moderator","superadmin"].includes(session.getRole());
+
   const filtered = groups.filter(g => {
     const matchFilter = filter === "all" || g.status === filter;
-    const matchSearch = g.serviceName.toLowerCase().includes(search.toLowerCase()) ||
-      g.planName.toLowerCase().includes(search.toLowerCase()) ||
-      g.organizerName.toLowerCase().includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const matchSearch = (g.serviceName||"").toLowerCase().includes(q) ||
+      (g.planName||"").toLowerCase().includes(q) ||
+      (g.organizerName||"").toLowerCase().includes(q);
     return matchFilter && matchSearch;
   });
 
@@ -30,7 +33,12 @@ export default function GroupsPage({ navigate }) {
           <h1 className="page-title">Browse Groups</h1>
           <p className="page-sub" style={{ marginBottom:0 }}>Find an open slot in an existing group</p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate("create")}>+ Create Group</button>
+        {canCreate
+          ? <button className="btn btn-primary" onClick={() => navigate("create")}>+ Create Group</button>
+          : !session.isLoggedIn() && (
+            <button className="btn btn-outline" onClick={() => navigate("signup")}>Sign Up to Join</button>
+          )
+        }
       </div>
 
       <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:28 }}>
@@ -38,28 +46,24 @@ export default function GroupsPage({ navigate }) {
           placeholder="Search by service, plan, organizer…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ maxWidth:280 }}
+          style={{ maxWidth:300 }}
         />
         {["all","open","full","closed"].map(f => (
-          <button
-            key={f}
+          <button key={f}
             className={`btn btn-sm ${filter===f ? "btn-primary" : "btn-outline"}`}
-            onClick={() => setFilter(f)}
-          >
+            onClick={() => setFilter(f)}>
             {f.charAt(0).toUpperCase()+f.slice(1)}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div style={{ textAlign:"center", padding:60 }}><span className="spinner" /></div>
+        <div style={{ textAlign:"center", padding:60 }}><span className="spinner"/></div>
       ) : filtered.length === 0 ? (
         <div className="empty-state">
           <div className="emoji">🔍</div>
           <h3>No groups found</h3>
-          <p>Try a different filter or create the first group!</p>
-          <br />
-          <button className="btn btn-primary" onClick={() => navigate("create")}>Create a Group</button>
+          <p>Try a different filter, or check back soon for new groups.</p>
         </div>
       ) : (
         <div className="grid-2">

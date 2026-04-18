@@ -1,106 +1,55 @@
 import React, { useState } from "react";
-import { api, auth } from "../api";
-import "./AdminLoginPage.css";
+import { api, session } from "../api";
+import "./AuthPage.css";
 
 export default function AdminLoginPage({ navigate }) {
   const [form, setForm]   = useState({ username: "", password: "" });
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
-
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setBusy(true);
+    e.preventDefault(); setBusy(true); setError("");
     try {
       const res = await api.adminLogin({ username: form.username, password: form.password });
-      auth.setToken(res.token);
-      navigate("earnings");
-    } catch (err) {
-      setError(err.message || "Invalid credentials");
-    } finally {
-      setBusy(false);
-    }
+      session.set(res.token, { name: "Super Admin", role: "superadmin", id: "superadmin" });
+      navigate("admin");
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
   }
 
   return (
-    <div className="login-outer fade-in">
-      {/* Background glow */}
-      <div className="login-glow" />
-
-      <div className="login-card">
-        {/* Logo */}
-        <div className="login-logo">
-          <span className="login-logo-icon">⚡</span>
-          <span>SplitPass</span>
+    <div className="auth-outer fade-in">
+      <div className="auth-glow" />
+      <div className="auth-card">
+        <button className="logo-mark" onClick={() => navigate("home")}>⚡ SplitPass</button>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:"2.5rem",marginBottom:8}}>🛡️</div>
+          <h1 className="auth-title" style={{marginBottom:4}}>Super Admin Login</h1>
+          <p className="auth-sub" style={{marginBottom:0}}>Access restricted to platform administrators</p>
         </div>
-
-        <h1 className="login-title">Admin Login</h1>
-        <p className="login-sub">Sign in to view your platform earnings dashboard</p>
-
-        <form onSubmit={handleSubmit} className="login-form">
-          {/* Username */}
+        <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label>Username</label>
-            <div className="input-icon-wrap">
-              <span className="input-icon">👤</span>
-              <input
-                required
-                autoComplete="username"
-                value={form.username}
-                onChange={set("username")}
-                placeholder="admin"
-                className="input-with-icon"
-              />
-            </div>
+            <input required autoComplete="username" value={form.username} onChange={set("username")} placeholder="superadmin" />
           </div>
-
-          {/* Password */}
           <div className="form-group">
             <label>Password</label>
-            <div className="input-icon-wrap">
-              <span className="input-icon">🔒</span>
-              <input
-                required
-                type={showPw ? "text" : "password"}
-                autoComplete="current-password"
-                value={form.password}
-                onChange={set("password")}
-                placeholder="••••••••••"
-                className="input-with-icon"
-              />
-              <button
-                type="button"
-                className="pw-toggle"
-                onClick={() => setShowPw((v) => !v)}
-                tabIndex={-1}
-              >
-                {showPw ? "🙈" : "👁️"}
-              </button>
+            <div className="pw-wrap">
+              <input required type={showPw?"text":"password"} autoComplete="current-password"
+                value={form.password} onChange={set("password")} placeholder="••••••••" />
+              <button type="button" className="pw-eye" onClick={() => setShowPw(v=>!v)}>{showPw?"🙈":"👁️"}</button>
             </div>
           </div>
-
-          {/* Error */}
-          {error && (
-            <div className="login-error">
-              <span>⚠️</span> {error}
-            </div>
-          )}
-
-          {/* Submit */}
-          <button type="submit" className="btn btn-primary login-btn" disabled={busy}>
-            {busy
-              ? <><span className="spinner" /> Signing in…</>
-              : "Sign In →"}
+          {error && <div className="auth-error">⚠️ {error}</div>}
+          <button type="submit" className="btn btn-primary auth-btn" disabled={busy}>
+            {busy ? <><span className="spinner"/> Signing in…</> : "🔐 Access Dashboard"}
           </button>
         </form>
-
-        {/* Security note */}
-        <div className="login-security-note">
-          🔐 Protected by JWT · Session expires in 8 hours
-        </div>
+        <p className="auth-switch" style={{marginTop:16}}>
+          Regular user? <button className="link-btn" onClick={() => navigate("login")}>User login</button>
+        </p>
       </div>
     </div>
   );

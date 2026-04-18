@@ -1,5 +1,8 @@
 {
+  "users": [],
   "groups": [],
-  "members": [],
-  "payments": []
+  "groupMembers": [],
+  "payments": [],
+  "pesapalOrders": [],
+  "platformEarnings": []
 }

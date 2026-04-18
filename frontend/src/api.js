@@ -1,64 +1,86 @@
 const BASE = "http://localhost:3001/api";
 
-// ── Token storage helpers ──────────────────────────────────────────────────
-// We use a module-level variable (not localStorage per environment rules)
-// but also mirror to sessionStorage so it survives page refreshes.
-let _token = (() => {
-  try { return sessionStorage.getItem("splitpass_admin_token") || null; }
-  catch { return null; }
-})();
+// ── Session storage for tokens ────────────────────────────────────────────
+function getStored(key) { try { return sessionStorage.getItem(key); } catch { return null; } }
+function setStored(key, v) { try { sessionStorage.setItem(key, v); } catch {} }
+function removeStored(key) { try { sessionStorage.removeItem(key); } catch {} }
 
-export const auth = {
-  setToken(t) {
-    _token = t;
-    try { sessionStorage.setItem("splitpass_admin_token", t); } catch {}
+let _token    = getStored("sp_token");
+let _user     = (() => { try { const u = getStored("sp_user"); return u ? JSON.parse(u) : null; } catch { return null; } })();
+let _listeners = [];
+
+export const session = {
+  set(token, user) {
+    _token = token; _user = user;
+    setStored("sp_token", token);
+    setStored("sp_user", JSON.stringify(user));
+    _listeners.forEach(fn => fn(user));
   },
-  clearToken() {
-    _token = null;
-    try { sessionStorage.removeItem("splitpass_admin_token"); } catch {}
+  clear() {
+    _token = null; _user = null;
+    removeStored("sp_token"); removeStored("sp_user");
+    _listeners.forEach(fn => fn(null));
   },
-  getToken() { return _token; },
+  getToken()   { return _token; },
+  getUser()    { return _user; },
   isLoggedIn() { return !!_token; },
+  getRole()    { return _user?.role || null; },
+  isSuperAdmin(){ return _user?.role === "superadmin"; },
+  isModerator(){ return _user?.role === "moderator"; },
+  isCustomer() { return _user?.role === "customer"; },
+  onChange(fn) { _listeners.push(fn); return () => { _listeners = _listeners.filter(l => l !== fn); }; },
 };
 
-// ── Core fetch helper ─────────────────────────────────────────────────────
+// ── Core fetch ────────────────────────────────────────────────────────────
 async function req(path, opts = {}) {
   const headers = { "Content-Type": "application/json" };
   if (_token) headers["Authorization"] = `Bearer ${_token}`;
 
   const res = await fetch(`${BASE}${path}`, {
-    ...opts,
-    headers,
+    ...opts, headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
 
-  // If 401, token is expired/invalid — clear it
-  if (res.status === 401) {
-    auth.clearToken();
-  }
+  if (res.status === 401) session.clear();
 
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────
+// ── API methods ───────────────────────────────────────────────────────────
 export const api = {
-  getServices:       ()              => req("/services"),
-  getGroups:         ()              => req("/groups"),
-  getGroup:          (id)            => req(`/groups/${id}`),
-  createGroup:       (body)          => req("/groups",                { method: "POST", body }),
-  joinGroup:         (id, body)      => req(`/groups/${id}/join`,     { method: "POST", body }),
-  updateGroupStatus: (id, status)    => req(`/groups/${id}/status`,   { method: "PATCH", body: { status } }),
-  recordPayment:     (gid, body)     => req(`/groups/${gid}/payments`,{ method: "POST", body }),
-  getStats:          ()              => req("/stats"),
+  // Auth
+  signup:       (body)       => req("/auth/signup",        { method: "POST", body }),
+  login:        (body)       => req("/auth/login",         { method: "POST", body }),
+  me:           ()           => req("/auth/me"),
+  refreshToken: ()           => req("/auth/refresh",       { method: "POST" }),
 
-  // PesaPal
-  initiatePesapal:   (body)          => req("/pesapal/initiate",      { method: "POST", body }),
-  verifyPesapal:     (orderId)       => req(`/pesapal/verify?orderId=${orderId}`),
+  // Super admin
+  adminLogin:   (body)       => req("/admin/login",        { method: "POST", body }),
+  adminRefresh: ()           => req("/admin/refresh"),
+  getEarnings:  ()           => req("/admin/earnings"),
+  getUsers:     (params="")  => req(`/admin/users${params}`),
+  getPendingMods:()          => req("/admin/moderators/pending"),
+  approveUser:  (id)         => req(`/admin/users/${id}/approve`, { method: "PATCH" }),
+  rejectUser:   (id, reason) => req(`/admin/users/${id}/reject`,  { method: "PATCH", body: { reason } }),
+  suspendUser:  (id)         => req(`/admin/users/${id}/suspend`, { method: "PATCH" }),
 
-  // Admin — requires valid token set via auth.setToken()
-  adminLogin:        (body)          => req("/admin/login",           { method: "POST", body }),
-  adminRefresh:      ()              => req("/admin/refresh",         { method: "POST" }),
-  getEarnings:       ()              => req("/admin/earnings"),
+  // Services & durations
+  getServices:  ()           => req("/services"),
+  getDurations: ()           => req("/durations"),
+  getStats:     ()           => req("/stats"),
+
+  // Groups
+  getGroups:    ()           => req("/groups"),
+  getGroup:     (id)         => req(`/groups/${id}`),
+  createGroup:  (body)       => req("/groups",             { method: "POST", body }),
+  updateStatus: (id, status) => req(`/groups/${id}/status`,{ method: "PATCH", body: { status } }),
+
+  // Membership
+  joinGroup:    (id, body)   => req(`/groups/${id}/join`,  { method: "POST", body }),
+
+  // Payments
+  initiatePay:  (body)       => req("/pesapal/initiate",   { method: "POST", body }),
+  verifyPay:    (orderId)    => req(`/pesapal/verify?orderId=${orderId}`),
 };

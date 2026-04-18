@@ -147,3 +147,66 @@
   color: #c4bcff !important;
   border: 1px solid rgba(124,106,255,0.15);
 }
+
+/* Duration grid */
+.duration-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
+@media(max-width:480px) { .duration-grid { grid-template-columns: 1fr 1fr; } }
+
+.duration-card {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  padding: 14px 10px; border-radius: 12px; cursor: pointer;
+  background: var(--bg3); border: 2px solid var(--border);
+  transition: all 0.15s; text-align: center;
+}
+.duration-card:hover { border-color: var(--border-hover); }
+.duration-card.selected { border-color: var(--accent); background: rgba(124,106,255,0.08); }
+.dur-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+.dur-price { font-family: var(--font-head); font-size: 1.2rem; font-weight: 800; color: var(--text); }
+.dur-sub { font-size: 0.65rem; color: var(--muted); }
+.dur-badge {
+  position: absolute; top:-8px; right:-8px;
+  background: var(--accent3); color: #000;
+  font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 99px;
+}
+.duration-card.selected .dur-price { color: var(--accent); }
+
+.dur-summary {
+  background: var(--bg3); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px; margin-top: 12px;
+}
+.dur-sum-row { display: flex; justify-content: space-between; font-size: 0.83rem; color: var(--muted); }
+.dur-sum-total { color: var(--text) !important; font-weight: 700; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+
+/* ── Management controls (organizer + superadmin) ── */
+.manage-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Super admin group panel ── */
+.admin-group-panel {
+  background: rgba(255,106,142,0.06);
+  border: 1px solid rgba(255,106,142,0.2);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.agp-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.agp-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.83rem;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.agp-row:last-of-type { border-bottom: none; }
+.agp-row span:first-child { color: var(--muted); }
+.agp-row span:last-child  { font-weight: 600; }

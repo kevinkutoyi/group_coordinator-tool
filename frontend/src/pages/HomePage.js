@@ -1,49 +1,42 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, session } from "../api";
 import "./HomePage.css";
 
 const HERO_SERVICES = [
-  { icon: "🎵", name: "Spotify" },
-  { icon: "🎬", name: "Netflix" },
-  { icon: "🤖", name: "ChatGPT" },
-  { icon: "✨", name: "Claude AI" },
-  { icon: "▶️", name: "YouTube" },
-  { icon: "🍎", name: "Apple One" },
-  { icon: "🏰", name: "Disney+" },
-  { icon: "👑", name: "Max" },
+  { icon:"🎵", name:"Spotify" }, { icon:"🎬", name:"Netflix" },
+  { icon:"🤖", name:"ChatGPT" }, { icon:"✨", name:"Claude AI" },
+  { icon:"▶️", name:"YouTube" }, { icon:"🍎", name:"Apple One" },
+  { icon:"🏰", name:"Disney+" }, { icon:"👑", name:"Max" },
 ];
 
 export default function HomePage({ navigate }) {
   const [stats, setStats] = useState(null);
+  const user = session.getUser();
 
-  useEffect(() => {
-    api.getStats().then(setStats).catch(() => {});
-  }, []);
+  useEffect(() => { api.getStats().then(setStats).catch(() => {}); }, []);
 
   return (
     <div className="home fade-in">
-      {/* Hero */}
       <section className="hero">
         <div className="hero-badge">🔒 Legal Family & Group Plans Only</div>
         <h1 className="hero-title">
-          Split subscriptions.<br />
+          Split subscriptions.<br/>
           <span className="gradient-text">Save together.</span>
         </h1>
         <p className="hero-sub">
-          Coordinate group-buys for Spotify, Netflix, Claude AI, ChatGPT &amp; more —
-          using their official family or group plans. Fully legal, fully transparent.
+          Coordinate group-buys for Spotify, Netflix, Claude AI, ChatGPT &amp; more — using official family or group plans. Fully legal, fully transparent.
         </p>
         <div className="hero-actions">
           <button className="btn btn-primary" onClick={() => navigate("groups")}>Browse Open Groups</button>
-          <button className="btn btn-outline" onClick={() => navigate("create")}>+ Start a Group</button>
+          {!user
+            ? <button className="btn btn-outline" onClick={() => navigate("signup")}>Create Free Account</button>
+            : ["moderator","superadmin"].includes(user.role)
+              ? <button className="btn btn-outline" onClick={() => navigate("create")}>+ Create a Group</button>
+              : <button className="btn btn-outline" onClick={() => navigate("my-groups")}>My Groups</button>
+          }
         </div>
-
         <div className="service-pills">
-          {HERO_SERVICES.map(s => (
-            <span key={s.name} className="service-pill">
-              {s.icon} {s.name}
-            </span>
-          ))}
+          {HERO_SERVICES.map(s => <span key={s.name} className="service-pill">{s.icon} {s.name}</span>)}
         </div>
       </section>
 
@@ -62,26 +55,43 @@ export default function HomePage({ navigate }) {
         <h2 className="section-title">How it works</h2>
         <div className="steps">
           {[
-            { n:"01", icon:"🔍", title:"Browse Groups", text:"Find an open group for your favourite subscription service with available slots." },
-            { n:"02", icon:"✋", title:"Request to Join", text:"Enter your name and email. The organizer will add you to the shared plan." },
-            { n:"03", icon:"💸", title:"Pay Your Share", text:"Send your monthly split amount directly to the organizer via your preferred method." },
-            { n:"04", icon:"🎉", title:"Enjoy &amp; Save", text:"The organizer shares your login slot. You save up to 80% compared to solo plans." },
-          ].map(step => (
-            <div key={step.n} className="step-card card">
-              <div className="step-num">{step.n}</div>
-              <div className="step-icon">{step.icon}</div>
-              <h3>{step.title}</h3>
-              <p dangerouslySetInnerHTML={{ __html: step.text }} />
+            { n:"01", icon:"✍️", title:"Sign Up",        text:"Create a free customer account in seconds. No credit card needed to register." },
+            { n:"02", icon:"🔍", title:"Find a Group",   text:"Browse open groups for your favourite subscription service." },
+            { n:"03", icon:"📅", title:"Pick Duration",  text:"Choose 1, 3, 6, or 12 months. Longer plans come with a discount." },
+            { n:"04", icon:"🔒", title:"Pay via PesaPal",text:"Secure payment via M-Pesa, card, or bank transfer. Your slot is confirmed instantly." },
+          ].map(s => (
+            <div key={s.n} className="step-card card">
+              <div className="step-num">{s.n}</div>
+              <div className="step-icon">{s.icon}</div>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Legal note */}
+      {/* Role callout */}
+      {!user && (
+        <section className="role-callout">
+          <div className="rc-card card">
+            <div className="rc-icon">👤</div>
+            <h3>Join as a Customer</h3>
+            <p>Browse groups, pick your duration, and pay your share securely.</p>
+            <button className="btn btn-primary" onClick={() => navigate("signup")}>Sign Up Free</button>
+          </div>
+          <div className="rc-card card rc-mod">
+            <div className="rc-icon">🛡️</div>
+            <h3>Become a Group Moderator</h3>
+            <p>Hold a subscription plan and earn trust managing a group for others. Requires admin approval.</p>
+            <button className="btn btn-outline" onClick={() => navigate("signup")}>Apply as Moderator</button>
+          </div>
+        </section>
+      )}
+
       <section className="legal-section">
         <div className="info-box">
-          <strong>⚖️ Legal Compliance Note</strong><br />
-          SplitPass only supports services with <em>official family or group plans</em> (e.g. Spotify Family, Netflix Standard/Premium with extra members, YouTube Premium Family). We never encourage password sharing that violates Terms of Service. Each member is a legitimate slot on the provider's official plan.
+          <strong>⚖️ Legal Compliance Notice</strong><br/>
+          SplitPass only supports services with <em>official family or group plans</em>. We never encourage account sharing that violates Terms of Service. Every member is a legitimate slot on the provider's official plan.
         </div>
       </section>
     </div>
