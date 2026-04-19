@@ -83,4 +83,10 @@ export const api = {
   // Payments
   initiatePay:  (body)       => req("/pesapal/initiate",   { method: "POST", body }),
   verifyPay:    (orderId)    => req(`/pesapal/verify?orderId=${orderId}`),
+
+  // Newsletter
+  getSubscribers:    ()      => req("/admin/newsletter/subscribers"),
+  getNewsletterHistory: ()   => req("/admin/newsletter/history"),
+  sendNewsletter:    (body)  => req("/admin/newsletter/send", { method: "POST", body }),
+  footerSubscribe:   (email) => req("/newsletter/subscribe",  { method: "POST", body: { email } }),
 };

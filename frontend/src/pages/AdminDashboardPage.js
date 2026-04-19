@@ -11,6 +11,11 @@ export default function AdminDashboardPage({ navigate }) {
   const [msg, setMsg]           = useState(null);
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [subscribers, setSubscribers]   = useState(null);
+  const [nlHistory, setNlHistory]       = useState([]);
+  const [nlForm, setNlForm]             = useState({ subject:"", body:"", senderName:"", senderEmail:"" });
+  const [nlBusy, setNlBusy]             = useState(false);
+  const [nlMsg, setNlMsg]               = useState(null);
   const [groups, setGroups]     = useState([]);
 
   useEffect(() => {
@@ -21,8 +26,8 @@ export default function AdminDashboardPage({ navigate }) {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, u, g] = await Promise.all([api.getPendingMods(), api.getUsers(), api.getGroups()]);
-      setPending(p); setAllUsers(u); setGroups(g);
+      const [p, u, g, subs, hist] = await Promise.all([api.getPendingMods(), api.getUsers(), api.getGroups(), api.getSubscribers(), api.getNewsletterHistory()]);
+      setPending(p); setAllUsers(u); setGroups(g); setSubscribers(subs); setNlHistory(hist);
     } catch { navigate("admin-login"); }
     finally { setLoading(false); }
   }, [navigate]);
@@ -110,6 +115,7 @@ export default function AdminDashboardPage({ navigate }) {
           {key:"customers",  label:"Customers"},
           {key:"all",        label:"All Users"},
           {key:"groups",     label:`Groups (${groups.length})`},
+          {key:"newsletter",  label:`📧 Newsletter${subscribers ? ` (${subscribers.total})` : ""}`},
         ].map(t => (
           <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
@@ -155,7 +161,128 @@ export default function AdminDashboardPage({ navigate }) {
         </div>
       )}
 
-      {/* ── Groups tab ── */}
+      {/* ── Newsletter tab ── */}
+      {tab === "newsletter" && (
+        <div className="newsletter-panel">
+          {/* Subscriber counts */}
+          <div className="stats-row" style={{marginBottom:24}}>
+            <div className="stat-card">
+              <div className="stat-value" style={{color:"var(--accent)"}}>{subscribers?.subscribers?.length || 0}</div>
+              <div className="stat-label">Registered Users</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{color:"var(--accent2)"}}>{subscribers?.footerSubs?.length || 0}</div>
+              <div className="stat-label">Footer Sign-ups</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{color:"var(--accent3)"}}>{subscribers?.total || 0}</div>
+              <div className="stat-label">Total Subscribers</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">{nlHistory.length}</div>
+              <div className="stat-label">Campaigns Sent</div>
+            </div>
+          </div>
+
+          <div className="nl-grid">
+            {/* Compose form */}
+            <div className="card">
+              <h2 className="section-h2" style={{marginBottom:16}}>✉️ Compose Newsletter</h2>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Sender Name</label>
+                  <input value={nlForm.senderName} onChange={e=>setNlForm(f=>({...f,senderName:e.target.value}))} placeholder="SplitPass Team" />
+                </div>
+                <div className="form-group">
+                  <label>Sender Email</label>
+                  <input type="email" value={nlForm.senderEmail} onChange={e=>setNlForm(f=>({...f,senderEmail:e.target.value}))} placeholder="newsletter@splitpass.com" />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Subject</label>
+                <input value={nlForm.subject} onChange={e=>setNlForm(f=>({...f,subject:e.target.value}))} placeholder="e.g. New Spotify groups available this week!" />
+              </div>
+
+              <div className="form-group">
+                <label>Message Body</label>
+                <textarea rows={8} value={nlForm.body} onChange={e=>setNlForm(f=>({...f,body:e.target.value}))}
+                  placeholder={"Hi {name},\n\nWe have exciting new groups available...\n\nCheck them out at splitpass.com\n\nBest,\nThe SplitPass Team"}
+                  style={{resize:"vertical", fontFamily:"monospace", fontSize:"0.82rem"}} />
+              </div>
+
+              {nlMsg && (
+                <div className={`msg-box ${nlMsg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:12}} onClick={()=>setNlMsg(null)}>
+                  {nlMsg.text} <span style={{opacity:.4}}>✕</span>
+                </div>
+              )}
+
+              <div className="info-box" style={{marginBottom:12,fontSize:"0.78rem"}}>
+                <strong>📌 Note:</strong> This logs the campaign to the database. To actually deliver emails,
+                connect <strong>Resend</strong>, <strong>Mailgun</strong>, or <strong>SendGrid</strong> in
+                <code style={{background:"var(--bg3)",padding:"1px 5px",borderRadius:4}}> backend/src/server.js</code> at the <code style={{background:"var(--bg3)",padding:"1px 5px",borderRadius:4}}>/api/admin/newsletter/send</code> route.
+              </div>
+
+              <button className="btn btn-primary" style={{width:"100%"}} disabled={nlBusy || !nlForm.subject || !nlForm.body}
+                onClick={async () => {
+                  setNlBusy(true); setNlMsg(null);
+                  try {
+                    const r = await api.sendNewsletter(nlForm);
+                    setNlMsg({type:"ok", text:r.message});
+                    setNlForm(f=>({...f,subject:"",body:""}));
+                    const hist = await api.getNewsletterHistory();
+                    setNlHistory(hist);
+                  } catch(err) { setNlMsg({type:"err",text:err.message}); }
+                  finally { setNlBusy(false); }
+                }}>
+                {nlBusy ? <><span className="spinner"/> Sending…</> : `📨 Send to ${subscribers?.total || 0} Subscribers`}
+              </button>
+            </div>
+
+            {/* Campaign history + subscriber list */}
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div className="card">
+                <h2 className="section-h2" style={{marginBottom:12}}>📋 Campaign History</h2>
+                {nlHistory.length === 0 ? (
+                  <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>No campaigns sent yet.</p>
+                ) : nlHistory.map(c => (
+                  <div key={c.id} className="earning-row">
+                    <div>
+                      <div style={{fontWeight:600,fontSize:"0.85rem"}}>{c.subject}</div>
+                      <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>
+                        {new Date(c.sentAt).toLocaleString()} · {c.recipientCount} recipients
+                      </div>
+                      <div style={{fontSize:"0.7rem",color:"var(--muted)"}}>From: {c.senderEmail}</div>
+                    </div>
+                    <span className="tag" style={{background:"rgba(74,222,128,0.1)",color:"var(--success)",border:"none",fontSize:"0.7rem"}}>
+                      {c.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="card">
+                <h2 className="section-h2" style={{marginBottom:12}}>👥 Recent Subscribers</h2>
+                {(subscribers?.subscribers || []).slice(0,8).map(s => (
+                  <div key={s.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)",fontSize:"0.8rem"}}>
+                    <span>{s.name} <span style={{color:"var(--muted)"}}>({s.role})</span></span>
+                    <span style={{color:"var(--muted)",fontSize:"0.72rem"}}>{s.email}</span>
+                  </div>
+                ))}
+                {(subscribers?.footerSubs || []).slice(0,5).map(s => (
+                  <div key={s.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)",fontSize:"0.8rem"}}>
+                    <span style={{color:"var(--muted)"}}>Footer sign-up</span>
+                    <span style={{color:"var(--muted)",fontSize:"0.72rem"}}>{s.email}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Groups tab ── */}}
       {tab === "groups" && (
         <div className="admin-user-list">
           {groups.length === 0 ? (

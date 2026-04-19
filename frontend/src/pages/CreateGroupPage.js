@@ -2,18 +2,29 @@ import React, { useEffect, useState } from "react";
 import { api, session } from "../api";
 import "./CreateGroupPage.css";
 
+const BILLING_CYCLES = [
+  { value: "monthly",    label: "Monthly",     desc: "Members pay each month" },
+  { value: "quarterly",  label: "Quarterly",   desc: "Members pay every 3 months" },
+  { value: "biannually", label: "Every 6 mo",  desc: "Members pay every 6 months" },
+  { value: "annually",   label: "Annually",    desc: "Members pay once a year" },
+];
+
 export default function CreateGroupPage({ navigate }) {
-  const [services, setServices]       = useState([]);
-  const [selectedService, setSvc]     = useState(null);
-  const [selectedPlan, setPlan]       = useState(null);
-  const [busy, setBusy]               = useState(false);
-  const [error, setError]             = useState("");
+  const [services, setServices]   = useState([]);
+  const [selectedService, setSvc] = useState(null);
+  const [selectedPlan, setPlan]   = useState(null);
+  const [busy, setBusy]           = useState(false);
+  const [error, setError]         = useState("");
   const [form, setForm] = useState({
-    serviceId: "", planName: "", totalPrice: "", maxSlots: "", description: "",
+    serviceId:    "",
+    planName:     "",
+    totalPrice:   "",
+    maxSlots:     "",
+    description:  "",
+    billingCycle: "monthly",
   });
 
   useEffect(() => {
-    // Moderator/superadmin only
     if (!session.isLoggedIn()) { navigate("login"); return; }
     if (!["moderator","superadmin"].includes(session.getRole())) { navigate("groups"); return; }
     api.getServices().then(setServices).catch(() => setError("Could not load services."));
@@ -28,7 +39,11 @@ export default function CreateGroupPage({ navigate }) {
   function handlePlanChange(e) {
     const plan = selectedService?.plans.find(p => p.name === e.target.value);
     setPlan(plan || null);
-    setForm(f => ({ ...f, planName: e.target.value, totalPrice: plan ? plan.price : "", maxSlots: plan ? plan.maxSlots : "" }));
+    setForm(f => ({
+      ...f, planName: e.target.value,
+      totalPrice: plan ? plan.price : "",
+      maxSlots:   plan ? plan.maxSlots : "",
+    }));
   }
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -37,20 +52,20 @@ export default function CreateGroupPage({ navigate }) {
     ? (parseFloat(form.totalPrice) / parseInt(form.maxSlots)).toFixed(2)
     : null;
 
-  const feePercent = 2;
   const memberPays = pricePerSlot
-    ? (parseFloat(pricePerSlot) * (1 + feePercent / 100)).toFixed(2)
+    ? (parseFloat(pricePerSlot) * 1.02).toFixed(2)
     : null;
 
   async function handleSubmit(e) {
     e.preventDefault(); setError(""); setBusy(true);
     try {
       const group = await api.createGroup({
-        serviceId:  form.serviceId,
-        planName:   form.planName,
-        totalPrice: parseFloat(form.totalPrice),
-        maxSlots:   parseInt(form.maxSlots),
-        description: form.description,
+        serviceId:    form.serviceId,
+        planName:     form.planName,
+        totalPrice:   parseFloat(form.totalPrice),
+        maxSlots:     parseInt(form.maxSlots),
+        description:  form.description,
+        billingCycle: form.billingCycle,
       });
       navigate("group", group.id);
     } catch (err) {
@@ -108,18 +123,39 @@ export default function CreateGroupPage({ navigate }) {
             </div>
           )}
 
+          {/* ── Billing cycle ── */}
           <div className="form-group">
-            <label>Description (optional)</label>
-            <textarea rows={3} value={form.description} onChange={set("description")}
-              placeholder="e.g. Looking for 3 more people to split Spotify Family. Pay via M-Pesa."
-              style={{ resize:"vertical" }} />
+            <label>Subscription Duration / Billing Cycle</label>
+            <div className="billing-grid">
+              {BILLING_CYCLES.map(c => (
+                <button
+                  key={c.value}
+                  type="button"
+                  className={`billing-card ${form.billingCycle === c.value ? "selected" : ""}`}
+                  onClick={() => setForm(f => ({ ...f, billingCycle: c.value }))}>
+                  <div className="bc-label">{c.label}</div>
+                  <div className="bc-desc">{c.desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Organizer info — auto-populated from logged-in user */}
+          <div className="form-group">
+            <label>Description (optional)</label>
+            <textarea
+              rows={3}
+              value={form.description}
+              onChange={set("description")}
+              placeholder="e.g. Looking for 3 more people to split Spotify Family. Pay via M-Pesa."
+              style={{ resize:"vertical" }}
+            />
+          </div>
+
+          {/* Organizer info — auto-populated */}
           <div className="organizer-info-box">
             <div className="org-label">👤 Group Organizer (you)</div>
             <div className="org-name">{user?.name}</div>
-            <div className="org-email">{user?.email}</div>
+            <div className="org-email">{user?.email || (session.isSuperAdmin() ? "Set via ADMIN_EMAIL in .env" : "")}</div>
           </div>
 
           {error && <div className="msg-box msg-err" style={{ marginBottom:8 }}>{error}</div>}
@@ -129,6 +165,7 @@ export default function CreateGroupPage({ navigate }) {
           </button>
         </form>
 
+        {/* Live preview sidebar */}
         <div className="create-sidebar">
           <div className="card preview-card">
             <h2 className="create-section-title">Live Preview</h2>
@@ -149,6 +186,7 @@ export default function CreateGroupPage({ navigate }) {
                   <div className="pb-row"><span>Full plan cost</span><span>${form.totalPrice || "—"}/mo</span></div>
                   <div className="pb-row"><span>Slots</span><span>{form.maxSlots || "—"} people</span></div>
                   <div className="pb-row"><span>Members pay (incl. 2% fee)</span><span>{memberPays ? `$${memberPays}` : "—"}/mo</span></div>
+                  <div className="pb-row"><span>Billing cycle</span><span>{BILLING_CYCLES.find(c=>c.value===form.billingCycle)?.label}</span></div>
                   <div className="pb-row pb-save">
                     <span>Each member saves</span>
                     <span>{pricePerSlot ? `$${(parseFloat(form.totalPrice) - parseFloat(pricePerSlot)).toFixed(2)}/mo` : "—"}</span>
@@ -158,7 +196,7 @@ export default function CreateGroupPage({ navigate }) {
             )}
           </div>
           <div className="info-box">
-            <strong>⚖️ Organizer Responsibilities</strong><br />
+            <strong>⚖️ Organizer Responsibilities</strong><br/>
             You hold the subscription and coordinate payments. Only create groups for official family/group plans.
           </div>
         </div>

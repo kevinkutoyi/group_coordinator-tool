@@ -8,6 +8,7 @@ const fs         = require("fs");
 const path       = require("path");
 const rateLimit  = require("express-rate-limit");
 const pesapal    = require("./pesapal");
+const { validateEmail, generateConfirmToken, isTokenExpired } = require("./emailValidator");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -28,14 +29,15 @@ function loadDB() {
   if (!fs.existsSync(DATA_FILE)) {
     const seed = {
       users: [], groups: [], groupMembers: [],
-      payments: [], pesapalOrders: [], platformEarnings: []
+      payments: [], pesapalOrders: [], platformEarnings: [],
+      emailVerifications: [], footerSubscribers: [], newsletterSent: []
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(seed, null, 2));
     return seed;
   }
   const db = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   // Ensure all collections exist in older DB files
-  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings"]
+  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications","footerSubscribers","newsletterSent"]
     .forEach(k => { if (!db[k]) db[k] = []; });
   return db;
 }
@@ -124,6 +126,11 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     return res.status(400).json({ error: "role must be customer or moderator" });
   if (password.length < 8)
     return res.status(400).json({ error: "Password must be at least 8 characters" });
+
+  // ── Email validation: format + disposable + DNS MX ──────────────────────
+  const emailCheck = await validateEmail(email);
+  if (!emailCheck.valid)
+    return res.status(400).json({ error: emailCheck.reason });
 
   const db = loadDB();
   if (db.users.find(u => u.email.toLowerCase() === email.toLowerCase()))
@@ -310,17 +317,30 @@ app.get("/api/groups/:id", (req, res) => {
   res.json({ ...group, members, payments });
 });
 
-// POST /api/groups — moderators only (must be approved)
+// POST /api/groups — moderators (approved) and superadmin
 app.post("/api/groups", requireRole("moderator", "superadmin"), (req, res) => {
-  const { serviceId, planName, totalPrice, maxSlots, description } = req.body;
+  const { serviceId, planName, totalPrice, maxSlots, description, billingCycle = 'monthly' } = req.body;
   if (!serviceId || !planName || !totalPrice || !maxSlots)
     return res.status(400).json({ error: "serviceId, planName, totalPrice, maxSlots required" });
 
-  const db      = loadDB();
-  const creator = db.users.find(u => u.id === req.user.id);
-  if (!creator) return res.status(404).json({ error: "User not found" });
-  if (creator.status !== "active")
-    return res.status(403).json({ error: "Your account is not yet approved to create groups" });
+  const db = loadDB();
+
+  // Superadmin uses env credentials — no DB record needed
+  const isSuperAdmin = req.user.role === "superadmin";
+  let creatorName, creatorEmail;
+
+  if (isSuperAdmin) {
+    creatorName  = process.env.ADMIN_USERNAME || "Super Admin";
+    creatorEmail = process.env.ADMIN_EMAIL    || "admin@splitpass.com";
+  } else {
+    const creator = db.users.find(u => u.id === req.user.id);
+    if (!creator)
+      return res.status(404).json({ error: "User not found" });
+    if (creator.status !== "active")
+      return res.status(403).json({ error: "Your account is not yet approved to create groups" });
+    creatorName  = creator.name;
+    creatorEmail = creator.email;
+  }
 
   const service = SERVICES.find(s => s.id === serviceId);
   if (!service) return res.status(404).json({ error: "Service not found" });
@@ -341,9 +361,10 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), (req, res) => {
     memberPays,
     feePercent:    FEE_PERCENT,
     organizerId:   req.user.id,
-    organizerName: creator.name,
-    organizerEmail:creator.email,
+    organizerName: creatorName,
+    organizerEmail: creatorEmail,
     description:   description || "",
+    billingCycle:  billingCycle,
     status:        "open",
     createdAt:     new Date().toISOString(),
   };
@@ -353,8 +374,8 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), (req, res) => {
     id:            uuidv4(),
     groupId:       group.id,
     userId:        req.user.id,
-    name:          creator.name,
-    email:         creator.email,
+    name:          creatorName,
+    email:         creatorEmail,
     role:          "organizer",
     months:        1,
     totalPaid:     0,
@@ -617,6 +638,88 @@ app.get("/api/admin/earnings", requireSuperAdmin, (req, res) => {
 app.get("/api/admin/refresh", requireSuperAdmin, (req, res) => {
   const token = signToken({ id: "superadmin", role: "superadmin", name: "Super Admin" }, "24h");
   res.json({ token });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  NEWSLETTER  (super admin compose + subscriber list)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/newsletter/subscribers — list all newsletter subscribers
+app.get("/api/admin/newsletter/subscribers", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  const subscribers = db.users
+    .filter(u => u.newsletter === true)
+    .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, joinedAt: u.createdAt }));
+  // Also include footer sign-ups (stored separately)
+  const footerSubs = (db.footerSubscribers || []);
+  res.json({ subscribers, footerSubs, total: subscribers.length + footerSubs.length });
+});
+
+// POST /api/admin/newsletter/subscribe — footer subscribe (no account needed)
+app.post("/api/newsletter/subscribe", async (req, res) => {
+  const { email } = req.body;
+
+  // ── Validate: format + disposable + DNS MX ──────────────────────────────
+  const emailCheck = await validateEmail(email);
+  if (!emailCheck.valid)
+    return res.status(400).json({ error: emailCheck.reason });
+
+  const db = loadDB();
+  const already = db.footerSubscribers.find(s => s.email.toLowerCase() === email.toLowerCase())
+    || db.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.newsletter);
+  if (already) return res.json({ message: "Already subscribed!" });
+
+  db.footerSubscribers.push({ id: uuidv4(), email: email.toLowerCase().trim(), subscribedAt: new Date().toISOString() });
+  saveDB(db);
+  res.json({ message: "Subscribed successfully!" });
+});
+
+// POST /api/admin/newsletter/send — compose + log a newsletter send
+// In production: integrate Resend / Mailgun / SendGrid here.
+app.post("/api/admin/newsletter/send", requireSuperAdmin, (req, res) => {
+  const { subject, body, senderName, senderEmail } = req.body;
+  if (!subject || !body) return res.status(400).json({ error: "subject and body required" });
+
+  const db = loadDB();
+  if (!db.newsletterSent) db.newsletterSent = [];
+  if (!db.footerSubscribers) db.footerSubscribers = [];
+
+  const recipients = [
+    ...db.users.filter(u => u.newsletter).map(u => u.email),
+    ...db.footerSubscribers.map(s => s.email),
+  ];
+  const uniqueRecipients = [...new Set(recipients)];
+
+  const campaign = {
+    id:           uuidv4(),
+    subject,
+    body,
+    senderName:   senderName  || process.env.ADMIN_USERNAME || "SplitPass Team",
+    senderEmail:  senderEmail || process.env.ADMIN_EMAIL    || "newsletter@splitpass.com",
+    recipientCount: uniqueRecipients.length,
+    recipients:   uniqueRecipients,
+    sentAt:       new Date().toISOString(),
+    // TODO: replace this stub with real email delivery:
+    // await resend.emails.send({ from: senderEmail, to: uniqueRecipients, subject, html: body });
+    status:       "logged", // change to "sent" after integrating email provider
+  };
+
+  db.newsletterSent.push(campaign);
+  saveDB(db);
+
+  res.json({
+    message:    `Newsletter logged. ${uniqueRecipients.length} recipient(s) queued.`,
+    campaignId: campaign.id,
+    recipientCount: uniqueRecipients.length,
+    note: "Connect Resend/Mailgun in server.js to actually send emails.",
+  });
+});
+
+// GET /api/admin/newsletter/history — sent campaigns
+app.get("/api/admin/newsletter/history", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  const history = (db.newsletterSent || []).slice().reverse();
+  res.json(history);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

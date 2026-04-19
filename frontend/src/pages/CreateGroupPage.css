@@ -80,3 +80,44 @@
 .org-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
 .org-name  { font-weight: 600; font-size: 0.9rem; }
 .org-email { font-size: 0.8rem; color: var(--muted); }
+
+/* ── Billing cycle grid ── */
+.billing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .billing-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.billing-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  background: var(--bg3);
+  border: 2px solid var(--border);
+  transition: all 0.15s;
+  text-align: center;
+  gap: 3px;
+}
+.billing-card:hover { border-color: var(--border-hover); }
+.billing-card.selected {
+  border-color: var(--accent);
+  background: rgba(124,106,255,0.1);
+}
+.bc-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.billing-card.selected .bc-label { color: var(--accent); }
+.bc-desc {
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.3;
+}

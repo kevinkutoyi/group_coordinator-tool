@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { api } from "../api";
 import "./Footer.css";
 
 export default function Footer({ navigate }) {
@@ -6,15 +7,29 @@ export default function Footer({ navigate }) {
   const [agreed, setAgreed]         = useState(false);
   const [submitted, setSubmitted]   = useState(false);
   const [error, setError]           = useState("");
+  const [emailHint, setEmailHint]   = useState("");
 
-  function handleSubscribe(e) {
+  function checkFooterEmail(val) {
+    if (!val) { setEmailHint(""); return; }
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const disposable = ["mailinator","guerrillamail","yopmail","tempmail","trashmail","throwaway"];
+    const domain = val.split("@")[1] || "";
+    if (!regex.test(val)) setEmailHint("⚠️ Check email format");
+    else if (disposable.some(d => domain.includes(d))) setEmailHint("⚠️ Disposable emails not allowed");
+    else setEmailHint("✅ Looks good");
+  }
+
+  async function handleSubscribe(e) {
     e.preventDefault();
     setError("");
     if (!email.trim()) return setError("Please enter your email address.");
     if (!agreed)       return setError("Please agree to receive our newsletter to subscribe.");
-    // In production: POST to your email service (Mailchimp, Resend, etc.)
-    // For now we just show the success state.
-    setSubmitted(true);
+    try {
+      await api.footerSubscribe(email.trim());
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message || "Could not subscribe. Please try again.");
+    }
   }
 
   return (
@@ -65,7 +80,12 @@ export default function Footer({ navigate }) {
                 </span>
               </label>
 
-              {error && <p className="fn-error">⚠️ {error}</p>}
+              {emailHint && !error && (
+                <p style={{fontSize:"0.74rem", color: emailHint.startsWith("✅")?"var(--success)":"var(--warning)", margin:0}}>
+                  {emailHint}
+                </p>
+              )}
+              {error && <p className="fn-error">{error}</p>}
             </form>
           )}
         </div>

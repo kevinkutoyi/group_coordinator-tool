@@ -11,10 +11,27 @@ export default function SignupPage({ navigate, params }) {
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState("");
   const [success, setSuccess] = useState("");
-  const [showPw, setShowPw]   = useState(false);
+  const [showPw, setShowPw]     = useState(false);
+  const [emailStatus, setEmailStatus] = useState(null); // null | "checking" | "ok" | "error"
+  const [emailMsg, setEmailMsg]       = useState("");
 
   const set    = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
   const toggle = k => e => setForm(f => ({ ...f, [k]: e.target.checked }));
+
+  // Client-side email format check (fast, instant feedback)
+  function checkEmailFormat(email) {
+    if (!email) { setEmailStatus(null); setEmailMsg(""); return; }
+    const regex = /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+\-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+    const disposable = ["mailinator","guerrillamail","yopmail","tempmail","10minutemail","trashmail","throwaway","fakeinbox","dispostable","maildrop","spamgourmet"];
+    const domain = email.split("@")[1] || "";
+    if (!regex.test(email) || email.includes("..")) {
+      setEmailStatus("error"); setEmailMsg("Invalid email format");
+    } else if (disposable.some(d => domain.includes(d))) {
+      setEmailStatus("error"); setEmailMsg("Disposable emails not allowed");
+    } else {
+      setEmailStatus("ok"); setEmailMsg("Looks good!");
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -94,7 +111,22 @@ export default function SignupPage({ navigate, params }) {
           <div className="form-row">
             <div className="form-group">
               <label>Email</label>
-              <input required type="email" value={form.email} onChange={set("email")} placeholder="jane@email.com" />
+              <div style={{position:"relative"}}>
+                <input required type="email" value={form.email}
+                  onChange={e => { set("email")(e); checkEmailFormat(e.target.value); }}
+                  placeholder="jane@email.com"
+                  style={{paddingRight:36, borderColor: emailStatus==="ok"?"var(--success)": emailStatus==="error"?"var(--error)":undefined}} />
+                {emailStatus && (
+                  <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:"1rem"}}>
+                    {emailStatus==="ok"?"✅":emailStatus==="error"?"❌":"⏳"}
+                  </span>
+                )}
+              </div>
+              {emailMsg && (
+                <span style={{fontSize:"0.72rem", color: emailStatus==="ok"?"var(--success)":"var(--error)", marginTop:2}}>
+                  {emailMsg}
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label>Phone (optional)</label>
