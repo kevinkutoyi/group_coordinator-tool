@@ -2,40 +2,27 @@
   "users": [],
   "groups": [
     {
-      "id": "949af109-322b-4440-b59c-48d6bc709137",
+      "id": "e35c5360-5d14-4a62-bb12-fcd14755d597",
       "serviceId": "spotify",
       "serviceName": "Spotify",
       "serviceIcon": "🎵",
       "planName": "Premium Family",
-      "totalPrice": 20,
+      "totalPrice": 17.99,
       "maxSlots": 6,
-      "pricePerSlot": 3.33,
-      "platformFee": 0.07,
-      "memberPays": 3.4,
+      "pricePerSlot": 3,
+      "platformFee": 0.06,
+      "memberPays": 3.06,
       "feePercent": 2,
       "organizerId": "superadmin",
       "organizerName": "amoraghali",
       "organizerEmail": "amoraghali@gmail.com",
-      "description": "5 more people",
+      "description": "Looking for 6 people",
       "billingCycle": "monthly",
       "status": "open",
-      "createdAt": "2026-04-18T18:09:25.145Z"
+      "createdAt": "2026-04-19T10:25:05.170Z"
     }
   ],
-  "groupMembers": [
-    {
-      "id": "70e45a2f-84c7-4802-a8bf-f74933900f8d",
-      "groupId": "949af109-322b-4440-b59c-48d6bc709137",
-      "userId": "superadmin",
-      "name": "amoraghali",
-      "email": "amoraghali@gmail.com",
-      "role": "organizer",
-      "months": 1,
-      "totalPaid": 0,
-      "paymentStatus": "confirmed",
-      "joinedAt": "2026-04-18T18:09:25.145Z"
-    }
-  ],
+  "groupMembers": [],
   "payments": [],
   "pesapalOrders": [],
   "platformEarnings": [],

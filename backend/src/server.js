@@ -298,11 +298,12 @@ app.get("/api/durations", (req, res) => res.json(SUBSCRIPTION_DURATIONS));
 app.get("/api/groups", (req, res) => {
   const db = loadDB();
   const enriched = db.groups.map(g => {
-    const members  = db.groupMembers.filter(m => m.groupId === g.id);
-    const payments = db.payments.filter(p => p.groupId === g.id);
+    const members        = db.groupMembers.filter(m => m.groupId === g.id);
+    const payingMembers  = members.filter(m => m.role !== "organizer");
+    const payments       = db.payments.filter(p => p.groupId === g.id);
     // Don't expose member emails publicly
     const safeMembers = members.map(({ email, ...m }) => m);
-    return { ...g, memberCount: members.length, members: safeMembers, payments };
+    return { ...g, memberCount: payingMembers.length, members: safeMembers, payments };
   });
   res.json(enriched);
 });
@@ -345,44 +346,32 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), (req, res) => {
   const service = SERVICES.find(s => s.id === serviceId);
   if (!service) return res.status(404).json({ error: "Service not found" });
 
+  // All maxSlots are paying-customer slots — organizer is NOT counted
   const pricePerSlot = +(totalPrice / maxSlots).toFixed(2);
   const { platformFee, memberPays } = calcFee(pricePerSlot, 1);
 
   const group = {
-    id:            uuidv4(),
+    id:             uuidv4(),
     serviceId,
-    serviceName:   service.name,
-    serviceIcon:   service.icon,
+    serviceName:    service.name,
+    serviceIcon:    service.icon,
     planName,
-    totalPrice:    +totalPrice,
-    maxSlots:      +maxSlots,
+    totalPrice:     +totalPrice,
+    maxSlots:       +maxSlots,   // all slots are for paying customers
     pricePerSlot,
     platformFee,
     memberPays,
-    feePercent:    FEE_PERCENT,
-    organizerId:   req.user.id,
-    organizerName: creatorName,
+    feePercent:     FEE_PERCENT,
+    organizerId:    req.user.id,
+    organizerName:  creatorName,
     organizerEmail: creatorEmail,
-    description:   description || "",
-    billingCycle:  billingCycle,
-    status:        "open",
-    createdAt:     new Date().toISOString(),
+    description:    description || "",
+    billingCycle:   billingCycle,
+    status:         "open",
+    createdAt:      new Date().toISOString(),
   };
 
-  // Organizer is auto-added as confirmed member (they own the plan)
-  db.groupMembers.push({
-    id:            uuidv4(),
-    groupId:       group.id,
-    userId:        req.user.id,
-    name:          creatorName,
-    email:         creatorEmail,
-    role:          "organizer",
-    months:        1,
-    totalPaid:     0,
-    paymentStatus: "confirmed",
-    joinedAt:      new Date().toISOString(),
-  });
-
+  // Organizer is NOT added as a groupMember — they coordinate only, pay nothing
   db.groups.push(group);
   saveDB(db);
   res.status(201).json(group);
@@ -419,10 +408,15 @@ app.post("/api/groups/:id/join", requireRole("customer", "superadmin"), (req, re
   const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === parseInt(months));
   if (!validDuration) return res.status(400).json({ error: "Invalid subscription duration" });
 
-  const allMembers = db.groupMembers.filter(m => m.groupId === group.id);
-  if (allMembers.length >= group.maxSlots) return res.status(400).json({ error: "Group is full" });
+  const allMembers     = db.groupMembers.filter(m => m.groupId === group.id);
+  const payingMembers  = allMembers.filter(m => m.role !== "organizer");
+  if (payingMembers.length >= group.maxSlots)
+    return res.status(400).json({ error: "Group is full" });
   if (allMembers.find(m => m.userId === req.user.id))
     return res.status(400).json({ error: "You are already a member of this group" });
+  // Organizer cannot join their own group as a paying member
+  if (group.organizerId === req.user.id)
+    return res.status(400).json({ error: "You are the organizer of this group and do not pay for a slot" });
 
   const user = db.users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -449,7 +443,7 @@ app.post("/api/groups/:id/join", requireRole("customer", "superadmin"), (req, re
   };
 
   db.groupMembers.push(member);
-  if (allMembers.length + 1 >= group.maxSlots) group.status = "full";
+  if (payingMembers.length + 1 >= group.maxSlots) group.status = "full";
   saveDB(db);
   res.status(201).json(member);
 });
@@ -546,8 +540,11 @@ app.get("/api/pesapal/verify", async (req, res) => {
       }
       const group = db.groups.find(g => g.id === order.groupId);
       if (group) {
-        const confirmed = db.groupMembers.filter(m => m.groupId === group.id && m.paymentStatus === "confirmed").length;
-        if (confirmed >= group.maxSlots) group.status = "full";
+        // Only count paying members (exclude organizer) against maxSlots
+        const confirmedPaying = db.groupMembers.filter(
+          m => m.groupId === group.id && m.paymentStatus === "confirmed" && m.role !== "organizer"
+        ).length;
+        if (confirmedPaying >= group.maxSlots) group.status = "full";
       }
     } else if (["Failed","Invalid"].includes(code)) { order.status = "FAILED"; }
     saveDB(db);
@@ -589,8 +586,10 @@ app.post("/api/pesapal/ipn", async (req, res) => {
       }
       const group = db.groups.find(g => g.id === order.groupId);
       if (group) {
-        const confirmed = db.groupMembers.filter(m => m.groupId === group.id && m.paymentStatus === "confirmed").length;
-        if (confirmed >= group.maxSlots) group.status = "full";
+        const confirmedPaying = db.groupMembers.filter(
+          m => m.groupId === group.id && m.paymentStatus === "confirmed" && m.role !== "organizer"
+        ).length;
+        if (confirmedPaying >= group.maxSlots) group.status = "full";
       }
     }
     saveDB(db);
@@ -628,6 +627,7 @@ app.get("/api/admin/earnings", requireSuperAdmin, (req, res) => {
     completedOrders: db.pesapalOrders.filter(o => o.status === "COMPLETED").length,
     totalGroups:     db.groups.length,
     totalUsers:      db.users.length,
+    totalCustomers:  db.users.filter(u => u.role === "customer").length,
     pendingModerators: db.users.filter(u => u.role === "moderator" && u.status === "pending").length,
     byGroup,
     monthlyEarnings,
@@ -735,6 +735,7 @@ app.get("/api/stats", (req, res) => {
     openGroups:     db.groups.filter(g => g.status === "open").length,
     fullGroups:     db.groups.filter(g => g.status === "full").length,
     totalMembers:   db.users.filter(u => u.role === "customer").length,
+    totalOrganizers: db.users.filter(u => u.role === "moderator" && u.status === "active").length,
     totalSaved:     +totalSaved.toFixed(2),
   });
 });

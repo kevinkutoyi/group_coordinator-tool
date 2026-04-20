@@ -29,7 +29,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
     e.preventDefault();
     if (!session.isLoggedIn()) { navigate("login"); return; }
     if (!session.isCustomer()) {
-      setMsg({ type:"err", text:"Only customers can join groups. Moderators and admins organise them." });
+      setMsg({ type:"err", text:"Only customers can join groups. Moderators organise them." });
       return;
     }
     setBusy(true);
@@ -61,13 +61,21 @@ export default function GroupDetailPage({ id, navigate, user }) {
   if (loading) return <div style={{ textAlign:"center", padding:80 }}><span className="spinner"/></div>;
   if (!group)  return null;
 
-  const filled       = group.members?.length || 0;
-  const pct          = Math.round((filled / group.maxSlots) * 100);
-  const myMember     = group.members?.find(m => m.userId === session.getUser()?.id);
-  const preview      = calcTotal(group.pricePerSlot, months);
-  const isSuperAdmin = session.isSuperAdmin();
-  const isOrganizer  = group.organizerId === session.getUser()?.id;
-  const canManage    = isSuperAdmin || isOrganizer; // both can manage
+  const currentUserId = session.getUser()?.id;
+  const isSuperAdmin  = session.isSuperAdmin();
+  const isOrganizer   = group.organizerId === currentUserId;
+  const canManage     = isSuperAdmin || isOrganizer;
+
+  // Only paying members (role !== "organizer") count toward slots
+  const payingMembers = group.members?.filter(m => m.role !== "organizer") || [];
+  const filled        = payingMembers.length;
+  const pct           = Math.round((filled / group.maxSlots) * 100);
+  const spotsLeft     = group.maxSlots - filled;
+
+  // Check if current user is already a paying member
+  const myMember = payingMembers.find(m => m.userId === currentUserId);
+
+  const preview = calcTotal(group.pricePerSlot, months);
 
   return (
     <div className="gd fade-in">
@@ -94,23 +102,37 @@ export default function GroupDetailPage({ id, navigate, user }) {
               <span style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
                 Created {new Date(group.createdAt).toLocaleDateString()}
               </span>
-              {isSuperAdmin && <span className="tag" style={{ background:"rgba(255,106,142,0.12)", color:"var(--accent2)", border:"none" }}>🛡️ Admin View</span>}
+              {group.billingCycle && (
+                <span className="tag" style={{ background:"var(--bg3)", color:"var(--muted)", border:"1px solid var(--border)" }}>
+                  🔄 {group.billingCycle}
+                </span>
+              )}
+              {isSuperAdmin && (
+                <span className="tag" style={{ background:"rgba(255,106,142,0.12)", color:"var(--accent2)", border:"none" }}>
+                  🛡️ Admin View
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Action buttons in the top-right */}
+          {/* Action buttons */}
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-            {/* Customer: join */}
-            {group.status === "open" && !myMember && session.isCustomer() && (
+            {/* Customer: join if open, not already a member, not the organizer */}
+            {group.status === "open" && !myMember && session.isCustomer() && !isOrganizer && (
               <button className="btn btn-primary" onClick={() => setShowJoin(true)}>Join Group</button>
             )}
-            {/* Guest: prompt to sign in */}
+            {/* Guest */}
             {group.status === "open" && !session.isLoggedIn() && (
               <button className="btn btn-primary" onClick={() => navigate("login")}>Sign In to Join</button>
             )}
-            {/* Already a member */}
+            {/* Organizer badge */}
+            {isOrganizer && (
+              <span className="tag" style={{ background:"rgba(124,106,255,0.15)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.2)", padding:"5px 12px" }}>
+                🛡️ You are the organizer
+              </span>
+            )}
             {myMember && <span className="tag tag-open">✓ You're a member</span>}
-            {/* Organizer / superadmin: status controls */}
+            {/* Organizer/superadmin: status controls */}
             {canManage && (
               <div className="manage-controls">
                 {group.status !== "open"   && <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange("open")}>🔓 Reopen</button>}
@@ -125,51 +147,72 @@ export default function GroupDetailPage({ id, navigate, user }) {
 
         {/* Fee banner */}
         <div className="fee-banner">
-          <div className="fee-item"><span className="fee-label">Monthly share</span><span className="fee-val">${group.pricePerSlot}</span></div>
+          <div className="fee-item">
+            <span className="fee-label">Monthly share per member</span>
+            <span className="fee-val">${group.pricePerSlot}</span>
+          </div>
           <div className="fee-plus">+</div>
-          <div className="fee-item"><span className="fee-label">Platform fee ({group.feePercent}%)</span><span className="fee-val fee-small">+${group.platformFee}</span></div>
+          <div className="fee-item">
+            <span className="fee-label">Platform fee ({group.feePercent}%)</span>
+            <span className="fee-val fee-small">+${group.platformFee}</span>
+          </div>
           <div className="fee-equals">=</div>
-          <div className="fee-item fee-total"><span className="fee-label">Members pay/month</span><span className="fee-val fee-highlight">${group.memberPays}</span></div>
+          <div className="fee-item fee-total">
+            <span className="fee-label">Members pay/month</span>
+            <span className="fee-val fee-highlight">${group.memberPays}</span>
+          </div>
         </div>
 
         {/* Stats */}
         <div className="gd-stats">
-          <div className="gd-stat"><div className="gd-stat-val">${group.pricePerSlot}<span>/mo</span></div><div className="gd-stat-lbl">Share</div></div>
+          <div className="gd-stat"><div className="gd-stat-val">${group.pricePerSlot}<span>/mo</span></div><div className="gd-stat-lbl">Share per Slot</div></div>
           <div className="gd-stat"><div className="gd-stat-val">${group.memberPays}<span>/mo</span></div><div className="gd-stat-lbl">Members Pay</div></div>
           <div className="gd-stat"><div className="gd-stat-val">${(group.totalPrice - group.pricePerSlot).toFixed(2)}<span>/mo</span></div><div className="gd-stat-lbl">Savings/member</div></div>
-          <div className="gd-stat"><div className="gd-stat-val">{filled}<span>/{group.maxSlots}</span></div><div className="gd-stat-lbl">Members</div></div>
+          <div className="gd-stat">
+            <div className="gd-stat-val">{filled}<span>/{group.maxSlots}</span></div>
+            <div className="gd-stat-lbl">Paying Slots Filled</div>
+          </div>
         </div>
 
         <div className="progress-bar"><div className="progress-fill" style={{ width:`${pct}%` }}/></div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.78rem", color:"var(--muted)", marginTop:4 }}>
-          <span>{filled}/{group.maxSlots} slots filled</span><span>{pct}%</span>
+          <span>{filled}/{group.maxSlots} paying slots filled · {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1?"s":""} left` : "Full"}</span>
+          <span>{pct}%</span>
+        </div>
+
+        {/* Organizer info bar */}
+        <div className="organizer-bar">
+          <span className="ob-label">🛡️ Coordinator</span>
+          <span className="ob-name">{group.organizerName}</span>
+          <span className="ob-note">Organizer holds the plan &amp; does not occupy a slot</span>
         </div>
       </div>
 
       {/* ── Two columns ── */}
       <div className="gd-cols">
 
-        {/* Members list */}
+        {/* Paying members list */}
         <div className="card">
-          <h2 className="section-h2">Members & Payments</h2>
-          {group.members?.length === 0 ? (
-            <p style={{ color:"var(--muted)", fontSize:"0.85rem" }}>No members yet.</p>
-          ) : group.members.map(m => (
+          <h2 className="section-h2">Paying Members</h2>
+
+          {payingMembers.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"24px 0", color:"var(--muted)", fontSize:"0.85rem" }}>
+              <div style={{ fontSize:"2rem", marginBottom:8 }}>👥</div>
+              No paying members yet. Be the first to join!
+            </div>
+          ) : payingMembers.map(m => (
             <div key={m.id} className="member-row">
               <div className="member-avatar">{m.name?.[0]?.toUpperCase()}</div>
               <div className="member-info">
-                <div className="member-name">
-                  {m.name}
-                  {m.role === "organizer" && <span className="organizer-badge">Organizer</span>}
-                </div>
-                {/* Show email only to organizer/superadmin */}
+                <div className="member-name">{m.name}</div>
+                {/* Show email to organizer/superadmin only */}
                 {canManage && <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>{m.email}</div>}
                 {m.durationLabel && <div style={{ fontSize:"0.72rem", color:"var(--accent)", marginTop:1 }}>📅 {m.durationLabel}</div>}
                 {m.expiresAt && <div style={{ fontSize:"0.7rem", color:"var(--muted)" }}>Expires {new Date(m.expiresAt).toLocaleDateString()}</div>}
               </div>
               <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
-              {/* Pay button — only for the member themselves */}
-              {m.userId === session.getUser()?.id && m.paymentStatus === "pending" && (
+              {/* Pay button — only for this member themselves */}
+              {m.userId === currentUserId && m.paymentStatus === "pending" && (
                 <button className="btn btn-sm pesapal-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
                   {payingId === m.id ? <><span className="spinner"/> Redirecting…</> : "🔒 Pay via PesaPal"}
                 </button>
@@ -182,23 +225,27 @@ export default function GroupDetailPage({ id, navigate, user }) {
         <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
           <div className="card">
-            <h2 className="section-h2">Organizer</h2>
+            <h2 className="section-h2">Organizer / Coordinator</h2>
             <p style={{ fontWeight:600, fontSize:"0.9rem" }}>{group.organizerName}</p>
-            {/* Show email to superadmin */}
             {isSuperAdmin && <p style={{ fontSize:"0.8rem", color:"var(--muted)" }}>{group.organizerEmail}</p>}
+            <p style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:6, lineHeight:1.5 }}>
+              The organizer coordinates the group and purchases the subscription from the provider.
+              They collect payments from members and do <strong>not</strong> occupy a paying slot.
+            </p>
           </div>
 
-          {/* Super admin quick-stats panel */}
+          {/* Super admin stats */}
           {isSuperAdmin && (
             <div className="admin-group-panel">
               <div className="agp-title">🛡️ Admin Overview</div>
-              <div className="agp-row"><span>Confirmed members</span><span style={{ color:"var(--success)" }}>{group.members?.filter(m=>m.paymentStatus==="confirmed").length || 0}</span></div>
-              <div className="agp-row"><span>Pending payments</span><span style={{ color:"var(--warning)" }}>{group.members?.filter(m=>m.paymentStatus==="pending").length || 0}</span></div>
-              <div className="agp-row"><span>Platform revenue</span><span style={{ color:"var(--accent3)" }}>${group.payments?.reduce((acc,p)=>acc+(p.platformFee||0),0).toFixed(2) || "0.00"}</span></div>
-              <div className="agp-row"><span>Organizer earned</span><span>${group.payments?.reduce((acc,p)=>acc+(p.organizerGets||0),0).toFixed(2) || "0.00"}</span></div>
+              <div className="agp-row"><span>Paying slots filled</span><span style={{ color:"var(--success)" }}>{filled}/{group.maxSlots}</span></div>
+              <div className="agp-row"><span>Confirmed payments</span><span style={{ color:"var(--success)" }}>{payingMembers.filter(m=>m.paymentStatus==="confirmed").length}</span></div>
+              <div className="agp-row"><span>Pending payments</span><span style={{ color:"var(--warning)" }}>{payingMembers.filter(m=>m.paymentStatus==="pending").length}</span></div>
+              <div className="agp-row"><span>Platform revenue</span><span style={{ color:"var(--accent3)" }}>${group.payments?.reduce((acc,p)=>acc+(p.platformFee||0),0).toFixed(2)||"0.00"}</span></div>
+              <div className="agp-row"><span>Organizer collects</span><span>${group.payments?.reduce((acc,p)=>acc+(p.organizerGets||0),0).toFixed(2)||"0.00"}</span></div>
               <div style={{ marginTop:12, display:"flex", gap:8, flexWrap:"wrap" }}>
-                <button className="btn btn-sm btn-outline" onClick={() => navigate("earnings")}>💰 View Earnings</button>
-                <button className="btn btn-sm btn-outline" onClick={() => navigate("admin")}>🛡️ Admin Panel</button>
+                <button className="btn btn-sm btn-outline" onClick={() => navigate("earnings")}>💰 Earnings</button>
+                <button className="btn btn-sm btn-outline" onClick={() => navigate("admin")}>🛡️ Admin</button>
               </div>
             </div>
           )}
@@ -207,8 +254,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
             <div className="pesapal-logo">🔒 Secured by PesaPal</div>
             <p>Accepted: 📱 M-Pesa &nbsp;💳 Visa/Mastercard &nbsp;🏦 Bank Transfer &nbsp;📲 Airtel Money</p>
             <p className="fee-note">
-              A {group.feePercent}% platform fee is added on top.
-              Organizer receives ${group.pricePerSlot}/mo per member.
+              A {group.feePercent}% platform fee is added. The organizer receives ${group.pricePerSlot}/mo per member to cover the plan cost.
             </p>
           </div>
 
@@ -224,7 +270,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 </div>
                 {p.platformFee && (
                   <div style={{ fontSize:"0.7rem", color:"var(--muted)" }}>
-                    Platform fee: ${p.platformFee} · Organizer: ${p.organizerGets}
+                    Platform: ${p.platformFee} · Organizer gets: ${p.organizerGets}
                   </div>
                 )}
               </div>
@@ -238,14 +284,15 @@ export default function GroupDetailPage({ id, navigate, user }) {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowJoin(false)}>
           <div className="modal">
             <h3>Join {group.serviceName} Group</h3>
+            <p style={{ fontSize:"0.83rem", color:"var(--muted)", marginBottom:16 }}>
+              {spotsLeft} slot{spotsLeft !== 1?"s":""} remaining out of {group.maxSlots} total paying slots.
+            </p>
 
             <div style={{ marginBottom:16 }}>
-              <p style={{ fontSize:"0.85rem", color:"var(--muted)", marginBottom:10 }}>
-                Choose your subscription length:
-              </p>
+              <p style={{ fontSize:"0.85rem", color:"var(--muted)", marginBottom:10 }}>Choose your subscription length:</p>
               <div className="duration-grid">
                 {durations.map(d => {
-                  const calc = calcTotal(group.pricePerSlot, d.months);
+                  const calc       = calcTotal(group.pricePerSlot, d.months);
                   const isSelected = months === d.months;
                   return (
                     <button key={d.months} type="button"

@@ -156,6 +156,9 @@ export default function CreateGroupPage({ navigate }) {
             <div className="org-label">👤 Group Organizer (you)</div>
             <div className="org-name">{user?.name}</div>
             <div className="org-email">{user?.email || (session.isSuperAdmin() ? "Set via ADMIN_EMAIL in .env" : "")}</div>
+            <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>
+              You coordinate the group and purchase the plan. You do not occupy a paying slot.
+            </div>
           </div>
 
           {error && <div className="msg-box msg-err" style={{ marginBottom:8 }}>{error}</div>}
@@ -184,7 +187,7 @@ export default function CreateGroupPage({ navigate }) {
                 )}
                 <div className="preview-breakdown">
                   <div className="pb-row"><span>Full plan cost</span><span>${form.totalPrice || "—"}/mo</span></div>
-                  <div className="pb-row"><span>Slots</span><span>{form.maxSlots || "—"} people</span></div>
+                  <div className="pb-row"><span>Paying member slots</span><span>{form.maxSlots || "—"} customers</span></div>
                   <div className="pb-row"><span>Members pay (incl. 2% fee)</span><span>{memberPays ? `$${memberPays}` : "—"}/mo</span></div>
                   <div className="pb-row"><span>Billing cycle</span><span>{BILLING_CYCLES.find(c=>c.value===form.billingCycle)?.label}</span></div>
                   <div className="pb-row pb-save">

@@ -2,8 +2,9 @@ import React from "react";
 import "./GroupCard.css";
 
 export default function GroupCard({ group, onClick }) {
-  const filled = group.memberCount || 0;
-  const pct = Math.round((filled / group.maxSlots) * 100);
+  // memberCount from backend already excludes the organizer (paying slots only)
+  const filled   = group.memberCount || 0;
+  const pct      = Math.round((filled / group.maxSlots) * 100);
   const spotsLeft = group.maxSlots - filled;
 
   return (
@@ -26,22 +27,22 @@ export default function GroupCard({ group, onClick }) {
           <span className="gc-price">${group.pricePerSlot}</span>
           <span className="gc-price-sub">/person/mo</span>
         </div>
-        <div className="gc-full-price">Full: ${group.totalPrice}/mo</div>
+        <div className="gc-full-price">Full plan: ${group.totalPrice}/mo</div>
       </div>
 
       <div className="progress-bar">
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
+        <div className="progress-fill" style={{ width:`${pct}%` }} />
       </div>
 
       <div className="gc-slots">
-        <span>{filled}/{group.maxSlots} members</span>
+        <span>{filled}/{group.maxSlots} paying slots</span>
         <span className={spotsLeft === 0 ? "no-spots" : "spots-left"}>
-          {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1 ? "s" : ""} left` : "Full"}
+          {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1?"s":""} left` : "Full"}
         </span>
       </div>
 
       <div className="gc-footer">
-        <span className="gc-organizer">Organizer: {group.organizerName}</span>
+        <span className="gc-organizer">via {group.organizerName}</span>
         <span className="gc-savings">Save ${(group.totalPrice - group.pricePerSlot).toFixed(2)}/mo</span>
       </div>
     </div>
