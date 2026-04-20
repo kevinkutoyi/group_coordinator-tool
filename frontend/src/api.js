@@ -85,8 +85,23 @@ export const api = {
   verifyPay:    (orderId)    => req(`/pesapal/verify?orderId=${orderId}`),
 
   // Newsletter
-  getSubscribers:    ()      => req("/admin/newsletter/subscribers"),
-  getNewsletterHistory: ()   => req("/admin/newsletter/history"),
-  sendNewsletter:    (body)  => req("/admin/newsletter/send", { method: "POST", body }),
-  footerSubscribe:   (email) => req("/newsletter/subscribe",  { method: "POST", body: { email } }),
+  getSubscribers:       ()       => req("/admin/newsletter/subscribers"),
+  getNewsletterHistory: ()       => req("/admin/newsletter/history"),
+  sendNewsletter:       (body)   => req("/admin/newsletter/send",   { method: "POST", body }),
+  footerSubscribe:      (email)  => req("/newsletter/subscribe",    { method: "POST", body: { email } }),
+
+  // Group emails (organizer / superadmin → paying members)
+  getGroupEmails:       (gid)    => req(`/groups/${gid}/emails`),
+  sendGroupEmail:       (gid, b) => req(`/groups/${gid}/emails/send`,           { method: "POST", body: b }),
+  sendExpiryReminder:   (gid, b) => req(`/groups/${gid}/emails/expiry-reminder`,{ method: "POST", body: b }),
+  getGroupMembersAdmin: (gid)    => req(`/groups/${gid}/members`),
+  runExpiryScheduler:   ()       => req("/admin/expiry-scheduler",              { method: "POST" }),
+
+  // Currency
+  getCurrencyRate: () => req("/currency/rate"),
+
+  // Credential Vault
+  getCredentials:    (gid)  => req(`/groups/${gid}/credentials`),
+  saveCredentials:   (gid, body) => req(`/groups/${gid}/credentials`, { method: "PUT", body }),
+  deleteCredentials: (gid)  => req(`/groups/${gid}/credentials`, { method: "DELETE" }),
 };

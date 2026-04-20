@@ -12,6 +12,7 @@ import AdminDashboardPage from "./pages/AdminDashboardPage";
 import EarningsPage from "./pages/EarningsPage";
 import PaymentCallbackPage from "./pages/PaymentCallbackPage";
 import MyGroupsPage from "./pages/MyGroupsPage";
+import GroupEmailPage from "./pages/GroupEmailPage";
 import Footer from "./components/Footer";
 import "./App.css";
 
@@ -30,6 +31,7 @@ export default function App() {
 
   function navigate(target, param = null) {
     const role = session.getRole();
+    if (target === "group-emails" && !["moderator","superadmin"].includes(role)) { return; }
     if (target === "create"    && !["moderator","superadmin"].includes(role)) { setPage("login"); setParam({ redirect:"create" }); return; }
     if (target === "my-groups" && !session.isLoggedIn())  { setPage("login"); return; }
     if (target === "earnings"  && role !== "superadmin")  { setPage("admin-login"); return; }
@@ -54,6 +56,7 @@ export default function App() {
         {page === "admin"            && <AdminDashboardPage   navigate={navigate} />}
         {page === "earnings"         && <EarningsPage         navigate={navigate} />}
         {page === "my-groups"        && <MyGroupsPage         navigate={navigate} user={user} />}
+        {page === "group-emails"     && <GroupEmailPage      groupId={pageParam}  navigate={navigate} />}
         {page === "payment-callback" && <PaymentCallbackPage  params={pageParam}  navigate={navigate} />}
       </main>
       <Footer navigate={navigate} />

@@ -9,6 +9,7 @@ const path       = require("path");
 const rateLimit  = require("express-rate-limit");
 const pesapal    = require("./pesapal");
 const { validateEmail, generateConfirmToken, isTokenExpired } = require("./emailValidator");
+const emailService = require("./emailService");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -30,14 +31,14 @@ function loadDB() {
     const seed = {
       users: [], groups: [], groupMembers: [],
       payments: [], pesapalOrders: [], platformEarnings: [],
-      emailVerifications: [], footerSubscribers: [], newsletterSent: []
+      emailVerifications: [], footerSubscribers: [], newsletterSent: [], groupEmails: [], groupCredentials: []
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(seed, null, 2));
     return seed;
   }
   const db = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   // Ensure all collections exist in older DB files
-  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications","footerSubscribers","newsletterSent"]
+  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications","footerSubscribers","newsletterSent","groupEmails","groupCredentials"]
     .forEach(k => { if (!db[k]) db[k] = []; });
   return db;
 }
@@ -541,6 +542,36 @@ app.get("/api/pesapal/verify", async (req, res) => {
           id: uuidv4(), orderId, groupId: order.groupId,
           fee: order.platformFee, currency: order.currency, earnedAt: order.confirmedAt,
         });
+
+        // ── Send welcome/confirmation email ──────────────────────────────
+        const grpForEmail = db.groups.find(g => g.id === order.groupId);
+        const memForEmail = db.groupMembers.find(m => m.id === order.memberId);
+        if (grpForEmail && memForEmail) {
+          // Send credentials email if credentials already set
+          const existingCreds = db.groupCredentials.find(c => c.groupId === order.groupId);
+          if (existingCreds && memForEmail) {
+            emailService.sendCredentialsUpdated({
+              to:          memForEmail.email,
+              memberName:  memForEmail.name,
+              groupName:   `${grpForEmail.serviceName} ${grpForEmail.planName}`,
+              serviceName: grpForEmail.serviceName,
+            }).catch(e => console.error("Creds email error:", e.message));
+          }
+
+          emailService.sendWelcome({
+            to:          memForEmail.email,
+            memberName:  memForEmail.name,
+            groupName:   `${grpForEmail.serviceName} ${grpForEmail.planName}`,
+            serviceName: grpForEmail.serviceName,
+            planName:    grpForEmail.planName,
+            billingCycle: grpForEmail.billingCycle,
+            pricePerSlot: grpForEmail.pricePerSlot,
+            memberPays:  order.memberPays,
+            currency:    order.currency || "KES",
+            expiresAt:   memForEmail.expiresAt,
+            organizerName: grpForEmail.organizerName,
+          }).catch(e => console.error("Welcome email error:", e.message));
+        }
       }
       const group = db.groups.find(g => g.id === order.groupId);
       if (group) {
@@ -727,6 +758,337 @@ app.get("/api/admin/newsletter/history", requireSuperAdmin, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  CREDENTIAL VAULT
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/groups/:id/credentials
+ * Returns credentials ONLY to confirmed paying members of this group.
+ * Organizer and superadmin can always view.
+ */
+app.get("/api/groups/:id/credentials", requireAuth, (req, res) => {
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  // Paying member check — must be confirmed
+  const membership = db.groupMembers.find(
+    m => m.groupId === group.id && m.userId === req.user.id && m.role !== "organizer"
+  );
+  const isConfirmedMember = membership && membership.paymentStatus === "confirmed";
+
+  if (!isOrganizer && !isSuperAdmin && !isConfirmedMember) {
+    return res.status(403).json({
+      error: "Access denied. Complete payment to view credentials.",
+      requiresPayment: !membership || membership.paymentStatus !== "confirmed",
+    });
+  }
+
+  const creds = db.groupCredentials.find(c => c.groupId === req.params.id);
+  if (!creds) return res.json({ exists: false, slots: [] });
+
+  res.json({ exists: true, ...creds, canEdit: isOrganizer || isSuperAdmin });
+});
+
+/**
+ * PUT /api/groups/:id/credentials
+ * Organizer or superadmin sets/updates credentials.
+ * On update, notifies all confirmed paying members via email.
+ * Body: { slots: [{ label, username, password, note }], generalNote }
+ */
+app.put("/api/groups/:id/credentials", requireAuth, async (req, res) => {
+  const { slots = [], generalNote = "" } = req.body;
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  // Validate slots
+  if (!Array.isArray(slots) || slots.length === 0)
+    return res.status(400).json({ error: "At least one credential slot is required" });
+
+  const isUpdate = !!db.groupCredentials.find(c => c.groupId === group.id);
+
+  // Upsert credentials
+  const idx = db.groupCredentials.findIndex(c => c.groupId === group.id);
+  const credRecord = {
+    groupId:     group.id,
+    slots:       slots.map((s, i) => ({
+      slotNumber: i + 1,
+      label:      s.label || `Slot ${i + 1}`,
+      username:   s.username || "",
+      password:   s.password || "",
+      note:       s.note    || "",
+    })),
+    generalNote,
+    updatedAt:   new Date().toISOString(),
+    updatedBy:   req.user.id,
+  };
+
+  if (idx >= 0) db.groupCredentials[idx] = credRecord;
+  else          db.groupCredentials.push(credRecord);
+
+  saveDB(db);
+
+  // Notify confirmed paying members if this is an update
+  if (isUpdate) {
+    const confirmedMembers = db.groupMembers.filter(
+      m => m.groupId === group.id && m.role !== "organizer" && m.paymentStatus === "confirmed"
+    );
+    confirmedMembers.forEach(m => {
+      emailService.sendCredentialsUpdated({
+        to:          m.email,
+        memberName:  m.name,
+        groupName:   `${group.serviceName} ${group.planName}`,
+        serviceName: group.serviceName,
+      }).catch(e => console.error("Cred update email error:", e.message));
+    });
+  }
+
+  res.json({ message: isUpdate ? "Credentials updated." : "Credentials saved.", ...credRecord });
+});
+
+/**
+ * DELETE /api/groups/:id/credentials
+ * Organizer or superadmin clears all credentials.
+ */
+app.delete("/api/groups/:id/credentials", requireAuth, (req, res) => {
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  db.groupCredentials = db.groupCredentials.filter(c => c.groupId !== group.id);
+  saveDB(db);
+  res.json({ message: "Credentials cleared." });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GROUP EMAILS  (organizer + superadmin → paying members)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/groups/:id/emails
+ * List all emails sent to this group's members.
+ * Accessible by: organizer of the group OR superadmin.
+ */
+app.get("/api/groups/:id/emails", requireAuth, (req, res) => {
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  const emails = (db.groupEmails || [])
+    .filter(e => e.groupId === req.params.id)
+    .slice().reverse();
+  res.json(emails);
+});
+
+/**
+ * POST /api/groups/:id/emails/send
+ * Send a custom message to ALL paying confirmed members of this group.
+ * Accessible by: organizer of the group OR superadmin.
+ * Body: { subject, body, senderEmail? }
+ */
+app.post("/api/groups/:id/emails/send", requireAuth, async (req, res) => {
+  const { subject, body: msgBody, senderEmail } = req.body;
+  if (!subject || !msgBody) return res.status(400).json({ error: "subject and body required" });
+
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  // Confirmed paying members only
+  const members = db.groupMembers.filter(
+    m => m.groupId === group.id && m.role !== "organizer" && m.paymentStatus === "confirmed"
+  );
+
+  if (members.length === 0)
+    return res.status(400).json({ error: "No confirmed paying members to message yet." });
+
+  // Determine sender name + email
+  let senderName = group.organizerName;
+  let fromEmail  = senderEmail || group.organizerEmail || process.env.ADMIN_EMAIL || "noreply@splitpass.com";
+  if (isSuperAdmin && !isOrganizer) {
+    senderName = process.env.ADMIN_USERNAME || "Super Admin";
+    fromEmail  = senderEmail || process.env.ADMIN_EMAIL || "noreply@splitpass.com";
+  }
+
+  // Log campaign
+  const campaign = {
+    id:           uuidv4(),
+    groupId:      group.id,
+    groupName:    `${group.serviceName} ${group.planName}`,
+    subject,
+    body:         msgBody,
+    senderName,
+    senderEmail:  fromEmail,
+    recipientCount: members.length,
+    recipients:   members.map(m => m.email),
+    sentAt:       new Date().toISOString(),
+    sentBy:       req.user.id,
+    status:       "sending",
+  };
+  if (!db.groupEmails) db.groupEmails = [];
+  db.groupEmails.push(campaign);
+  saveDB(db);
+
+  // Send to each member individually (personalised greeting)
+  let sent = 0, failed = 0;
+  await Promise.allSettled(members.map(async m => {
+    try {
+      await emailService.sendGroupMessage({
+        to:          m.email,
+        memberName:  m.name,
+        groupName:   `${group.serviceName} ${group.planName}`,
+        serviceName: group.serviceName,
+        senderName,
+        senderEmail: fromEmail,
+        subject,
+        messageBody: msgBody,
+      });
+      sent++;
+    } catch { failed++; }
+  }));
+
+  // Update campaign status
+  const c = db.groupEmails.find(e => e.id === campaign.id);
+  if (c) { c.status = failed === members.length ? "failed" : "sent"; c.sent = sent; c.failed = failed; }
+  saveDB(db);
+
+  res.json({
+    message:  `Email sent to ${sent} member${sent !== 1 ? "s" : ""}.${failed > 0 ? ` ${failed} failed.` : ""}`,
+    sent, failed, campaignId: campaign.id,
+    note: process.env.EMAIL_ENABLED !== "true"
+      ? "Set EMAIL_ENABLED=true and RESEND_API_KEY in .env to actually deliver emails."
+      : undefined,
+  });
+});
+
+/**
+ * POST /api/groups/:id/emails/expiry-reminder
+ * Manually trigger expiry reminder for a specific member (or all expiring within N days).
+ * Accessible by: organizer OR superadmin.
+ * Body: { memberId? , daysThreshold? }   — omit memberId to send to all expiring members
+ */
+app.post("/api/groups/:id/emails/expiry-reminder", requireAuth, async (req, res) => {
+  const { memberId, daysThreshold = 7 } = req.body;
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  const now    = new Date();
+  const thresh = new Date(now.getTime() + daysThreshold * 24 * 60 * 60 * 1000);
+
+  let targets = db.groupMembers.filter(
+    m => m.groupId === group.id && m.role !== "organizer" && m.paymentStatus === "confirmed" && m.expiresAt
+  );
+  if (memberId) targets = targets.filter(m => m.id === memberId);
+  else          targets = targets.filter(m => new Date(m.expiresAt) <= thresh);
+
+  if (targets.length === 0)
+    return res.json({ message: "No members match the expiry criteria.", sent: 0 });
+
+  let sent = 0;
+  await Promise.allSettled(targets.map(async m => {
+    const expiry   = new Date(m.expiresAt);
+    const daysLeft = Math.max(0, Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)));
+    try {
+      if (daysLeft <= 0) {
+        await emailService.sendExpiryToday({
+          to: m.email, memberName: m.name,
+          groupName:   `${group.serviceName} ${group.planName}`,
+          serviceName: group.serviceName,
+          renewUrl:    process.env.FRONTEND_URL,
+          currency:    "KES", memberPays: group.memberPays,
+        });
+      } else {
+        await emailService.sendExpiryWarning({
+          to: m.email, memberName: m.name,
+          groupName:   `${group.serviceName} ${group.planName}`,
+          serviceName: group.serviceName,
+          expiresAt:   m.expiresAt,
+          renewUrl:    process.env.FRONTEND_URL,
+          daysLeft,
+          currency: "KES", memberPays: group.memberPays,
+        });
+      }
+      sent++;
+    } catch (e) { console.error("Expiry reminder error:", e.message); }
+  }));
+
+  res.json({ message: `Expiry reminder sent to ${sent} member${sent !== 1 ? "s" : ""}.`, sent });
+});
+
+/**
+ * GET /api/groups/:id/members  — full member list for organizer dashboard
+ * Returns confirmed members with expiry info.
+ */
+app.get("/api/groups/:id/members", requireAuth, (req, res) => {
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const isOrganizer  = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  const members = db.groupMembers
+    .filter(m => m.groupId === group.id && m.role !== "organizer")
+    .map(m => {
+      const expiry   = m.expiresAt ? new Date(m.expiresAt) : null;
+      const daysLeft = expiry ? Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24)) : null;
+      return { ...m, daysLeft };
+    });
+  res.json(members);
+});
+
+/**
+ * POST /api/admin/expiry-scheduler
+ * Manually trigger the global expiry scheduler (normally run by a cron).
+ * Superadmin only.
+ */
+app.post("/api/admin/expiry-scheduler", requireSuperAdmin, async (req, res) => {
+  try {
+    await emailService.runExpiryScheduler(loadDB, saveDB);
+    res.json({ message: "Expiry scheduler completed." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CURRENCY RATE  (display only — PesaPal handles actual conversion)
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get("/api/currency/rate", (req, res) => {
+  // KES per 1 USD — update RESEND_API_KEY in .env for live rates
+  // For production, replace with a live forex API call
+  const rate = parseFloat(process.env.KES_PER_USD || "130");
+  res.json({ KES_PER_USD: rate, USD_PER_KES: +(1 / rate).toFixed(6), source: "env", note: "Update KES_PER_USD in .env to reflect current exchange rate." });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  PUBLIC STATS
 // ═══════════════════════════════════════════════════════════════════════════
 app.get("/api/stats", (req, res) => {
@@ -748,7 +1110,16 @@ app.get("/api/stats", (req, res) => {
 app.listen(PORT, async () => {
   console.log(`\n🚀 SplitPass API  →  http://localhost:${PORT}`);
   console.log(`💰 Platform fee   →  ${FEE_PERCENT}%`);
-  console.log(`🌍 PesaPal env    →  ${process.env.PESAPAL_ENV || "sandbox"}\n`);
+  console.log(`🌍 PesaPal env    →  ${process.env.PESAPAL_ENV || "sandbox"}`);
+  console.log(`📧 Email enabled  →  ${process.env.EMAIL_ENABLED === "true" ? "YES" : "NO (stub mode)"}\n`);
   try { await pesapal.registerIPN(); }
   catch (e) { console.warn("⚠️  IPN pre-reg skipped:", e.message); }
+
+  // ── Daily expiry scheduler — runs once at startup then every 24 hours ──
+  async function runScheduler() {
+    try { await emailService.runExpiryScheduler(loadDB, saveDB); }
+    catch (e) { console.error("Scheduler error:", e.message); }
+  }
+  runScheduler(); // run immediately on boot
+  setInterval(runScheduler, 24 * 60 * 60 * 1000); // then every 24h
 });

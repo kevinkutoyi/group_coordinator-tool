@@ -59,6 +59,13 @@ export default function EarningsPage({ navigate }) {
         </div>
         <div style={{ display:"flex", gap:10, alignItems:"center" }}>
           <button className="btn btn-outline btn-sm" onClick={() => navigate("admin")}>🛡️ Admin Panel</button>
+          <button className="btn btn-outline btn-sm" title="Run expiry email scheduler now"
+            onClick={async () => {
+              try { await api.runExpiryScheduler(); alert("✅ Expiry scheduler ran successfully."); }
+              catch (e) { alert("Error: " + e.message); }
+            }}>
+            ⏰ Run Scheduler
+          </button>
           <button className="btn btn-outline btn-sm" onClick={load}>↻ Refresh</button>
           <button className="btn btn-danger btn-sm" onClick={handleLogout}>Sign Out</button>
         </div>

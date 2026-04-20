@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import CredentialVault from "../components/CredentialVault";
 import { api, session } from "../api";
 import "./GroupDetailPage.css";
 
@@ -7,13 +8,16 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [loading, setLoading]   = useState(true);
   const [showJoin, setShowJoin] = useState(false);
   const [busy, setBusy]         = useState(false);
-  const [payingId, setPayingId] = useState(null);
+  const [payingId, setPayingId]   = useState(null);
+  const [showCurrency, setCurrency] = useState(null);  // member object awaiting currency pick
+  const [kesToUsd, setKesToUsd]     = useState(130);   // fallback rate
   const [msg, setMsg]           = useState(null);
 
   const reload = () => api.getGroup(id).then(setGroup).catch(() => navigate("groups"));
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
+    api.getCurrencyRate().then(r => setKesToUsd(r.KES_PER_USD)).catch(() => {});
   }, [id]);
 
   // billingCycle → months (mirrors backend CYCLE_MONTHS map)
@@ -43,10 +47,16 @@ export default function GroupDetailPage({ id, navigate, user }) {
     finally { setBusy(false); }
   }
 
-  async function handlePay(member) {
+  function handlePay(member) {
+    // Show currency picker before redirecting to PesaPal
+    setCurrency(member);
+  }
+
+  async function handleCurrencyConfirm(member, currency) {
+    setCurrency(null);
     setPayingId(member.id);
     try {
-      const res = await api.initiatePay({ groupId: id, memberId: member.id, currency: "KES" });
+      const res = await api.initiatePay({ groupId: id, memberId: member.id, currency });
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type:"err", text: err.message }); setPayingId(null); }
   }
@@ -133,6 +143,13 @@ export default function GroupDetailPage({ id, navigate, user }) {
               </span>
             )}
             {myMember && <span className="tag tag-open">✓ You're a member</span>}
+            {/* Email management button — organizer & superadmin */}
+            {canManage && (
+              <button className="btn btn-sm btn-outline" onClick={() => navigate("group-emails", id)}
+                style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}>
+                📧 Group Emails
+              </button>
+            )}
             {/* Organizer/superadmin: status controls */}
             {canManage && (
               <div className="manage-controls">
@@ -261,6 +278,15 @@ export default function GroupDetailPage({ id, navigate, user }) {
             </div>
           )}
 
+          {/* ── Credential Vault ── */}
+          <CredentialVault
+            groupId={id}
+            groupName={`${group.serviceName} ${group.planName}`}
+            serviceName={group.serviceName}
+            serviceIcon={group.serviceIcon}
+            maxSlots={group.maxSlots}
+          />
+
           <div className="pesapal-info-card">
             <div className="pesapal-logo">🔒 Secured by PesaPal</div>
             <p>Accepted: 📱 M-Pesa &nbsp;💳 Visa/Mastercard &nbsp;🏦 Bank Transfer &nbsp;📲 Airtel Money</p>
@@ -336,6 +362,50 @@ export default function GroupDetailPage({ id, navigate, user }) {
               <button className="btn btn-primary" onClick={handleJoin} disabled={busy}>
                 {busy ? <><span className="spinner"/> Joining…</> : "Confirm & Pay →"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Currency picker modal ── */}
+      {showCurrency && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCurrency(null)}>
+          <div className="modal">
+            <h3>Choose Payment Currency</h3>
+            <p style={{ fontSize:"0.84rem", color:"var(--muted)", marginBottom:20 }}>
+              Select the currency you'd like to pay in. PesaPal accepts both — no conversion needed on your end.
+            </p>
+
+            <div className="currency-grid">
+              {/* KES option */}
+              <button className="currency-card" onClick={() => handleCurrencyConfirm(showCurrency, "KES")}>
+                <div className="cc-flag">🇰🇪</div>
+                <div className="cc-name">Kenyan Shilling</div>
+                <div className="cc-code">KES</div>
+                <div className="cc-amount">
+                  KES {(group.memberPays * kesToUsd).toFixed(0)}
+                </div>
+                <div className="cc-methods">M-Pesa · Airtel Money · Bank</div>
+              </button>
+
+              {/* USD option */}
+              <button className="currency-card" onClick={() => handleCurrencyConfirm(showCurrency, "USD")}>
+                <div className="cc-flag">🇺🇸</div>
+                <div className="cc-name">US Dollar</div>
+                <div className="cc-code">USD</div>
+                <div className="cc-amount">
+                  USD {group.memberPays}
+                </div>
+                <div className="cc-methods">Visa · Mastercard · PayPal</div>
+              </button>
+            </div>
+
+            <div className="info-box" style={{ marginTop:14, marginBottom:0, fontSize:"0.78rem" }}>
+              💡 Rate: 1 USD ≈ KES {kesToUsd} (indicative). PesaPal applies the live rate at checkout.
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setCurrency(null)}>Cancel</button>
             </div>
           </div>
         </div>
