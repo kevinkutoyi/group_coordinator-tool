@@ -1,8 +1,22 @@
 {
-  "users": [],
+  "users": [
+    {
+      "id": "b56bf10f-a755-4610-a75d-caad617b5e89",
+      "name": "John Doe",
+      "email": "kutoyikevin@gmail.com",
+      "phone": "",
+      "passwordHash": "$2a$12$RHXZJQ4zCe8mN.gZgvOJrecWw24BMgk4weGgeDEpHCABh8Sj9xERW",
+      "role": "customer",
+      "status": "active",
+      "newsletter": true,
+      "createdAt": "2026-04-20T08:39:51.397Z",
+      "approvedAt": null,
+      "approvedBy": null
+    }
+  ],
   "groups": [
     {
-      "id": "e35c5360-5d14-4a62-bb12-fcd14755d597",
+      "id": "d09897a5-8b8d-41f2-9117-0639118f9742",
       "serviceId": "spotify",
       "serviceName": "Spotify",
       "serviceIcon": "🎵",
@@ -10,21 +24,59 @@
       "totalPrice": 17.99,
       "maxSlots": 6,
       "pricePerSlot": 3,
-      "platformFee": 0.06,
-      "memberPays": 3.06,
-      "feePercent": 2,
+      "platformFee": 0.27,
+      "memberPays": 3.27,
+      "feePercent": 9,
       "organizerId": "superadmin",
       "organizerName": "amoraghali",
       "organizerEmail": "amoraghali@gmail.com",
       "description": "Looking for 6 people",
       "billingCycle": "monthly",
       "status": "open",
-      "createdAt": "2026-04-19T10:25:05.170Z"
+      "createdAt": "2026-04-20T08:40:55.686Z"
     }
   ],
-  "groupMembers": [],
+  "groupMembers": [
+    {
+      "id": "b9757001-f2b1-411b-b3d5-30ad20b01fc9",
+      "groupId": "d09897a5-8b8d-41f2-9117-0639118f9742",
+      "userId": "b56bf10f-a755-4610-a75d-caad617b5e89",
+      "name": "John Doe",
+      "email": "kutoyikevin@gmail.com",
+      "role": "member",
+      "months": 1,
+      "durationLabel": "1 Month",
+      "discount": 0,
+      "baseAmount": 3,
+      "platformFee": 0.27,
+      "memberPays": 3.27,
+      "organizerGets": 3,
+      "paymentStatus": "pending",
+      "joinedAt": "2026-04-20T08:42:49.556Z",
+      "expiresAt": null
+    }
+  ],
   "payments": [],
-  "pesapalOrders": [],
+  "pesapalOrders": [
+    {
+      "id": "SP-1776674586658-E62DE5A3",
+      "orderTrackingId": "d80f07b6-a3ee-452b-bd18-da7a8ea4cb3e",
+      "groupId": "d09897a5-8b8d-41f2-9117-0639118f9742",
+      "memberId": "b9757001-f2b1-411b-b3d5-30ad20b01fc9",
+      "userId": "b56bf10f-a755-4610-a75d-caad617b5e89",
+      "memberName": "John Doe",
+      "memberEmail": "kutoyikevin@gmail.com",
+      "months": 1,
+      "baseAmount": 3,
+      "platformFee": 0.27,
+      "organizerGets": 3,
+      "memberPays": 3.27,
+      "currency": "KES",
+      "status": "PENDING",
+      "createdAt": "2026-04-20T08:43:07.345Z",
+      "confirmedAt": null
+    }
+  ],
   "platformEarnings": [],
   "emailVerifications": [],
   "footerSubscribers": [],

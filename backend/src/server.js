@@ -397,16 +397,20 @@ app.patch("/api/groups/:id/status", requireAuth, (req, res) => {
 //  GROUP MEMBERSHIP  (authenticated customers)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── billingCycle → months mapper ─────────────────────────────────────────
+const CYCLE_MONTHS = { monthly: 1, quarterly: 3, biannually: 6, annually: 12 };
+
 // POST /api/groups/:id/join
 app.post("/api/groups/:id/join", requireRole("customer", "superadmin"), (req, res) => {
-  const { months = 1 } = req.body;
   const db    = loadDB();
   const group = db.groups.find(g => g.id === req.params.id);
   if (!group)                   return res.status(404).json({ error: "Group not found" });
   if (group.status !== "open")  return res.status(400).json({ error: "Group is not accepting new members" });
 
-  const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === parseInt(months));
-  if (!validDuration) return res.status(400).json({ error: "Invalid subscription duration" });
+  // Duration is FIXED by the group's billingCycle — customers cannot override it
+  const fixedMonths = CYCLE_MONTHS[group.billingCycle] || 1;
+  const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === fixedMonths) || SUBSCRIPTION_DURATIONS[0];
+  const months = fixedMonths;
 
   const allMembers     = db.groupMembers.filter(m => m.groupId === group.id);
   const payingMembers  = allMembers.filter(m => m.role !== "organizer");

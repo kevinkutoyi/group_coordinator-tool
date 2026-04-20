@@ -4,10 +4,8 @@ import "./GroupDetailPage.css";
 
 export default function GroupDetailPage({ id, navigate, user }) {
   const [group, setGroup]       = useState(null);
-  const [durations, setDurs]    = useState([]);
   const [loading, setLoading]   = useState(true);
   const [showJoin, setShowJoin] = useState(false);
-  const [months, setMonths]     = useState(1);
   const [busy, setBusy]         = useState(false);
   const [payingId, setPayingId] = useState(null);
   const [msg, setMsg]           = useState(null);
@@ -15,9 +13,12 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const reload = () => api.getGroup(id).then(setGroup).catch(() => navigate("groups"));
 
   useEffect(() => {
-    Promise.all([reload(), api.getDurations().then(setDurs)])
-      .finally(() => setLoading(false));
+    reload().finally(() => setLoading(false));
   }, [id]);
+
+  // billingCycle → months (mirrors backend CYCLE_MONTHS map)
+  const CYCLE_MONTHS = { monthly:1, quarterly:3, biannually:6, annually:12 };
+  const groupMonths = CYCLE_MONTHS[group?.billingCycle] || 1;
 
   function calcTotal(pricePerSlot, months) {
     const base = +(pricePerSlot * months).toFixed(2);
@@ -34,8 +35,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
     }
     setBusy(true);
     try {
-      await api.joinGroup(id, { months });
-      setMsg({ type:"ok", text:`Joined! Now pay your ${months}-month share via PesaPal to confirm your slot.` });
+      await api.joinGroup(id, {}); // backend determines months from group billingCycle
+      setMsg({ type:"ok", text:`Joined! Now pay your ${groupMonths}-month share via PesaPal to confirm your slot.` });
       setShowJoin(false);
       reload();
     } catch (err) { setMsg({ type:"err", text: err.message }); }
@@ -75,7 +76,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   // Check if current user is already a paying member
   const myMember = payingMembers.find(m => m.userId === currentUserId);
 
-  const preview = calcTotal(group.pricePerSlot, months);
+  const preview = calcTotal(group.pricePerSlot, groupMonths);
 
   return (
     <div className="gd fade-in">
@@ -161,6 +162,16 @@ export default function GroupDetailPage({ id, navigate, user }) {
             <span className="fee-label">Members pay/month</span>
             <span className="fee-val fee-highlight">${group.memberPays}</span>
           </div>
+        </div>
+
+        {/* Billing cycle — locked, set by organizer, prominently displayed */}
+        <div className="gd-billing-cycle-bar">
+          <span className="gdb-icon">🔄</span>
+          <div>
+            <span className="gdb-label">Billing Cycle</span>
+            <span className="gdb-value">{group.billingCycle?.charAt(0).toUpperCase() + group.billingCycle?.slice(1) || "Monthly"}</span>
+          </div>
+          <span className="gdb-note">Set by the organizer — all members pay on this schedule</span>
         </div>
 
         {/* Stats */}
@@ -285,31 +296,34 @@ export default function GroupDetailPage({ id, navigate, user }) {
           <div className="modal">
             <h3>Join {group.serviceName} Group</h3>
             <p style={{ fontSize:"0.83rem", color:"var(--muted)", marginBottom:16 }}>
-              {spotsLeft} slot{spotsLeft !== 1?"s":""} remaining out of {group.maxSlots} total paying slots.
+              {spotsLeft} slot{spotsLeft !== 1?"s":""} remaining · {group.maxSlots} total paying slots.
             </p>
 
-            <div style={{ marginBottom:16 }}>
-              <p style={{ fontSize:"0.85rem", color:"var(--muted)", marginBottom:10 }}>Choose your subscription length:</p>
-              <div className="duration-grid">
-                {durations.map(d => {
-                  const calc       = calcTotal(group.pricePerSlot, d.months);
-                  const isSelected = months === d.months;
-                  return (
-                    <button key={d.months} type="button"
-                      className={`duration-card ${isSelected ? "selected" : ""}`}
-                      onClick={() => setMonths(d.months)}>
-                      <div className="dur-label">{d.label}</div>
-                      <div className="dur-price">${calc.total}</div>
-                      <div className="dur-sub">total incl. fee</div>
-                      {d.discount > 0 && <div className="dur-badge">Save {d.discount}%</div>}
-                    </button>
-                  );
-                })}
+            {/* Locked billing cycle — set by organizer, not changeable */}
+            <div className="locked-cycle-box">
+              <div className="lcb-header">
+                <span className="lcb-lock">🔒</span>
+                <span className="lcb-title">Subscription Billing — Set by Organizer</span>
               </div>
+              <div className="lcb-body">
+                <div className="lcb-row">
+                  <span className="lcb-label">Billing cycle</span>
+                  <span className="lcb-val lcb-cycle">{group.billingCycle?.charAt(0).toUpperCase() + group.billingCycle?.slice(1)}</span>
+                </div>
+                <div className="lcb-row">
+                  <span className="lcb-label">Covers</span>
+                  <span className="lcb-val">{groupMonths} month{groupMonths > 1 ? "s" : ""} per payment</span>
+                </div>
+                <div className="lcb-row">
+                  <span className="lcb-label">Your share per period</span>
+                  <span className="lcb-val">${group.pricePerSlot} × {groupMonths}mo = ${preview.base}</span>
+                </div>
+              </div>
+              <p className="lcb-note">The billing cycle is fixed by the group organizer and cannot be changed.</p>
             </div>
 
             <div className="dur-summary">
-              <div className="dur-sum-row"><span>Subscription ({months}mo × ${group.pricePerSlot})</span><span>${preview.base}</span></div>
+              <div className="dur-sum-row"><span>Subscription ({groupMonths}mo × ${group.pricePerSlot})</span><span>${preview.base}</span></div>
               <div className="dur-sum-row"><span>Platform fee ({group.feePercent}%)</span><span>+${preview.fee}</span></div>
               <div className="dur-sum-row dur-sum-total"><span>Total charged via PesaPal</span><span>${preview.total}</span></div>
             </div>
@@ -320,7 +334,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setShowJoin(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleJoin} disabled={busy}>
-                {busy ? <><span className="spinner"/> Joining…</> : "Confirm & Pay Later"}
+                {busy ? <><span className="spinner"/> Joining…</> : "Confirm & Pay →"}
               </button>
             </div>
           </div>
