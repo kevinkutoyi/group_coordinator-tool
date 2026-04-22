@@ -38,3 +38,9 @@
   gap: 12px;
 }
 .earning-row:last-child { border-bottom: none; }
+
+/* ── Payouts tab ── */
+.payout-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.payout-table th { padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--border); color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.payout-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.payout-table tr:last-child td { border-bottom: none; }

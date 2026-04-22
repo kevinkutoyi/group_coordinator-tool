@@ -92,7 +92,8 @@ export default function CredentialVault({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { copied, copy } = useCopy();
-  const canManage = session.isSuperAdmin() || session.isModerator();
+  // canManage: superadmin, any moderator, or the group organizer (who is typically a moderator)
+  const canManage = session.isSuperAdmin() || session.isModerator() || isOrganizer;
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);

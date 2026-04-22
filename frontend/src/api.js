@@ -113,6 +113,13 @@ export const api = {
   emailOrganizers:        (body) => req("/admin/email-organizers",         { method: "POST", body }),
   getOrganizerEmailHistory: ()   => req("/admin/organizer-email-history"),
 
+  // Admin — platform settings & payouts
+  getAdminSettings:  ()           => req("/admin/settings"),
+  updateFeePercent:  (feePercent) => req("/admin/settings/fee", { method: "PUT", body: { feePercent } }),
+  getPayoutQueue:    ()           => req("/admin/payout-queue"),
+  markPaid:          (body)       => req("/admin/payouts/mark-paid", { method: "POST", body }),
+  getPayoutHistory:  ()           => req("/admin/payouts/history"),
+
   // Credential Vault
   getCredentials:    (gid)  => req(`/groups/${gid}/credentials`),
   saveCredentials:   (gid, body) => req(`/groups/${gid}/credentials`, { method: "PUT", body }),

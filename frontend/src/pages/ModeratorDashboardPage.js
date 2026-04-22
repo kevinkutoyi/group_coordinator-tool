@@ -27,8 +27,12 @@ export default function ModeratorDashboardPage({ navigate }) {
   if (loading) return <div style={{ textAlign:"center", padding:80 }}><span className="spinner"/></div>;
   if (!data)   return null;
 
-  const { summary, groups } = data;
+  const { summary, groups, payoutHistory } = data;
   const user = session.getUser();
+
+  // Backend fields: totalCollected, totalOwed, totalPaid, totalPending, feePercent, pesapalEmail, configured
+  const feePercent = summary.feePercent ?? 8;
+  const modKeeps   = +(100 - feePercent).toFixed(1);
 
   return (
     <div className="mod-dash fade-in">
@@ -53,8 +57,8 @@ export default function ModeratorDashboardPage({ navigate }) {
         <div className="mod-setup-banner">
           <span>⚠️</span>
           <div>
-            <strong>Connect your PesaPal account to start earning.</strong>
-            <span> Set your profit percentage and PesaPal API credentials to receive payments.</span>
+            <strong>Register your PesaPal email to receive Sunday payouts.</strong>
+            <span> Add your payout email in Settings so the admin knows where to send your earnings.</span>
           </div>
           <button className="btn btn-primary btn-sm" onClick={() => navigate("mod-settings")}>
             Set Up Now →
@@ -76,46 +80,91 @@ export default function ModeratorDashboardPage({ navigate }) {
         </div>
         <div className="mod-kpi-card mod-kpi-earn">
           <div className="mod-kpi-icon">💰</div>
-          <div className="mod-kpi-val" style={{ color:"var(--accent3)" }}>${summary.totalNet.toFixed(2)}</div>
-          <div className="mod-kpi-label">Your Net Earnings</div>
+          <div className="mod-kpi-val" style={{ color:"var(--accent3)" }}>
+            KES {(summary.totalOwed ?? 0).toFixed(2)}
+          </div>
+          <div className="mod-kpi-label">Total Owed to You</div>
         </div>
         <div className="mod-kpi-card">
-          <div className="mod-kpi-icon">📊</div>
-          <div className="mod-kpi-val">{summary.profitPercent}<span>%</span></div>
-          <div className="mod-kpi-label">Your Profit Rate</div>
+          <div className="mod-kpi-icon">✅</div>
+          <div className="mod-kpi-val" style={{ color:"var(--success)" }}>
+            KES {(summary.totalPaid ?? 0).toFixed(2)}
+          </div>
+          <div className="mod-kpi-label">Already Paid Out</div>
         </div>
+        {summary.totalPending > 0 && (
+          <div className="mod-kpi-card mod-kpi-warn">
+            <div className="mod-kpi-icon">🕐</div>
+            <div className="mod-kpi-val" style={{ color:"var(--warning)" }}>
+              KES {(summary.totalPending ?? 0).toFixed(2)}
+            </div>
+            <div className="mod-kpi-label">Pending Next Payout</div>
+          </div>
+        )}
         {summary.pendingReview > 0 && (
           <div className="mod-kpi-card mod-kpi-warn">
             <div className="mod-kpi-icon">⏳</div>
             <div className="mod-kpi-val" style={{ color:"var(--warning)" }}>{summary.pendingReview}</div>
-            <div className="mod-kpi-label">Awaiting Review</div>
+            <div className="mod-kpi-label">Groups Awaiting Review</div>
           </div>
         )}
       </div>
 
       {/* Earnings breakdown card */}
-      {summary.configured && summary.totalGross > 0 && (
+      {summary.totalCollected > 0 && (
         <div className="card mod-earnings-card">
           <h2 className="section-h2" style={{ marginBottom:16 }}>💰 Earnings Breakdown</h2>
           <div className="mod-earn-row">
             <span>Gross collected from members</span>
-            <span>${summary.totalGross.toFixed(2)}</span>
-          </div>
-          <div className="mod-earn-row">
-            <span>Your profit ({summary.profitPercent}% of gross)</span>
-            <span style={{ color:"var(--accent3)" }}>${summary.totalProfit.toFixed(2)}</span>
+            <span>KES {(summary.totalCollected ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row mod-earn-split">
-            <span>Platform cut ({summary.platformCutPercent}% of your profit → goes to SplitPass)</span>
-            <span style={{ color:"var(--muted)" }}>−${summary.totalPlatformTake.toFixed(2)}</span>
+            <span>Platform fee ({feePercent}% — kept by SplitPass)</span>
+            <span style={{ color:"var(--muted)" }}>
+              − KES {((summary.totalCollected ?? 0) - (summary.totalOwed ?? 0)).toFixed(2)}
+            </span>
+          </div>
+          <div className="mod-earn-row">
+            <span>Your total owed ({modKeeps}% of gross)</span>
+            <span style={{ color:"var(--accent3)" }}>KES {(summary.totalOwed ?? 0).toFixed(2)}</span>
+          </div>
+          <div className="mod-earn-row">
+            <span>Already paid to you</span>
+            <span style={{ color:"var(--success)" }}>KES {(summary.totalPaid ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row mod-earn-total">
-            <span>Your net earnings</span>
-            <span style={{ color:"var(--success)" }}>${summary.totalNet.toFixed(2)}</span>
+            <span>Pending next Sunday payout</span>
+            <span style={{ color:"var(--warning)" }}>KES {(summary.totalPending ?? 0).toFixed(2)}</span>
           </div>
           <p style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:12 }}>
-            Profit flows automatically: {summary.profitPercent}% profit → {summary.platformCutPercent}% of that ({summary.totalPlatformTake > 0 ? ((summary.platformCutPercent/100)*summary.profitPercent).toFixed(1) : "–"}% total) goes to SplitPass, you keep the rest.
+            All payments land in the platform PesaPal account. Every Sunday the super admin pays out your {modKeeps}% share to your registered PesaPal email.
           </p>
+        </div>
+      )}
+
+      {/* Payout history */}
+      {payoutHistory?.length > 0 && (
+        <div className="card" style={{ marginBottom:24 }}>
+          <h2 className="section-h2" style={{ marginBottom:12 }}>📅 Payout History</h2>
+          {payoutHistory.map(p => (
+            <div key={p.id} style={{
+              display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"10px 0", borderBottom:"1px solid var(--border)", fontSize:"0.82rem",
+            }}>
+              <div>
+                <div style={{ fontWeight:600 }}>KES {p.amountPaid?.toFixed(2)}</div>
+                <div style={{ color:"var(--muted)", fontSize:"0.72rem" }}>
+                  {new Date(p.paidAt).toLocaleDateString("en-KE", { weekday:"short", day:"numeric", month:"short", year:"numeric" })}
+                  {p.notes && ` · ${p.notes}`}
+                </div>
+              </div>
+              <span style={{
+                padding:"3px 10px", borderRadius:99,
+                background:"rgba(74,222,128,0.1)", color:"var(--success)",
+                border:"1px solid rgba(74,222,128,0.2)", fontSize:"0.72rem", fontWeight:600,
+              }}>Paid ✓</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -168,10 +217,10 @@ export default function ModeratorDashboardPage({ navigate }) {
                   </div>
                 </div>
                 <div className="mgc-right">
-                  {g.reviewStatus === "approved" && (
+                  {g.reviewStatus === "approved" && g.modOwed > 0 && (
                     <div className="mgc-earnings">
-                      <div className="mgc-earn-val">${g.netEarned.toFixed(2)}</div>
-                      <div className="mgc-earn-sub">net earned</div>
+                      <div className="mgc-earn-val">KES {g.modOwed.toFixed(2)}</div>
+                      <div className="mgc-earn-sub">total owed</div>
                     </div>
                   )}
                   <div style={{ display:"flex", gap:8 }}>

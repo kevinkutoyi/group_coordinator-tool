@@ -14,10 +14,18 @@ const emailService = require("./emailService");
 const app  = express();
 const PORT = process.env.PORT || 3001;
 const DATA_FILE = path.join(__dirname, "../data/db.json");
-const FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || "2");
-// % of organizer earnings that flows to platform owner automatically
-const ORGANIZER_PLATFORM_CUT = parseFloat(process.env.ORGANIZER_PLATFORM_CUT_PERCENT || "33");
+// Platform fee % taken from every payment — remainder owed to moderator.
+// Can be overridden per-run by DB platformSettings.feePercent (set via admin dashboard).
+const DEFAULT_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || "8");
 const JWT_SECRET  = process.env.JWT_SECRET || "dev_secret_change_in_production";
+
+// Runtime fee (may be updated by super admin without restart)
+function getPlatformFeePercent() {
+  try {
+    const db = loadDB();
+    return db.platformSettings?.feePercent ?? DEFAULT_FEE_PERCENT;
+  } catch { return DEFAULT_FEE_PERCENT; }
+}
 
 // ── Middleware ────────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:3000" }));
@@ -33,26 +41,37 @@ function loadDB() {
     const seed = {
       users: [], groups: [], groupMembers: [],
       payments: [], pesapalOrders: [], platformEarnings: [],
-      emailVerifications: [], footerSubscribers: [], newsletterSent: [], groupEmails: [], groupCredentials: [], moderatorSettings: [], organizerEarnings: []
+      emailVerifications: [], footerSubscribers: [], newsletterSent: [], groupEmails: [], groupCredentials: [],
+      moderatorSettings: [], organizerEarnings: [],
+      // ── NEW ──────────────────────────────────────────────────────
+      moderatorPayouts: [],       // Sunday payout records per moderator
+      platformSettings: { feePercent: DEFAULT_FEE_PERCENT }, // live-editable
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(seed, null, 2));
     return seed;
   }
   const db = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  // Ensure all collections exist in older DB files
-  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications","footerSubscribers","newsletterSent","groupEmails","groupCredentials","moderatorSettings","organizerEarnings"]
+  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications",
+   "footerSubscribers","newsletterSent","groupEmails","groupCredentials","moderatorSettings","organizerEarnings",
+   "moderatorPayouts"]
     .forEach(k => { if (!db[k]) db[k] = []; });
+  if (!db.platformSettings) db.platformSettings = { feePercent: DEFAULT_FEE_PERCENT };
   return db;
 }
 function saveDB(db) { fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2)); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+// New payment model:
+//   memberPays      = base subscription cost (no extra fee on top)
+//   platformFee     = memberPays × feePercent/100  (platform keeps this)
+//   moderatorOwed   = memberPays − platformFee      (queued for Sunday payout)
 function calcFee(amount, months = 1) {
-  const base         = +(amount * months).toFixed(2);
-  const platformFee  = +(base * FEE_PERCENT / 100).toFixed(2);
-  const memberPays   = +(base + platformFee).toFixed(2);
-  const organizerGets = base;
-  return { base, platformFee, memberPays, organizerGets };
+  const feePercent    = getPlatformFeePercent();
+  const memberPays    = +(amount * months).toFixed(2);
+  const platformFee   = +(memberPays * feePercent / 100).toFixed(2);
+  const moderatorOwed = +(memberPays - platformFee).toFixed(2);
+  return { base: memberPays, memberPays, platformFee, moderatorOwed,
+           feePercent, organizerGets: moderatorOwed }; // organizerGets alias kept for compat
 }
 
 function signToken(payload, expiresIn = process.env.JWT_EXPIRES_IN || "8h") {
@@ -327,10 +346,32 @@ app.get("/api/groups", (req, res) => {
 });
 
 // GET /api/groups/:id — public detail
+// Pending-review groups are only visible to the owning moderator and superadmin.
 app.get("/api/groups/:id", (req, res) => {
   const db    = loadDB();
   const group = db.groups.find(g => g.id === req.params.id);
   if (!group) return res.status(404).json({ error: "Group not found" });
+
+  // Decode caller's role/id from token (if present)
+  const authHeader = req.headers.authorization || "";
+  let viewerRole = "guest";
+  let viewerId   = null;
+  try {
+    const decoded = jwt.verify(authHeader.replace("Bearer ", ""), JWT_SECRET);
+    viewerRole = decoded.role;
+    viewerId   = decoded.id;
+  } catch {}
+
+  // Enforce review gate: non-approved groups are only visible to superadmin
+  // or the moderator who owns them
+  const isApproved   = group.reviewStatus === "approved";
+  const isSuperAdmin = viewerRole === "superadmin";
+  const isOwner      = viewerRole === "moderator" && viewerId === group.organizerId;
+
+  if (!isApproved && !isSuperAdmin && !isOwner) {
+    return res.status(404).json({ error: "Group not found" });
+  }
+
   const members  = db.groupMembers.filter(m => m.groupId === group.id);
   const payments = db.payments.filter(p => p.groupId === group.id);
   res.json({ ...group, members, payments });
@@ -379,7 +420,7 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), (req, res) => {
     pricePerSlot,
     platformFee,
     memberPays,
-    feePercent:     FEE_PERCENT,
+    feePercent:     getPlatformFeePercent(),
     organizerId:    req.user.id,
     organizerName:  creatorName,
     organizerEmail: creatorEmail,
@@ -492,13 +533,33 @@ app.post("/api/pesapal/initiate", requireRole("customer", "superadmin"), async (
   if (member.paymentStatus === "confirmed")
     return res.status(400).json({ error: "Already paid" });
 
+  // ── Currency conversion ───────────────────────────────────────────────────
+  // All prices are stored in USD. We use a single fixed rate (KES_PER_USD from .env)
+  // to derive BOTH the KES and USD charge amounts so they are equivalent regardless
+  // of PesaPal's own live market rate on the day.
+  //
+  // Without this fix:
+  //   KES path → memberPays * 130 = 432.9 → KES 433
+  //   USD path → memberPays = $3.33 → PesaPal converts at live rate ~129.5 → KES 431
+  //   Result: customer pays different amounts depending on currency choice.
+  //
+  // With this fix:
+  //   kesAmount = round(3.33 * 130) = 433 KES  (whole shillings)
+  //   usdAmount = 433 / 130 = 3.33 USD          (back-derived — same purchasing power)
+  //   Both paths now represent identical value at our fixed rate.
+  const KES_PER_USD  = parseFloat(process.env.KES_PER_USD || "130");
+  const amountInUSD  = member.memberPays;
+  const kesAmount    = Math.round(amountInUSD * KES_PER_USD);   // whole shillings
+  const usdAmount    = +(kesAmount / KES_PER_USD).toFixed(2);   // back-derived USD
+  const amountForPesapal = currency === "KES" ? kesAmount : usdAmount;
+
   const orderId    = `SP-${Date.now()}-${uuidv4().slice(0,8).toUpperCase()}`;
   const callbackUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment-callback?orderId=${orderId}&groupId=${groupId}&memberId=${memberId}`;
 
   try {
     const nameParts = member.name.split(" ");
     const { redirectUrl, orderTrackingId } = await pesapal.submitOrder({
-      orderId, amount: member.memberPays, currency,
+      orderId, amount: amountForPesapal, currency,
       description: `SplitPass: ${group.serviceName} ${group.planName} × ${member.months}mo — ${member.name}`,
       firstName: nameParts[0], lastName: nameParts.slice(1).join(" ") || "",
       email: member.email, phone: "", callbackUrl,
@@ -512,13 +573,22 @@ app.post("/api/pesapal/initiate", requireRole("customer", "superadmin"), async (
       months:        member.months,
       baseAmount:    member.baseAmount,
       platformFee:   member.platformFee,
-      organizerGets: member.organizerGets,
-      memberPays:    member.memberPays,
+      moderatorOwed: member.moderatorOwed,
+      organizerGets: member.moderatorOwed, // compat alias
+      moderatorId:   group.organizerId,
+      memberPays:    member.memberPays,       // always USD — used for earnings calc
+      chargedAmount: amountForPesapal,        // actual amount sent to PesaPal (KES or USD)
       currency, status: "PENDING",
       createdAt: new Date().toISOString(), confirmedAt: null,
     });
     saveDB(db);
-    res.json({ redirectUrl, orderId, memberPays: member.memberPays, platformFee: member.platformFee });
+    res.json({
+      redirectUrl, orderId,
+      memberPays:    member.memberPays,       // USD base
+      chargedAmount: amountForPesapal,        // what PesaPal will charge
+      currency,
+      platformFee:   member.platformFee,
+    });
   } catch (err) {
     console.error("PesaPal initiate:", err.message);
     res.status(502).json({ error: `Payment gateway error: ${err.message}` });
@@ -546,18 +616,23 @@ app.get("/api/pesapal/verify", async (req, res) => {
       const member = db.groupMembers.find(m => m.id === order.memberId);
       if (member) {
         member.paymentStatus = "confirmed";
-        // Set expiry from today + months
         const exp = new Date();
         exp.setMonth(exp.getMonth() + (order.months || 1));
         member.expiresAt = exp.toISOString();
       }
       if (!db.payments.find(p => p.pesapalOrderId === orderId)) {
+        // ── Record payment with moderator payout tracking ───────────────
         db.payments.push({
           id: uuidv4(), groupId: order.groupId, memberId: order.memberId,
           userId: order.userId, memberName: order.memberName,
           months: order.months, amount: order.memberPays,
-          organizerGets: order.organizerGets, platformFee: order.platformFee,
+          platformFee:   order.platformFee,
+          moderatorOwed: order.moderatorOwed ?? order.organizerGets,
+          moderatorId:   order.moderatorId,
+          organizerGets: order.moderatorOwed ?? order.organizerGets, // compat
           method: "pesapal", pesapalOrderId: orderId, confirmedAt: order.confirmedAt,
+          payoutStatus: "pending", // "pending" until super admin marks paid on Sunday
+          currency: order.currency || "KES",
         });
         db.platformEarnings.push({
           id: uuidv4(), orderId, groupId: order.groupId,
@@ -568,7 +643,6 @@ app.get("/api/pesapal/verify", async (req, res) => {
         const grpForEmail = db.groups.find(g => g.id === order.groupId);
         const memForEmail = db.groupMembers.find(m => m.id === order.memberId);
         if (grpForEmail && memForEmail) {
-          // Send credentials email if credentials already set
           const existingCreds = db.groupCredentials.find(c => c.groupId === order.groupId);
           if (existingCreds && memForEmail) {
             emailService.sendCredentialsUpdated({
@@ -596,7 +670,6 @@ app.get("/api/pesapal/verify", async (req, res) => {
       }
       const group = db.groups.find(g => g.id === order.groupId);
       if (group) {
-        // Only count paying members (exclude organizer) against maxSlots
         const confirmedPaying = db.groupMembers.filter(
           m => m.groupId === group.id && m.paymentStatus === "confirmed" && m.role !== "organizer"
         ).length;
@@ -635,8 +708,13 @@ app.post("/api/pesapal/ipn", async (req, res) => {
           id: uuidv4(), groupId: order.groupId, memberId: order.memberId,
           userId: order.userId, memberName: order.memberName,
           months: order.months, amount: order.memberPays,
-          organizerGets: order.organizerGets, platformFee: order.platformFee,
+          platformFee:   order.platformFee,
+          moderatorOwed: order.moderatorOwed ?? order.organizerGets,
+          moderatorId:   order.moderatorId,
+          organizerGets: order.moderatorOwed ?? order.organizerGets,
           method: "pesapal", pesapalOrderId: order.id, confirmedAt: order.confirmedAt,
+          payoutStatus: "pending",
+          currency: order.currency || "KES",
         });
         db.platformEarnings.push({ id: uuidv4(), orderId: order.id, groupId: order.groupId, fee: order.platformFee, currency: order.currency, earnedAt: order.confirmedAt });
       }
@@ -660,6 +738,7 @@ app.get("/api/admin/earnings", requireSuperAdmin, (req, res) => {
   const db    = loadDB();
   const total = db.platformEarnings.reduce((acc, e) => acc + (e.fee || 0), 0);
   const now   = new Date();
+  const feePercent = getPlatformFeePercent();
 
   const monthlyEarnings = Array.from({ length: 12 }, (_, i) => {
     const d     = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
@@ -675,19 +754,25 @@ app.get("/api/admin/earnings", requireSuperAdmin, (req, res) => {
     return { groupId: g.id, serviceName: g.serviceName, planName: g.planName, fees: +fees.toFixed(2) };
   }).filter(g => g.fees > 0);
 
+  // Total pending moderator payouts
+  const totalPendingPayouts = db.payments
+    .filter(p => p.payoutStatus === "pending")
+    .reduce((a, p) => a + (p.moderatorOwed || 0), 0);
+
   res.json({
-    totalEarned:     +total.toFixed(2),
-    feePercent:      FEE_PERCENT,
-    earningsCount:   db.platformEarnings.length,
-    pendingOrders:   db.pesapalOrders.filter(o => o.status === "PENDING").length,
-    completedOrders: db.pesapalOrders.filter(o => o.status === "COMPLETED").length,
-    totalGroups:     db.groups.length,
-    totalUsers:      db.users.length,
-    totalCustomers:  db.users.filter(u => u.role === "customer").length,
-    pendingModerators: db.users.filter(u => u.role === "moderator" && u.status === "pending").length,
+    totalEarned:        +total.toFixed(2),
+    feePercent,
+    totalPendingPayouts: +totalPendingPayouts.toFixed(2),
+    earningsCount:      db.platformEarnings.length,
+    pendingOrders:      db.pesapalOrders.filter(o => o.status === "PENDING").length,
+    completedOrders:    db.pesapalOrders.filter(o => o.status === "COMPLETED").length,
+    totalGroups:        db.groups.length,
+    totalUsers:         db.users.length,
+    totalCustomers:     db.users.filter(u => u.role === "customer").length,
+    pendingModerators:  db.users.filter(u => u.role === "moderator" && u.status === "pending").length,
     byGroup,
     monthlyEarnings,
-    recentEarnings:  db.platformEarnings.slice(-20).reverse(),
+    recentEarnings:     db.platformEarnings.slice(-20).reverse(),
   });
 });
 
@@ -697,7 +782,130 @@ app.get("/api/admin/refresh", requireSuperAdmin, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  MODERATOR SETTINGS  (PesaPal creds + profit cut)
+//  SUPER ADMIN — PLATFORM FEE SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/settings  — current platform fee
+app.get("/api/admin/settings", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  res.json({ feePercent: db.platformSettings?.feePercent ?? DEFAULT_FEE_PERCENT });
+});
+
+// PUT /api/admin/settings/fee  — update platform fee %
+app.put("/api/admin/settings/fee", requireSuperAdmin, (req, res) => {
+  const { feePercent } = req.body;
+  if (feePercent == null || feePercent < 1 || feePercent > 50)
+    return res.status(400).json({ error: "feePercent must be between 1 and 50" });
+  const db = loadDB();
+  db.platformSettings = { ...(db.platformSettings || {}), feePercent: +feePercent };
+  saveDB(db);
+  res.json({ feePercent: +feePercent, message: "Platform fee updated." });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUPER ADMIN — SUNDAY PAYOUT QUEUE
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/payout-queue
+// Returns one row per moderator with pending (unpaid) payments
+app.get("/api/admin/payout-queue", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  const pendingPayments = db.payments.filter(p => p.payoutStatus === "pending");
+
+  // Group by moderatorId
+  const byMod = {};
+  for (const p of pendingPayments) {
+    const modId = p.moderatorId;
+    if (!modId) continue;
+    if (!byMod[modId]) {
+      const modUser = db.users.find(u => u.id === modId);
+      const modSettings = db.moderatorSettings.find(s => s.userId === modId);
+      byMod[modId] = {
+        moderatorId:    modId,
+        moderatorName:  modUser?.name  || "Unknown",
+        moderatorEmail: modUser?.email || "",
+        pesapalEmail:   modSettings?.pesapalEmail || modUser?.email || "",
+        currency:       p.currency || "KES",
+        amountOwed:     0,
+        paymentCount:   0,
+        payments:       [],
+      };
+    }
+    byMod[modId].amountOwed   = +(byMod[modId].amountOwed + (p.moderatorOwed || 0)).toFixed(2);
+    byMod[modId].paymentCount += 1;
+    byMod[modId].payments.push({
+      id: p.id, memberName: p.memberName, amount: p.amount,
+      moderatorOwed: p.moderatorOwed, platformFee: p.platformFee,
+      confirmedAt: p.confirmedAt, currency: p.currency,
+    });
+  }
+
+  // Also include history of past payouts
+  const payoutHistory = (db.moderatorPayouts || []).slice().reverse().slice(0, 50);
+
+  res.json({
+    queue: Object.values(byMod).sort((a, b) => b.amountOwed - a.amountOwed),
+    totalOwed: +Object.values(byMod).reduce((a, m) => a + m.amountOwed, 0).toFixed(2),
+    payoutHistory,
+  });
+});
+
+// POST /api/admin/payouts/mark-paid
+// Marks all pending payments for a moderator as paid and logs the payout
+app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, (req, res) => {
+  const { moderatorId, notes = "" } = req.body;
+  if (!moderatorId) return res.status(400).json({ error: "moderatorId required" });
+
+  const db = loadDB();
+  const pending = db.payments.filter(
+    p => p.moderatorId === moderatorId && p.payoutStatus === "pending"
+  );
+  if (!pending.length)
+    return res.status(400).json({ error: "No pending payments for this moderator" });
+
+  const totalPaid = pending.reduce((a, p) => a + (p.moderatorOwed || 0), 0);
+  const modUser   = db.users.find(u => u.id === moderatorId);
+  const modSettings = db.moderatorSettings.find(s => s.userId === moderatorId);
+  const now       = new Date().toISOString();
+
+  // Mark each payment
+  for (const p of pending) {
+    p.payoutStatus = "paid";
+    p.paidAt       = now;
+    p.paidBy       = "superadmin";
+  }
+
+  // Log payout record
+  const payoutRecord = {
+    id:             uuidv4(),
+    moderatorId,
+    moderatorName:  modUser?.name  || "Unknown",
+    moderatorEmail: modUser?.email || "",
+    pesapalEmail:   modSettings?.pesapalEmail || modUser?.email || "",
+    amountPaid:     +totalPaid.toFixed(2),
+    currency:       pending[0]?.currency || "KES",
+    paymentIds:     pending.map(p => p.id),
+    paymentCount:   pending.length,
+    notes,
+    paidAt: now,
+    paidBy: "superadmin",
+    weekEnding: new Date().toISOString(),
+  };
+  db.moderatorPayouts.push(payoutRecord);
+  saveDB(db);
+
+  res.json({ success: true, payout: payoutRecord });
+});
+
+// GET /api/admin/payouts/history  — all past payout records
+app.get("/api/admin/payouts/history", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  res.json((db.moderatorPayouts || []).slice().reverse());
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MODERATOR SETTINGS  (payout email only — no PesaPal credentials needed)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // GET /api/moderator/settings
@@ -705,51 +913,37 @@ app.get("/api/moderator/settings", requireRole("moderator"), (req, res) => {
   const db = loadDB();
   const settings = db.moderatorSettings.find(s => s.userId === req.user.id);
   if (!settings) return res.json({ configured: false });
-  // Never expose secret key
-  const { pesapalConsumerSecret, ...safe } = settings;
-  res.json({ ...safe, configured: true, hasSecret: !!pesapalConsumerSecret });
+  res.json({ ...settings, configured: true });
 });
 
 // PUT /api/moderator/settings
+// Moderators only need to save their PesaPal email (for receiving Sunday payouts)
 app.put("/api/moderator/settings", requireRole("moderator"), (req, res) => {
-  const { pesapalConsumerKey, pesapalConsumerSecret, pesapalEnv = "sandbox",
-          profitPercent, payoutEmail } = req.body;
-  if (!pesapalConsumerKey || !pesapalConsumerSecret)
-    return res.status(400).json({ error: "PesaPal consumer key and secret are required" });
-  if (!profitPercent || profitPercent < 1 || profitPercent > 50)
-    return res.status(400).json({ error: "Profit percent must be between 1 and 50" });
+  const { pesapalEmail, displayName } = req.body;
+  if (!pesapalEmail)
+    return res.status(400).json({ error: "pesapalEmail is required so we can send your weekly payout" });
 
-  const db = loadDB();
+  const db  = loadDB();
   const idx = db.moderatorSettings.findIndex(s => s.userId === req.user.id);
-
-  // Calculate the split: platform cut from organizer's profit
-  const platformCutPercent = ORGANIZER_PLATFORM_CUT;
-  const platformTake = +((profitPercent * platformCutPercent) / 100).toFixed(2);
-  const organizerKeeps = +(profitPercent - platformTake).toFixed(2);
+  const feePercent = getPlatformFeePercent();
 
   const settings = {
-    userId:               req.user.id,
-    pesapalConsumerKey,
-    pesapalConsumerSecret,
-    pesapalEnv,
-    profitPercent:        +profitPercent,
-    platformCutPercent,
-    platformTake,         // goes to you automatically
-    organizerKeeps,       // organizer's actual net
-    payoutEmail:          payoutEmail || "",
-    updatedAt:            new Date().toISOString(),
+    userId:       req.user.id,
+    pesapalEmail: pesapalEmail.trim().toLowerCase(),
+    displayName:  displayName || "",
+    feePercent,
+    updatedAt:    new Date().toISOString(),
   };
 
   if (idx >= 0) db.moderatorSettings[idx] = settings;
   else          db.moderatorSettings.push(settings);
   saveDB(db);
 
-  const { pesapalConsumerSecret: _s, ...safe } = settings;
-  res.json({ ...safe, configured: true });
+  res.json({ ...settings, configured: true });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  MODERATOR DASHBOARD  (earnings, groups, stats)
+//  MODERATOR DASHBOARD  (earnings, groups, payout status)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // GET /api/moderator/dashboard
@@ -758,49 +952,56 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), (req, res) => {
   const uid      = req.user.id;
   const myGroups = db.groups.filter(g => g.organizerId === uid);
   const settings = db.moderatorSettings.find(s => s.userId === uid);
+  const feePercent = getPlatformFeePercent();
 
-  // Earnings per group
   const groupStats = myGroups.map(g => {
-    const members    = db.groupMembers.filter(m => m.groupId === g.id && m.role !== "organizer");
-    const confirmed  = members.filter(m => m.paymentStatus === "confirmed").length;
-    const payments   = db.payments.filter(p => p.groupId === g.id);
-    const grossRevenue = payments.reduce((acc, p) => acc + (p.organizerGets || 0), 0);
-    const profitPct  = settings?.profitPercent || 0;
-    const profitEarned = +((grossRevenue * profitPct) / 100).toFixed(2);
-    const platformTake = +((profitEarned * ORGANIZER_PLATFORM_CUT) / 100).toFixed(2);
-    const netEarned    = +(profitEarned - platformTake).toFixed(2);
+    const members   = db.groupMembers.filter(m => m.groupId === g.id && m.role !== "organizer");
+    const confirmed = members.filter(m => m.paymentStatus === "confirmed").length;
+    const payments  = db.payments.filter(p => p.groupId === g.id);
+    const totalCollected = payments.reduce((acc, p) => acc + (p.amount || 0), 0);
+    const platformFees   = payments.reduce((acc, p) => acc + (p.platformFee || 0), 0);
+    const modOwed        = payments.reduce((acc, p) => acc + (p.moderatorOwed || p.organizerGets || 0), 0);
+    const modPaid        = payments.filter(p => p.payoutStatus === "paid").reduce((acc, p) => acc + (p.moderatorOwed || 0), 0);
+    const modPending     = payments.filter(p => p.payoutStatus === "pending").reduce((acc, p) => acc + (p.moderatorOwed || 0), 0);
     return {
       id: g.id, serviceName: g.serviceName, serviceIcon: g.serviceIcon,
       planName: g.planName, status: g.status, reviewStatus: g.reviewStatus,
       billingCycle: g.billingCycle, maxSlots: g.maxSlots,
       confirmedMembers: confirmed, totalSlots: g.maxSlots,
-      grossRevenue: +grossRevenue.toFixed(2),
-      profitEarned, platformTake, netEarned,
+      totalCollected:  +totalCollected.toFixed(2),
+      platformFees:    +platformFees.toFixed(2),
+      modOwed:         +modOwed.toFixed(2),
+      modPaid:         +modPaid.toFixed(2),
+      modPending:      +modPending.toFixed(2),
       createdAt: g.createdAt,
     };
   });
 
-  const totalGross     = groupStats.reduce((a, g) => a + g.grossRevenue, 0);
-  const totalProfit    = groupStats.reduce((a, g) => a + g.profitEarned, 0);
-  const totalPlatform  = groupStats.reduce((a, g) => a + g.platformTake, 0);
-  const totalNet       = groupStats.reduce((a, g) => a + g.netEarned, 0);
+  const totalCollected = groupStats.reduce((a, g) => a + g.totalCollected, 0);
+  const totalOwed      = groupStats.reduce((a, g) => a + g.modOwed, 0);
+  const totalPaid      = groupStats.reduce((a, g) => a + g.modPaid, 0);
+  const totalPending   = groupStats.reduce((a, g) => a + g.modPending, 0);
   const totalMembers   = groupStats.reduce((a, g) => a + g.confirmedMembers, 0);
   const pendingReview  = myGroups.filter(g => g.reviewStatus === "pending").length;
   const activeGroups   = myGroups.filter(g => g.status === "open" || g.status === "full").length;
 
+  const payoutHistory = (db.moderatorPayouts || [])
+    .filter(p => p.moderatorId === uid)
+    .slice().reverse().slice(0, 10);
+
   res.json({
     groups: groupStats,
     summary: {
-      totalGroups: myGroups.length, activeGroups, pendingReview,
-      totalMembers, totalGross: +totalGross.toFixed(2),
-      totalProfit: +totalProfit.toFixed(2),
-      totalPlatformTake: +totalPlatform.toFixed(2),
-      totalNet: +totalNet.toFixed(2),
-      profitPercent:    settings?.profitPercent || 0,
-      organizerKeeps:   settings?.organizerKeeps || 0,
-      platformCutPercent: ORGANIZER_PLATFORM_CUT,
-      configured:       !!settings,
+      totalGroups: myGroups.length, activeGroups, pendingReview, totalMembers,
+      totalCollected: +totalCollected.toFixed(2),
+      totalOwed:      +totalOwed.toFixed(2),
+      totalPaid:      +totalPaid.toFixed(2),
+      totalPending:   +totalPending.toFixed(2),
+      feePercent,
+      pesapalEmail:   settings?.pesapalEmail || "",
+      configured:     !!settings,
     },
+    payoutHistory,
   });
 });
 
@@ -1018,6 +1219,7 @@ app.get("/api/groups/:id/credentials", requireAuth, (req, res) => {
 
   const isOrganizer  = group.organizerId === req.user.id;
   const isSuperAdmin = req.user.role === "superadmin";
+  const isModerator  = req.user.role === "moderator";
 
   // Paying member check — must be confirmed
   const membership = db.groupMembers.find(
@@ -1025,7 +1227,8 @@ app.get("/api/groups/:id/credentials", requireAuth, (req, res) => {
   );
   const isConfirmedMember = membership && membership.paymentStatus === "confirmed";
 
-  if (!isOrganizer && !isSuperAdmin && !isConfirmedMember) {
+  // Superadmin, moderators, and the group organizer can always view credentials
+  if (!isOrganizer && !isSuperAdmin && !isModerator && !isConfirmedMember) {
     return res.status(403).json({
       error: "Access denied. Complete payment to view credentials.",
       requiresPayment: !membership || membership.paymentStatus !== "confirmed",
@@ -1035,7 +1238,7 @@ app.get("/api/groups/:id/credentials", requireAuth, (req, res) => {
   const creds = db.groupCredentials.find(c => c.groupId === req.params.id);
   if (!creds) return res.json({ exists: false, slots: [] });
 
-  res.json({ exists: true, ...creds, canEdit: isOrganizer || isSuperAdmin });
+  res.json({ exists: true, ...creds, canEdit: isOrganizer || isSuperAdmin || isModerator });
 });
 
 /**
@@ -1052,7 +1255,8 @@ app.put("/api/groups/:id/credentials", requireAuth, async (req, res) => {
 
   const isOrganizer  = group.organizerId === req.user.id;
   const isSuperAdmin = req.user.role === "superadmin";
-  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+  const isModerator  = req.user.role === "moderator";
+  if (!isOrganizer && !isSuperAdmin && !isModerator) return res.status(403).json({ error: "Forbidden" });
 
   // Validate slots
   if (!Array.isArray(slots) || slots.length === 0)
@@ -1110,7 +1314,8 @@ app.delete("/api/groups/:id/credentials", requireAuth, (req, res) => {
 
   const isOrganizer  = group.organizerId === req.user.id;
   const isSuperAdmin = req.user.role === "superadmin";
-  if (!isOrganizer && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+  const isModerator  = req.user.role === "moderator";
+  if (!isOrganizer && !isSuperAdmin && !isModerator) return res.status(403).json({ error: "Forbidden" });
 
   db.groupCredentials = db.groupCredentials.filter(c => c.groupId !== group.id);
   saveDB(db);
@@ -1354,7 +1559,7 @@ app.get("/api/stats", (req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────
 app.listen(PORT, async () => {
   console.log(`\n🚀 SplitPass API  →  http://localhost:${PORT}`);
-  console.log(`💰 Platform fee   →  ${FEE_PERCENT}%`);
+  console.log(`💰 Platform fee   →  ${getPlatformFeePercent()}%`);
   console.log(`🌍 PesaPal env    →  ${process.env.PESAPAL_ENV || "sandbox"}`);
   console.log(`📧 Email enabled  →  ${process.env.EMAIL_ENABLED === "true" ? "YES" : "NO (stub mode)"}\n`);
   try { await pesapal.registerIPN(); }

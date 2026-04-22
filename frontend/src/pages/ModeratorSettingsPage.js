@@ -4,214 +4,205 @@ import "./ModeratorSettingsPage.css";
 
 export default function ModeratorSettingsPage({ navigate }) {
   const [settings, setSettings] = useState(null);
+  const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [form, setForm]         = useState({
-    pesapalConsumerKey: "", pesapalConsumerSecret: "",
-    pesapalEnv: "sandbox", profitPercent: 9, payoutEmail: "",
-  });
+  const [form, setForm]         = useState({ pesapalEmail: "", displayName: "" });
   const [busy, setBusy]   = useState(false);
   const [msg, setMsg]     = useState(null);
-  const [showSecret, setShowSecret] = useState(false);
-  const PLATFORM_CUT = 33; // matches backend default
 
   useEffect(() => {
     if (!session.isModerator()) { navigate("login"); return; }
-    api.getModeratorSettings()
-      .then(s => {
+    Promise.all([api.getModeratorSettings(), api.getModeratorDashboard()])
+      .then(([s, d]) => {
         setSettings(s);
+        setDashboard(d);
         if (s.configured) {
-          setForm(f => ({
-            ...f,
-            pesapalConsumerKey: s.pesapalConsumerKey || "",
-            pesapalEnv:         s.pesapalEnv || "sandbox",
-            profitPercent:      s.profitPercent || 9,
-            payoutEmail:        s.payoutEmail || "",
-            // don't prefill secret — user must re-enter
-          }));
+          setForm({ pesapalEmail: s.pesapalEmail || "", displayName: s.displayName || "" });
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === "number" ? +e.target.value : e.target.value }));
-
-  // Live split preview
-  const profit    = +form.profitPercent || 0;
-  const platTake  = +((profit * PLATFORM_CUT) / 100).toFixed(2);
-  const youKeep   = +(profit - platTake).toFixed(2);
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   async function handleSave(e) {
     e.preventDefault(); setBusy(true); setMsg(null);
     try {
       const saved = await api.saveModeratorSettings(form);
       setSettings(saved);
-      setMsg({ type:"ok", text:"Settings saved successfully! Your PesaPal account is connected." });
-    } catch (err) { setMsg({ type:"err", text: err.message }); }
-    finally { setBusy(false); }
+      setMsg({ type: "ok", text: "✅ Settings saved! Your PesaPal email is registered for Sunday payouts." });
+    } catch (err) {
+      setMsg({ type: "err", text: err.message });
+    } finally { setBusy(false); }
   }
 
-  if (loading) return <div style={{ textAlign:"center", padding:80 }}><span className="spinner"/></div>;
+  if (loading) return <div style={{ textAlign: "center", padding: 80 }}><span className="spinner" /></div>;
+
+  const sum = dashboard?.summary || {};
+  const feePercent = settings?.feePercent ?? sum.feePercent ?? 8;
+  const modKeeps   = +(100 - feePercent).toFixed(1);
 
   return (
     <div className="mss-page fade-in">
-      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 8 }}>
         <button className="btn btn-outline btn-sm" onClick={() => navigate("mod-dash")}>← Dashboard</button>
         <div>
-          <h1 className="page-title" style={{ marginBottom:0 }}>⚙️ Moderator Settings</h1>
-          <p style={{ color:"var(--muted)", fontSize:"0.82rem", marginTop:4 }}>Connect your PesaPal account and set your earnings percentage</p>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>⚙️ Moderator Settings</h1>
+          <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginTop: 4 }}>
+            Register your PesaPal email to receive your Sunday payout
+          </p>
         </div>
       </div>
 
       {msg && (
-        <div className={`msg-box ${msg.type==="ok"?"msg-ok":"msg-err"}`} onClick={() => setMsg(null)} style={{ marginBottom:16 }}>
-          {msg.text} <span style={{ opacity:.4 }}>✕</span>
+        <div className={`msg-box ${msg.type === "ok" ? "msg-ok" : "msg-err"}`}
+          onClick={() => setMsg(null)} style={{ marginBottom: 16 }}>
+          {msg.text} <span style={{ opacity: .4 }}>✕</span>
         </div>
       )}
 
       <div className="mss-layout">
+        {/* ── Left: form ── */}
         <form className="card mss-form" onSubmit={handleSave}>
 
-          {/* PesaPal section */}
+          {/* PesaPal payout email */}
           <div className="mss-section-header">
-            <div className="mss-section-icon">🔗</div>
+            <div className="mss-section-icon">💸</div>
             <div>
-              <div className="mss-section-title">PesaPal Account</div>
-              <div className="mss-section-sub">Your personal PesaPal API credentials for receiving payments</div>
-            </div>
-            {settings?.configured && <span className="mss-connected-badge">✅ Connected</span>}
-          </div>
-
-          <div className="form-group">
-            <label>Consumer Key</label>
-            <input required value={form.pesapalConsumerKey} onChange={set("pesapalConsumerKey")}
-              placeholder="Your PesaPal consumer key" autoComplete="off" />
-          </div>
-
-          <div className="form-group">
-            <label>Consumer Secret</label>
-            <div className="pw-wrap">
-              <input required={!settings?.configured} type={showSecret ? "text" : "password"}
-                value={form.pesapalConsumerSecret} onChange={set("pesapalConsumerSecret")}
-                placeholder={settings?.configured ? "Re-enter to update secret" : "Your PesaPal consumer secret"}
-                autoComplete="new-password" />
-              <button type="button" className="pw-eye" onClick={() => setShowSecret(v => !v)}>
-                {showSecret ? "🙈" : "👁️"}
-              </button>
+              <div className="mss-section-title">Payout Account</div>
+              <div className="mss-section-sub">
+                The PesaPal-registered email where you receive your earnings every Sunday
+              </div>
             </div>
             {settings?.configured && (
-              <small style={{ color:"var(--muted)", fontSize:"0.72rem" }}>
-                Secret is saved. Leave blank to keep existing secret.
-              </small>
+              <span className="mss-connected-badge">✓ Registered</span>
             )}
           </div>
 
-          <div className="form-group">
-            <label>PesaPal Environment</label>
-            <select value={form.pesapalEnv} onChange={set("pesapalEnv")}>
-              <option value="sandbox">Sandbox (testing)</option>
-              <option value="live">Live (production)</option>
-            </select>
-          </div>
+          <label className="form-label">PesaPal Email <span style={{ color: "var(--error)" }}>*</span></label>
+          <input
+            type="email"
+            className="form-input"
+            value={form.pesapalEmail}
+            onChange={set("pesapalEmail")}
+            placeholder="yourname@pesapal.com"
+            required
+          />
+          <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 4, marginBottom: 14 }}>
+            This must be the email linked to your PesaPal account. The super admin
+            sends your payout to this address every Sunday.
+          </p>
 
-          <div className="form-group">
-            <label>Payout Email</label>
-            <input type="email" value={form.payoutEmail} onChange={set("payoutEmail")}
-              placeholder="email@example.com — where payment notifications go" />
-          </div>
+          <label className="form-label">Display Name (optional)</label>
+          <input
+            className="form-input"
+            value={form.displayName}
+            onChange={set("displayName")}
+            placeholder="e.g. John's Groups"
+            style={{ marginBottom: 20 }}
+          />
 
-          {/* Profit section */}
-          <div className="mss-section-header" style={{ marginTop:8 }}>
-            <div className="mss-section-icon">💰</div>
-            <div>
-              <div className="mss-section-title">Profit Percentage</div>
-              <div className="mss-section-sub">Your cut from what members pay. A portion of this automatically goes to SplitPass.</div>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Your Profit % (from gross member payments)</label>
-            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <input type="range" min={1} max={50} step={0.5}
-                value={form.profitPercent} onChange={set("profitPercent")}
-                style={{ flex:1, accentColor:"var(--accent)" }} />
-              <div className="mss-percent-badge">{form.profitPercent}%</div>
-            </div>
-          </div>
-
-          {/* Split preview */}
-          <div className="mss-split-preview">
-            <div className="mss-split-title">💡 Earnings Split Preview</div>
-            <div className="mss-split-row">
-              <span>Member pays (example for $10)</span>
-              <span>$10.00</span>
-            </div>
-            <div className="mss-split-row">
-              <span>Your profit ({profit}%)</span>
-              <span style={{ color:"var(--accent3)" }}>+${(10 * profit / 100).toFixed(2)}</span>
-            </div>
-            <div className="mss-split-row">
-              <span>SplitPass platform cut ({PLATFORM_CUT}% of your profit → automatic)</span>
-              <span style={{ color:"var(--muted)" }}>−${(10 * platTake / 100).toFixed(2)}</span>
-            </div>
-            <div className="mss-split-row mss-split-total">
-              <span>You keep ({youKeep}%)</span>
-              <span style={{ color:"var(--success)" }}>${(10 * youKeep / 100).toFixed(2)}</span>
-            </div>
-            <p style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:8 }}>
-              On every $10 collected: ${(10*platTake/100).toFixed(2)} goes to SplitPass automatically,
-              you receive ${(10*youKeep/100).toFixed(2)}.
-            </p>
-          </div>
-
-          {!form.pesapalConsumerKey && (
-            <div className="info-box" style={{ marginBottom:8, fontSize:"0.8rem" }}>
-              Get your API keys at <a href="https://developer.pesapal.com" target="_blank" rel="noreferrer">developer.pesapal.com</a> → Register Merchant → API Keys.
-            </div>
-          )}
-
-          <button type="submit" className="btn btn-primary" style={{ width:"100%", marginTop:8 }} disabled={busy}>
-            {busy ? <><span className="spinner"/> Saving…</> : "💾 Save Settings"}
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy ? "Saving…" : settings?.configured ? "Update Settings" : "Save Settings"}
           </button>
         </form>
 
-        {/* Info sidebar */}
-        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-          <div className="card">
-            <h2 className="section-h2" style={{ marginBottom:12 }}>How earnings work</h2>
-            <div style={{ fontSize:"0.82rem", color:"var(--muted)", lineHeight:1.7 }}>
-              <p>1. A member pays $10 to join your group</p>
-              <p>2. You earn {form.profitPercent}% = ${(10*profit/100).toFixed(2)} profit</p>
-              <p>3. SplitPass automatically takes {PLATFORM_CUT}% of that = ${(10*platTake/100).toFixed(2)}</p>
-              <p>4. You receive ${(10*youKeep/100).toFixed(2)} via your PesaPal account</p>
-            </div>
-          </div>
+        {/* ── Right: earnings summary + fee info ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
+          {/* How payouts work */}
           <div className="card">
-            <h2 className="section-h2" style={{ marginBottom:12 }}>Account Status</h2>
-            <div style={{ fontSize:"0.84rem" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid var(--border)" }}>
-                <span style={{ color:"var(--muted)" }}>Account</span>
-                <span style={{ color:"var(--success)", fontWeight:600 }}>✅ Approved</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid var(--border)" }}>
-                <span style={{ color:"var(--muted)" }}>PesaPal</span>
-                <span style={{ fontWeight:600, color: settings?.configured ? "var(--success)" : "var(--warning)" }}>
-                  {settings?.configured ? "✅ Connected" : "⚠️ Not connected"}
-                </span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0" }}>
-                <span style={{ color:"var(--muted)" }}>Profit rate</span>
-                <span style={{ fontWeight:600 }}>{settings?.profitPercent || "Not set"}%</span>
+            <div className="mss-section-header" style={{ marginBottom: 12 }}>
+              <div className="mss-section-icon">📋</div>
+              <div>
+                <div className="mss-section-title">How Payouts Work</div>
               </div>
             </div>
+            <div className="mss-split-preview" style={{ marginBottom: 0 }}>
+              <div className="mss-split-title">Revenue split per payment</div>
+              <div className="mss-split-row">
+                <span>Member pays</span>
+                <span>100%</span>
+              </div>
+              <div className="mss-split-row">
+                <span>Platform fee</span>
+                <span style={{ color: "var(--error)" }}>− {feePercent}%</span>
+              </div>
+              <div className="mss-split-row mss-split-total">
+                <span>Your earnings</span>
+                <span style={{ color: "var(--success)" }}>{modKeeps}%</span>
+              </div>
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>
+              All member payments go to the platform's PesaPal account.
+              Every Sunday the super admin reviews the queue and sends your accumulated earnings to your PesaPal email above.
+            </p>
           </div>
 
-          <div className="info-box">
-            <strong>⚠️ Group Review Required</strong><br/>
-            Every group you create is reviewed by the super admin before going public.
-            You'll be notified by email once approved or rejected.
-          </div>
+          {/* Earnings snapshot */}
+          {dashboard && (
+            <div className="card">
+              <div className="mss-section-header" style={{ marginBottom: 12 }}>
+                <div className="mss-section-icon">💰</div>
+                <div><div className="mss-section-title">Your Earnings</div></div>
+              </div>
+              <div className="mss-split-preview" style={{ marginBottom: 0 }}>
+                <div className="mss-split-row">
+                  <span>Total collected from members</span>
+                  <span>KES {sum.totalCollected?.toFixed(2) ?? "0.00"}</span>
+                </div>
+                <div className="mss-split-row">
+                  <span>Platform fees deducted</span>
+                  <span style={{ color: "var(--error)" }}>
+                    − KES {(sum.totalCollected - sum.totalOwed)?.toFixed(2) ?? "0.00"}
+                  </span>
+                </div>
+                <div className="mss-split-row">
+                  <span>Total owed to you</span>
+                  <span>KES {sum.totalOwed?.toFixed(2) ?? "0.00"}</span>
+                </div>
+                <div className="mss-split-row">
+                  <span>Already paid out</span>
+                  <span style={{ color: "var(--success)" }}>KES {sum.totalPaid?.toFixed(2) ?? "0.00"}</span>
+                </div>
+                <div className="mss-split-row mss-split-total">
+                  <span>Pending next payout</span>
+                  <span style={{ color: "var(--accent)" }}>
+                    KES {sum.totalPending?.toFixed(2) ?? "0.00"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Recent payout history */}
+              {dashboard.payoutHistory?.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, marginBottom: 8, color: "var(--muted)" }}>
+                    RECENT PAYOUTS
+                  </div>
+                  {dashboard.payoutHistory.map(p => (
+                    <div key={p.id} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "8px 0", borderBottom: "1px solid var(--border)",
+                      fontSize: "0.8rem",
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{p.currency} {p.amountPaid?.toFixed(2)}</div>
+                        <div style={{ color: "var(--muted)", fontSize: "0.72rem" }}>
+                          {new Date(p.paidAt).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        </div>
+                      </div>
+                      <span style={{
+                        padding: "3px 10px", borderRadius: 99,
+                        background: "rgba(74,222,128,0.1)", color: "var(--success)",
+                        border: "1px solid rgba(74,222,128,0.2)", fontSize: "0.72rem", fontWeight: 600,
+                      }}>Paid ✓</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

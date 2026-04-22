@@ -26,6 +26,16 @@ export default function AdminDashboardPage({ navigate }) {
   const [orgEmailMsg, setOrgEmailMsg]   = useState(null);
   const [orgEmailHistory, setOrgEmailHistory] = useState([]);
 
+  // Payouts
+  const [payoutQueue, setPayoutQueue]   = useState([]);
+  const [payoutHistory, setPayoutHistory] = useState([]);
+  const [payoutBusy, setPayoutBusy]     = useState({});
+  const [payoutMsg, setPayoutMsg]       = useState(null);
+  const [feePercent, setFeePercent]     = useState(8);
+  const [feeInput, setFeeInput]         = useState("8");
+  const [feeBusy, setFeeBusy]           = useState(false);
+  const [feeMsg, setFeeMsg]             = useState(null);
+
   useEffect(() => {
     if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
     loadAll();
@@ -34,13 +44,17 @@ export default function AdminDashboardPage({ navigate }) {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, u, g, subs, hist, pg, oeh] = await Promise.all([
+      const [p, u, g, subs, hist, pg, oeh, pq, ph, as_] = await Promise.all([
         api.getPendingMods(), api.getUsers(), api.getGroups(),
         api.getSubscribers(), api.getNewsletterHistory(),
         api.getPendingGroups(), api.getOrganizerEmailHistory(),
+        api.getPayoutQueue(), api.getPayoutHistory(), api.getAdminSettings(),
       ]);
       setPending(p); setAllUsers(u); setGroups(g); setSubscribers(subs);
       setNlHistory(hist); setPGroups(pg); setOrgEmailHistory(oeh);
+      setPayoutQueue(pq?.queue || []); setPayoutHistory(ph || []);
+      const fee = as_?.feePercent ?? 8;
+      setFeePercent(fee); setFeeInput(String(fee));
     } catch { navigate("admin-login"); }
     finally { setLoading(false); }
   }, [navigate]);
@@ -131,6 +145,7 @@ export default function AdminDashboardPage({ navigate }) {
           {key:"newsletter",  label:`📧 Newsletter${subscribers ? ` (${subscribers.total})` : ""}`},
           {key:"group-review", label:`🔍 Group Review (${pendingGroups.length})`},
           {key:"org-email",    label:"✉️ Email Organizers"},
+          {key:"payouts",       label:`💸 Payouts${payoutQueue.length > 0 ? ` (${payoutQueue.length})` : ""}`},
         ].map(t => (
           <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
@@ -297,7 +312,7 @@ export default function AdminDashboardPage({ navigate }) {
         </div>
       )}
 
-      {/* ── Groups tab ── */}}
+      {/* ── Groups tab ── */}
       {tab === "groups" && (
         <div className="admin-user-list">
           {groups.length === 0 ? (
@@ -478,6 +493,217 @@ export default function AdminDashboardPage({ navigate }) {
                 {reviewBusy[reviewTarget?.id] ? <span className="spinner"/> : "Confirm Reject"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payouts tab ── */}
+      {tab === "payouts" && (
+        <div>
+          {/* Sunday reminder banner */}
+          {new Date().getDay() === 0 && (
+            <div style={{
+              background:"rgba(124,106,255,0.12)", border:"1px solid rgba(124,106,255,0.3)",
+              borderRadius:12, padding:"14px 20px", marginBottom:20,
+              display:"flex", alignItems:"center", gap:12, fontSize:"0.88rem"
+            }}>
+              <span style={{fontSize:"1.4rem"}}>🎉</span>
+              <div>
+                <strong>It's Sunday — Payout Day!</strong>
+                <div style={{color:"var(--muted)",fontSize:"0.78rem",marginTop:2}}>
+                  Review the queue below and send each moderator their earnings via PesaPal.
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20,marginBottom:20,alignItems:"start"}}>
+            {/* Platform fee editor */}
+            <div className="card">
+              <h2 className="section-h2" style={{marginBottom:14}}>⚙️ Platform Fee</h2>
+              <p style={{color:"var(--muted)",fontSize:"0.82rem",marginBottom:14}}>
+                This percentage is deducted from every payment. The remainder is owed to the group moderator and queued here every Sunday.
+              </p>
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <input
+                  type="number" min="1" max="50" step="0.5"
+                  className="form-input"
+                  value={feeInput}
+                  onChange={e => setFeeInput(e.target.value)}
+                  style={{width:100,fontWeight:700,fontSize:"1.1rem",textAlign:"center"}}
+                />
+                <span style={{color:"var(--muted)",fontSize:"0.9rem"}}>%</span>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={feeBusy}
+                  onClick={async () => {
+                    setFeeBusy(true); setFeeMsg(null);
+                    try {
+                      const r = await api.updateFeePercent(parseFloat(feeInput));
+                      setFeePercent(r.feePercent);
+                      setFeeMsg({type:"ok", text:`Platform fee updated to ${r.feePercent}%`});
+                      loadAll();
+                    } catch(err) { setFeeMsg({type:"err", text:err.message}); }
+                    finally { setFeeBusy(false); }
+                  }}>
+                  {feeBusy ? <span className="spinner"/> : "Save"}
+                </button>
+              </div>
+              {feeMsg && (
+                <div className={`msg-box ${feeMsg.type==="ok"?"msg-ok":"msg-err"}`}
+                  style={{marginTop:12}} onClick={()=>setFeeMsg(null)}>
+                  {feeMsg.text} <span style={{opacity:.4}}>✕</span>
+                </div>
+              )}
+            </div>
+
+            {/* Payout summary */}
+            <div className="card">
+              <h2 className="section-h2" style={{marginBottom:14}}>📊 Summary</h2>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
+                  <span style={{color:"var(--muted)"}}>Moderators with pending payouts</span>
+                  <strong>{payoutQueue.length}</strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
+                  <span style={{color:"var(--muted)"}}>Total owed this cycle</span>
+                  <strong style={{color:"var(--accent)"}}>
+                    KES {payoutQueue.reduce((a,m) => a + m.amountOwed, 0).toFixed(2)}
+                  </strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
+                  <span style={{color:"var(--muted)"}}>Platform fee rate</span>
+                  <strong style={{color:"var(--success)"}}>{feePercent}%</strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
+                  <span style={{color:"var(--muted)"}}>Total payouts processed</span>
+                  <strong>{payoutHistory.length}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Payout queue */}
+          <div className="card" style={{marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <h2 className="section-h2" style={{margin:0}}>
+                💸 Pending Payouts
+                {new Date().getDay() !== 0 && (
+                  <span style={{fontSize:"0.72rem",fontWeight:400,color:"var(--muted)",marginLeft:10}}>
+                    (Next payout Sunday: {(() => { const d=new Date(); d.setDate(d.getDate()+(7-d.getDay())%7||7); return d.toLocaleDateString("en-KE",{weekday:"long",day:"numeric",month:"short"}); })()})
+                  </span>
+                )}
+              </h2>
+              <button className="btn btn-sm btn-outline" onClick={loadAll}>↻ Refresh</button>
+            </div>
+
+            {payoutMsg && (
+              <div className={`msg-box ${payoutMsg.type==="ok"?"msg-ok":"msg-err"}`}
+                style={{marginBottom:14}} onClick={()=>setPayoutMsg(null)}>
+                {payoutMsg.text} <span style={{opacity:.4}}>✕</span>
+              </div>
+            )}
+
+            {payoutQueue.length === 0 ? (
+              <div className="empty-state" style={{padding:"30px 0"}}>
+                <div className="emoji">✅</div>
+                <h3>All paid up!</h3>
+                <p>No pending moderator payouts. Check back after members make payments.</p>
+              </div>
+            ) : (
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.84rem"}}>
+                  <thead>
+                    <tr style={{borderBottom:"2px solid var(--border)",color:"var(--muted)",fontSize:"0.75rem",textTransform:"uppercase",letterSpacing:"0.05em"}}>
+                      <th style={{padding:"8px 12px",textAlign:"left"}}>Moderator</th>
+                      <th style={{padding:"8px 12px",textAlign:"left"}}>PesaPal Email</th>
+                      <th style={{padding:"8px 12px",textAlign:"right"}}>Payments</th>
+                      <th style={{padding:"8px 12px",textAlign:"right"}}>Amount Owed</th>
+                      <th style={{padding:"8px 12px",textAlign:"right"}}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutQueue.map(mod => (
+                      <tr key={mod.moderatorId} style={{borderBottom:"1px solid var(--border)"}}>
+                        <td style={{padding:"12px 12px"}}>
+                          <div style={{fontWeight:600}}>{mod.moderatorName}</div>
+                          <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>{mod.moderatorEmail}</div>
+                        </td>
+                        <td style={{padding:"12px 12px"}}>
+                          {mod.pesapalEmail ? (
+                            <span style={{
+                              background:"rgba(74,222,128,0.1)",color:"var(--success)",
+                              border:"1px solid rgba(74,222,128,0.25)",
+                              borderRadius:6,padding:"3px 8px",fontSize:"0.78rem",fontFamily:"monospace"
+                            }}>
+                              {mod.pesapalEmail}
+                            </span>
+                          ) : (
+                            <span style={{color:"var(--error)",fontSize:"0.78rem"}}>⚠ Not set</span>
+                          )}
+                        </td>
+                        <td style={{padding:"12px 12px",textAlign:"right",color:"var(--muted)"}}>
+                          {mod.paymentCount}
+                        </td>
+                        <td style={{padding:"12px 12px",textAlign:"right"}}>
+                          <strong style={{color:"var(--accent)",fontSize:"1rem"}}>
+                            {mod.currency} {mod.amountOwed.toFixed(2)}
+                          </strong>
+                        </td>
+                        <td style={{padding:"12px 12px",textAlign:"right"}}>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            disabled={payoutBusy[mod.moderatorId]}
+                            onClick={async () => {
+                              if (!window.confirm(
+                                `Confirm payout of ${mod.currency} ${mod.amountOwed.toFixed(2)} to ${mod.moderatorName} at ${mod.pesapalEmail || mod.moderatorEmail}?
+
+Make sure you have already sent the funds via PesaPal before clicking OK.`
+                              )) return;
+                              setPayoutBusy(b => ({...b,[mod.moderatorId]:true}));
+                              try {
+                                await api.markPaid({ moderatorId: mod.moderatorId });
+                                setPayoutMsg({type:"ok", text:`✅ Payout of ${mod.currency} ${mod.amountOwed.toFixed(2)} to ${mod.moderatorName} recorded.`});
+                                loadAll();
+                              } catch(err) { setPayoutMsg({type:"err", text:err.message}); }
+                              finally { setPayoutBusy(b => ({...b,[mod.moderatorId]:false})); }
+                            }}>
+                            {payoutBusy[mod.moderatorId] ? <span className="spinner"/> : "✓ Mark as Paid"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Payout history */}
+          <div className="card">
+            <h2 className="section-h2" style={{marginBottom:14}}>📋 Payout History</h2>
+            {payoutHistory.length === 0 ? (
+              <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>No payouts processed yet.</p>
+            ) : payoutHistory.map(p => (
+              <div key={p.id} className="earning-row">
+                <div>
+                  <div style={{fontWeight:600,fontSize:"0.85rem"}}>{p.moderatorName}</div>
+                  <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>
+                    {new Date(p.paidAt).toLocaleDateString("en-KE",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}
+                    {" · "}{p.paymentCount} payment{p.paymentCount!==1?"s":""}
+                    {" · "}<span style={{fontFamily:"monospace"}}>{p.pesapalEmail}</span>
+                  </div>
+                  {p.notes && <div style={{fontSize:"0.72rem",color:"var(--muted)",fontStyle:"italic"}}>{p.notes}</div>}
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontWeight:700,color:"var(--success)",fontSize:"0.95rem"}}>{p.currency} {p.amountPaid?.toFixed(2)}</div>
+                  <span style={{
+                    padding:"2px 8px",borderRadius:99,fontSize:"0.68rem",fontWeight:600,
+                    background:"rgba(74,222,128,0.1)",color:"var(--success)",border:"1px solid rgba(74,222,128,0.2)"
+                  }}>Paid ✓</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

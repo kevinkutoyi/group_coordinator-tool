@@ -18,6 +18,9 @@ export default function GroupsPage({ navigate }) {
   const canCreate = ["moderator","superadmin"].includes(session.getRole());
 
   const filtered = groups.filter(g => {
+    // Customers and guests only see approved groups
+    const role = session.getRole();
+    if (role !== "superadmin" && role !== "moderator" && g.reviewStatus !== "approved") return false;
     const matchFilter = filter === "all" || g.status === filter;
     const q = search.toLowerCase();
     const matchSearch = (g.serviceName||"").toLowerCase().includes(q) ||
