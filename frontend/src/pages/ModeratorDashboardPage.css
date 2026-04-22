@@ -1,0 +1,84 @@
+.mod-dash { display: flex; flex-direction: column; gap: 20px; max-width: 1000px; }
+
+.mod-dash-header {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}
+.mod-dash-greeting { display: flex; align-items: center; gap: 14px; }
+.mod-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; font-weight: 800; color: #fff; flex-shrink: 0;
+}
+.mod-dash-title { font-size: clamp(1.2rem,3vw,1.6rem); font-weight: 800; letter-spacing:-0.03em; margin-bottom:4px; }
+.mod-dash-sub { font-size: 0.82rem; color: var(--muted); }
+
+/* Setup warning */
+.mod-setup-banner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 18px;
+  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.25);
+  border-radius: 12px; font-size: 0.84rem;
+}
+.mod-setup-banner span:first-child { font-size: 1.2rem; flex-shrink:0; }
+.mod-setup-banner div { flex:1; color: var(--text); }
+.mod-setup-banner strong { color: #fbbf24; }
+
+/* KPIs */
+.mod-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.mod-kpi-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 18px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  text-align: center; transition: border-color 0.2s;
+}
+.mod-kpi-card:hover { border-color: var(--border-hover); }
+.mod-kpi-earn { border-color: rgba(106,255,203,0.2); background: rgba(106,255,203,0.03); }
+.mod-kpi-warn { border-color: rgba(251,191,36,0.2); background: rgba(251,191,36,0.03); }
+.mod-kpi-icon { font-size: 1.4rem; }
+.mod-kpi-val {
+  font-family: var(--font-head); font-size: 1.8rem; font-weight: 800; line-height: 1;
+}
+.mod-kpi-val span { font-size: 1rem; color: var(--muted); font-family: var(--font-body); }
+.mod-kpi-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Earnings breakdown */
+.mod-earnings-card { }
+.mod-earn-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 0.84rem; color: var(--muted);
+}
+.mod-earn-row:last-child { border-bottom: none; }
+.mod-earn-row span:last-child { font-weight: 600; color: var(--text); }
+.mod-earn-split span:last-child { color: var(--muted) !important; }
+.mod-earn-total { border-top: 2px solid var(--border); padding-top: 12px; margin-top: 4px; }
+.mod-earn-total span { font-weight: 700; font-size: 0.92rem; }
+
+/* Groups list */
+.mod-groups-list { display: flex; flex-direction: column; gap: 12px; }
+.mod-group-card {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 12px; padding: 16px 20px;
+}
+.mgc-left { display: flex; align-items: center; gap: 14px; flex: 1; }
+.mgc-name { font-weight: 600; font-size: 0.9rem; }
+.mgc-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.mgc-earnings { text-align: right; }
+.mgc-earn-val { font-family: var(--font-head); font-size: 1.2rem; font-weight: 800; color: var(--accent3); }
+.mgc-earn-sub { font-size: 0.68rem; color: var(--muted); }
+
+/* Reuse tab-btn from GroupEmailPage */
+.tab-btn { padding: 7px 16px; border-radius: 8px; font-size: 0.84rem; font-weight: 500; background: var(--bg3); border: 1px solid var(--border); color: var(--muted); cursor: pointer; transition: all 0.15s; font-family: var(--font-body); }
+.tab-btn:hover { color: var(--text); border-color: var(--border-hover); }
+.tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.gep-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.msg-box { padding: 12px 18px; border-radius: 10px; font-size: 0.88rem; display: flex; justify-content: space-between; align-items: center; }
+.msg-ok  { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.2);  color: var(--success); }
+.msg-err { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--error); }

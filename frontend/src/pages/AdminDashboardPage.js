@@ -16,7 +16,15 @@ export default function AdminDashboardPage({ navigate }) {
   const [nlForm, setNlForm]             = useState({ subject:"", body:"", senderName:"", senderEmail:"" });
   const [nlBusy, setNlBusy]             = useState(false);
   const [nlMsg, setNlMsg]               = useState(null);
-  const [groups, setGroups]     = useState([]);
+  const [groups, setGroups]         = useState([]);
+  const [pendingGroups, setPGroups]   = useState([]);
+  const [reviewBusy, setReviewBusy]   = useState({});
+  const [reviewNote, setReviewNote]   = useState("");
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const [orgEmailForm, setOrgEmailForm] = useState({ subject:"", body:"", senderEmail:"" });
+  const [orgEmailBusy, setOrgEmailBusy] = useState(false);
+  const [orgEmailMsg, setOrgEmailMsg]   = useState(null);
+  const [orgEmailHistory, setOrgEmailHistory] = useState([]);
 
   useEffect(() => {
     if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
@@ -26,8 +34,13 @@ export default function AdminDashboardPage({ navigate }) {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, u, g, subs, hist] = await Promise.all([api.getPendingMods(), api.getUsers(), api.getGroups(), api.getSubscribers(), api.getNewsletterHistory()]);
-      setPending(p); setAllUsers(u); setGroups(g); setSubscribers(subs); setNlHistory(hist);
+      const [p, u, g, subs, hist, pg, oeh] = await Promise.all([
+        api.getPendingMods(), api.getUsers(), api.getGroups(),
+        api.getSubscribers(), api.getNewsletterHistory(),
+        api.getPendingGroups(), api.getOrganizerEmailHistory(),
+      ]);
+      setPending(p); setAllUsers(u); setGroups(g); setSubscribers(subs);
+      setNlHistory(hist); setPGroups(pg); setOrgEmailHistory(oeh);
     } catch { navigate("admin-login"); }
     finally { setLoading(false); }
   }, [navigate]);
@@ -116,6 +129,8 @@ export default function AdminDashboardPage({ navigate }) {
           {key:"all",        label:"All Users"},
           {key:"groups",     label:`Groups (${groups.length})`},
           {key:"newsletter",  label:`📧 Newsletter${subscribers ? ` (${subscribers.total})` : ""}`},
+          {key:"group-review", label:`🔍 Group Review (${pendingGroups.length})`},
+          {key:"org-email",    label:"✉️ Email Organizers"},
         ].map(t => (
           <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
@@ -307,6 +322,163 @@ export default function AdminDashboardPage({ navigate }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Group Review tab ── */}
+      {tab === "group-review" && (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
+            <h2 className="section-h2" style={{margin:0}}>🔍 Groups Awaiting Review</h2>
+            <button className="btn btn-sm btn-outline" onClick={loadAll}>↻ Refresh</button>
+          </div>
+          {pendingGroups.length === 0 ? (
+            <div className="empty-state"><div className="emoji">✅</div><h3>All clear!</h3><p>No groups pending review.</p></div>
+          ) : pendingGroups.map(g => (
+            <div key={g.id} className="user-card card" style={{marginBottom:12}}>
+              <div className="user-card-left" style={{flexWrap:"wrap",gap:12}}>
+                <span style={{fontSize:"2.2rem"}}>{g.serviceIcon}</span>
+                <div>
+                  <div className="user-card-name">{g.serviceName} — {g.planName}</div>
+                  <div className="user-card-email">
+                    {g.billingCycle} · ${g.pricePerSlot}/slot · {g.maxSlots} slots max
+                  </div>
+                  {g.organizerDetails && (
+                    <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:2}}>
+                      Organizer: {g.organizerDetails.name} ({g.organizerDetails.email})
+                    </div>
+                  )}
+                  {g.description && (
+                    <div style={{fontSize:"0.75rem",color:"var(--muted)",marginTop:4,maxWidth:400,fontStyle:"italic"}}>
+                      "{g.description}"
+                    </div>
+                  )}
+                  <div style={{fontSize:"0.7rem",color:"var(--muted)",marginTop:2}}>
+                    Submitted {new Date(g.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              <div className="user-card-right">
+                <button className="btn btn-sm btn-primary" disabled={reviewBusy[g.id]}
+                  onClick={async () => {
+                    setReviewBusy(b=>({...b,[g.id]:true}));
+                    try { await api.reviewGroup(g.id,{decision:"approved",note:""}); setMsg({type:"ok",text:"Group approved and is now live!"}); loadAll(); }
+                    catch(err) { setMsg({type:"err",text:err.message}); }
+                    finally { setReviewBusy(b=>({...b,[g.id]:false})); }
+                  }}>
+                  {reviewBusy[g.id] ? <span className="spinner"/> : "✅ Approve"}
+                </button>
+                <button className="btn btn-sm btn-danger"
+                  onClick={() => setReviewTarget(g)}>
+                  ❌ Reject
+                </button>
+                <button className="btn btn-sm btn-outline"
+                  onClick={() => navigate("group", g.id)}>
+                  👁️ Preview
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Email Organizers tab ── */}
+      {tab === "org-email" && (
+        <div className="nl-grid">
+          <div className="card">
+            <h2 className="section-h2" style={{marginBottom:16}}>✉️ Email All Active Organizers</h2>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Reply-To Email</label>
+                <input type="email" value={orgEmailForm.senderEmail}
+                  onChange={e=>setOrgEmailForm(f=>({...f,senderEmail:e.target.value}))}
+                  placeholder="admin@splitpass.com"/>
+              </div>
+              <div className="form-group">
+                <label>Subject</label>
+                <input value={orgEmailForm.subject}
+                  onChange={e=>setOrgEmailForm(f=>({...f,subject:e.target.value}))}
+                  placeholder="e.g. Important platform update"/>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Message</label>
+              <textarea rows={8} value={orgEmailForm.body}
+                onChange={e=>setOrgEmailForm(f=>({...f,body:e.target.value}))}
+                placeholder={"Hi {name},\n\nWrite your message to all organizers here...\n\n— SplitPass Admin"}
+                style={{resize:"vertical",fontFamily:"monospace",fontSize:"0.82rem"}}/>
+            </div>
+            {orgEmailMsg && (
+              <div className={`msg-box ${orgEmailMsg.type==="ok"?"msg-ok":"msg-err"}`}
+                style={{marginBottom:12}} onClick={()=>setOrgEmailMsg(null)}>
+                {orgEmailMsg.text} <span style={{opacity:.4}}>✕</span>
+              </div>
+            )}
+            <button className="btn btn-primary" style={{width:"100%"}}
+              disabled={orgEmailBusy || !orgEmailForm.subject || !orgEmailForm.body}
+              onClick={async () => {
+                setOrgEmailBusy(true); setOrgEmailMsg(null);
+                try {
+                  const r = await api.emailOrganizers(orgEmailForm);
+                  setOrgEmailMsg({type:"ok", text:r.message + (r.note ? `\n📌 ${r.note}` : "")});
+                  setOrgEmailForm(f=>({...f,subject:"",body:""}));
+                  loadAll();
+                } catch(err) { setOrgEmailMsg({type:"err",text:err.message}); }
+                finally { setOrgEmailBusy(false); }
+              }}>
+              {orgEmailBusy ? <><span className="spinner"/> Sending…</> : `📨 Send to All Active Organizers`}
+            </button>
+          </div>
+          <div className="card">
+            <h2 className="section-h2" style={{marginBottom:12}}>📋 Email History</h2>
+            {orgEmailHistory.length === 0 ? (
+              <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>No organizer emails sent yet.</p>
+            ) : orgEmailHistory.map(e => (
+              <div key={e.id} className="earning-row">
+                <div>
+                  <div style={{fontWeight:600,fontSize:"0.85rem"}}>{e.subject}</div>
+                  <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>
+                    {new Date(e.sentAt).toLocaleString()} · {e.recipientCount} recipients
+                  </div>
+                </div>
+                <span className="tag tag-open" style={{fontSize:"0.7rem"}}>{e.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review reject modal */}
+      {reviewTarget && (
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setReviewTarget(null)}>
+          <div className="modal">
+            <h3>Reject Group</h3>
+            <p style={{color:"var(--muted)",fontSize:"0.84rem",marginBottom:16}}>
+              Rejecting: <strong>{reviewTarget.serviceName} — {reviewTarget.planName}</strong>
+            </p>
+            <div className="form-group">
+              <label>Reason for rejection (sent to organizer)</label>
+              <textarea rows={3} value={reviewNote} onChange={e=>setReviewNote(e.target.value)}
+                placeholder="e.g. Price is too high, description is incomplete, or service not supported"
+                style={{resize:"vertical"}}/>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={()=>{setReviewTarget(null);setReviewNote("");}}>Cancel</button>
+              <button className="btn btn-danger"
+                disabled={reviewBusy[reviewTarget.id]}
+                onClick={async () => {
+                  setReviewBusy(b=>({...b,[reviewTarget.id]:true}));
+                  try {
+                    await api.reviewGroup(reviewTarget.id,{decision:"rejected",note:reviewNote});
+                    setMsg({type:"ok",text:"Group rejected. Organizer has been notified."});
+                    setReviewTarget(null); setReviewNote(""); loadAll();
+                  } catch(err) { setMsg({type:"err",text:err.message}); }
+                  finally { setReviewBusy(b=>({...b,[reviewTarget.id]:false})); }
+                }}>
+                {reviewBusy[reviewTarget?.id] ? <span className="spinner"/> : "Confirm Reject"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

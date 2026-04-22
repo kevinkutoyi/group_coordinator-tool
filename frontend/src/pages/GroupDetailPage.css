@@ -362,3 +362,11 @@
   color: var(--muted);
   line-height: 1.4;
 }
+
+/* ── Vault spotlight wrapper inside hero card ── */
+.gd-vault-spotlight {
+  margin: 4px 0 8px;
+  /* Subtle outer glow so it stands out from the rest of the card */
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(124,106,255,0.2), 0 4px 32px rgba(124,106,255,0.12);
+}

@@ -1,97 +1,81 @@
 {
   "users": [
     {
-      "id": "313c7693-3d8d-4a1d-b857-ecc5a489a7c0",
+      "id": "c3f99cc1-50c6-41b4-b179-066cd6845f1d",
       "name": "John Doe",
       "email": "kutoyikevin@gmail.com",
-      "phone": "",
-      "passwordHash": "$2a$12$OhlK1NwBxbW8M2QSwvFAyeoHlvkV72JOt9VzanJcF5.GIsHqnG3Vm",
+      "phone": "amoraghali",
+      "passwordHash": "$2a$12$prPa4eyR9whv3.F2nHORwuYxTW4BLzAoWJaQm7zeypPU/6FcOK7VC",
       "role": "customer",
       "status": "active",
       "newsletter": true,
-      "createdAt": "2026-04-20T20:27:41.330Z",
+      "createdAt": "2026-04-21T18:50:19.061Z",
       "approvedAt": null,
       "approvedBy": null
     }
   ],
   "groups": [
     {
-      "id": "a8141f77-41c1-4dd7-b748-a45d03aede9c",
+      "id": "550ccb43-6a6a-4215-ad00-f7b2c97c9d21",
       "serviceId": "spotify",
       "serviceName": "Spotify",
       "serviceIcon": "🎵",
       "planName": "Premium Family",
-      "totalPrice": 20,
+      "totalPrice": 17.99,
       "maxSlots": 6,
-      "pricePerSlot": 3.33,
-      "platformFee": 0.3,
-      "memberPays": 3.63,
-      "feePercent": 9,
+      "pricePerSlot": 3,
+      "platformFee": 0.06,
+      "memberPays": 3.06,
+      "feePercent": 2,
       "organizerId": "superadmin",
       "organizerName": "amoraghali",
       "organizerEmail": "amoraghali@gmail.com",
-      "description": "Looking for 6 people",
+      "description": "6 people",
       "billingCycle": "monthly",
       "status": "open",
-      "createdAt": "2026-04-20T20:23:13.203Z"
+      "reviewStatus": "approved",
+      "reviewNote": "",
+      "createdAt": "2026-04-21T18:50:44.054Z"
     }
   ],
   "groupMembers": [
     {
-      "id": "fdb6f563-e843-4aac-ac5b-adcfb44e4404",
-      "groupId": "a8141f77-41c1-4dd7-b748-a45d03aede9c",
-      "userId": "313c7693-3d8d-4a1d-b857-ecc5a489a7c0",
+      "id": "01c23abe-f970-45c7-a5b0-ce746c07139c",
+      "groupId": "550ccb43-6a6a-4215-ad00-f7b2c97c9d21",
+      "userId": "c3f99cc1-50c6-41b4-b179-066cd6845f1d",
       "name": "John Doe",
       "email": "kutoyikevin@gmail.com",
       "role": "member",
       "months": 1,
       "durationLabel": "1 Month",
       "discount": 0,
-      "baseAmount": 3.33,
-      "platformFee": 0.3,
-      "memberPays": 3.63,
-      "organizerGets": 3.33,
+      "baseAmount": 3,
+      "platformFee": 0.06,
+      "memberPays": 3.06,
+      "organizerGets": 3,
       "paymentStatus": "pending",
-      "joinedAt": "2026-04-20T20:29:13.101Z",
+      "joinedAt": "2026-04-21T18:56:36.166Z",
       "expiresAt": null
     }
   ],
   "payments": [],
   "pesapalOrders": [
     {
-      "id": "SP-1776717042168-C1E87E8B",
-      "orderTrackingId": "a055d843-25c4-485a-ac84-da7afee6984e",
-      "groupId": "a8141f77-41c1-4dd7-b748-a45d03aede9c",
-      "memberId": "fdb6f563-e843-4aac-ac5b-adcfb44e4404",
-      "userId": "313c7693-3d8d-4a1d-b857-ecc5a489a7c0",
+      "id": "SP-1776797832931-A18DB83A",
+      "orderTrackingId": "3f67d0f5-f7bc-49c9-a221-da79ff68887e",
+      "groupId": "550ccb43-6a6a-4215-ad00-f7b2c97c9d21",
+      "memberId": "01c23abe-f970-45c7-a5b0-ce746c07139c",
+      "userId": "c3f99cc1-50c6-41b4-b179-066cd6845f1d",
       "memberName": "John Doe",
       "memberEmail": "kutoyikevin@gmail.com",
       "months": 1,
-      "baseAmount": 3.33,
-      "platformFee": 0.3,
-      "organizerGets": 3.33,
-      "memberPays": 3.63,
-      "currency": "USD",
-      "status": "PENDING",
-      "createdAt": "2026-04-20T20:30:43.420Z",
-      "confirmedAt": null
-    },
-    {
-      "id": "SP-1776717478377-BCA4C201",
-      "orderTrackingId": "5fd04c8a-963b-42cc-b410-da7ab5829346",
-      "groupId": "a8141f77-41c1-4dd7-b748-a45d03aede9c",
-      "memberId": "fdb6f563-e843-4aac-ac5b-adcfb44e4404",
-      "userId": "313c7693-3d8d-4a1d-b857-ecc5a489a7c0",
-      "memberName": "John Doe",
-      "memberEmail": "kutoyikevin@gmail.com",
-      "months": 1,
-      "baseAmount": 3.33,
-      "platformFee": 0.3,
-      "organizerGets": 3.33,
-      "memberPays": 3.63,
+      "baseAmount": 3,
+      "platformFee": 0.06,
+      "organizerGets": 3,
+      "memberPays": 3.06,
       "currency": "KES",
       "status": "PENDING",
-      "createdAt": "2026-04-20T20:37:59.480Z",
+      "createdAt": "2026-04-21T18:57:14.141Z",
       "confirmedAt": null
     }
   ],
@@ -100,21 +84,7 @@
   "footerSubscribers": [],
   "newsletterSent": [],
   "groupEmails": [],
-  "groupCredentials": [
-    {
-      "groupId": "a8141f77-41c1-4dd7-b748-a45d03aede9c",
-      "slots": [
-        {
-          "slotNumber": 1,
-          "label": "Shared Account",
-          "username": "gdgsjgg@gmail.com",
-          "password": "0987654321",
-          "note": ""
-        }
-      ],
-      "generalNote": "",
-      "updatedAt": "2026-04-20T20:26:37.651Z",
-      "updatedBy": "superadmin"
-    }
-  ]
+  "groupCredentials": [],
+  "moderatorSettings": [],
+  "organizerEarnings": []
 }

@@ -15,6 +15,8 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 const DATA_FILE = path.join(__dirname, "../data/db.json");
 const FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || "2");
+// % of organizer earnings that flows to platform owner automatically
+const ORGANIZER_PLATFORM_CUT = parseFloat(process.env.ORGANIZER_PLATFORM_CUT_PERCENT || "33");
 const JWT_SECRET  = process.env.JWT_SECRET || "dev_secret_change_in_production";
 
 // ── Middleware ────────────────────────────────────────────────────────────
@@ -31,14 +33,14 @@ function loadDB() {
     const seed = {
       users: [], groups: [], groupMembers: [],
       payments: [], pesapalOrders: [], platformEarnings: [],
-      emailVerifications: [], footerSubscribers: [], newsletterSent: [], groupEmails: [], groupCredentials: []
+      emailVerifications: [], footerSubscribers: [], newsletterSent: [], groupEmails: [], groupCredentials: [], moderatorSettings: [], organizerEarnings: []
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(seed, null, 2));
     return seed;
   }
   const db = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   // Ensure all collections exist in older DB files
-  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications","footerSubscribers","newsletterSent","groupEmails","groupCredentials"]
+  ["users","groups","groupMembers","payments","pesapalOrders","platformEarnings","emailVerifications","footerSubscribers","newsletterSent","groupEmails","groupCredentials","moderatorSettings","organizerEarnings"]
     .forEach(k => { if (!db[k]) db[k] = []; });
   return db;
 }
@@ -295,15 +297,30 @@ app.get("/api/durations", (req, res) => res.json(SUBSCRIPTION_DURATIONS));
 //  GROUPS
 // ═══════════════════════════════════════════════════════════════════════════
 
-// GET /api/groups — public list
+// GET /api/groups — public list (only approved groups shown publicly)
 app.get("/api/groups", (req, res) => {
   const db = loadDB();
-  const enriched = db.groups.map(g => {
+  // Admins see all; public only sees approved groups
+  const authHeader = req.headers.authorization || "";
+  let viewerRole = "guest";
+  try {
+    const decoded = jwt.verify(authHeader.replace("Bearer ", ""), JWT_SECRET);
+    viewerRole = decoded.role;
+  } catch {}
+
+  const groups = db.groups.filter(g =>
+    viewerRole === "superadmin" ||
+    g.reviewStatus === "approved" ||
+    (viewerRole === "moderator" && g.organizerId === (() => {
+      try { return jwt.verify(authHeader.replace("Bearer ",""), JWT_SECRET).id; } catch { return null; }
+    })())
+  );
+
+  const enriched = groups.map(g => {
     const members        = db.groupMembers.filter(m => m.groupId === g.id);
     const payingMembers  = members.filter(m => m.role !== "organizer");
     const payments       = db.payments.filter(p => p.groupId === g.id);
-    // Don't expose member emails publicly
-    const safeMembers = members.map(({ email, ...m }) => m);
+    const safeMembers    = members.map(({ email, ...m }) => m);
     return { ...g, memberCount: payingMembers.length, members: safeMembers, payments };
   });
   res.json(enriched);
@@ -368,7 +385,11 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), (req, res) => {
     organizerEmail: creatorEmail,
     description:    description || "",
     billingCycle:   billingCycle,
-    status:         "open",
+    // Groups created by moderators start as "pending_review" — superadmin must approve
+    // Groups created by superadmin are live immediately
+    status:         isSuperAdmin ? "open" : "pending_review",
+    reviewStatus:   isSuperAdmin ? "approved" : "pending",
+    reviewNote:     "",
     createdAt:      new Date().toISOString(),
   };
 
@@ -673,6 +694,230 @@ app.get("/api/admin/earnings", requireSuperAdmin, (req, res) => {
 app.get("/api/admin/refresh", requireSuperAdmin, (req, res) => {
   const token = signToken({ id: "superadmin", role: "superadmin", name: "Super Admin" }, "24h");
   res.json({ token });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MODERATOR SETTINGS  (PesaPal creds + profit cut)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/moderator/settings
+app.get("/api/moderator/settings", requireRole("moderator"), (req, res) => {
+  const db = loadDB();
+  const settings = db.moderatorSettings.find(s => s.userId === req.user.id);
+  if (!settings) return res.json({ configured: false });
+  // Never expose secret key
+  const { pesapalConsumerSecret, ...safe } = settings;
+  res.json({ ...safe, configured: true, hasSecret: !!pesapalConsumerSecret });
+});
+
+// PUT /api/moderator/settings
+app.put("/api/moderator/settings", requireRole("moderator"), (req, res) => {
+  const { pesapalConsumerKey, pesapalConsumerSecret, pesapalEnv = "sandbox",
+          profitPercent, payoutEmail } = req.body;
+  if (!pesapalConsumerKey || !pesapalConsumerSecret)
+    return res.status(400).json({ error: "PesaPal consumer key and secret are required" });
+  if (!profitPercent || profitPercent < 1 || profitPercent > 50)
+    return res.status(400).json({ error: "Profit percent must be between 1 and 50" });
+
+  const db = loadDB();
+  const idx = db.moderatorSettings.findIndex(s => s.userId === req.user.id);
+
+  // Calculate the split: platform cut from organizer's profit
+  const platformCutPercent = ORGANIZER_PLATFORM_CUT;
+  const platformTake = +((profitPercent * platformCutPercent) / 100).toFixed(2);
+  const organizerKeeps = +(profitPercent - platformTake).toFixed(2);
+
+  const settings = {
+    userId:               req.user.id,
+    pesapalConsumerKey,
+    pesapalConsumerSecret,
+    pesapalEnv,
+    profitPercent:        +profitPercent,
+    platformCutPercent,
+    platformTake,         // goes to you automatically
+    organizerKeeps,       // organizer's actual net
+    payoutEmail:          payoutEmail || "",
+    updatedAt:            new Date().toISOString(),
+  };
+
+  if (idx >= 0) db.moderatorSettings[idx] = settings;
+  else          db.moderatorSettings.push(settings);
+  saveDB(db);
+
+  const { pesapalConsumerSecret: _s, ...safe } = settings;
+  res.json({ ...safe, configured: true });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MODERATOR DASHBOARD  (earnings, groups, stats)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/moderator/dashboard
+app.get("/api/moderator/dashboard", requireRole("moderator"), (req, res) => {
+  const db       = loadDB();
+  const uid      = req.user.id;
+  const myGroups = db.groups.filter(g => g.organizerId === uid);
+  const settings = db.moderatorSettings.find(s => s.userId === uid);
+
+  // Earnings per group
+  const groupStats = myGroups.map(g => {
+    const members    = db.groupMembers.filter(m => m.groupId === g.id && m.role !== "organizer");
+    const confirmed  = members.filter(m => m.paymentStatus === "confirmed").length;
+    const payments   = db.payments.filter(p => p.groupId === g.id);
+    const grossRevenue = payments.reduce((acc, p) => acc + (p.organizerGets || 0), 0);
+    const profitPct  = settings?.profitPercent || 0;
+    const profitEarned = +((grossRevenue * profitPct) / 100).toFixed(2);
+    const platformTake = +((profitEarned * ORGANIZER_PLATFORM_CUT) / 100).toFixed(2);
+    const netEarned    = +(profitEarned - platformTake).toFixed(2);
+    return {
+      id: g.id, serviceName: g.serviceName, serviceIcon: g.serviceIcon,
+      planName: g.planName, status: g.status, reviewStatus: g.reviewStatus,
+      billingCycle: g.billingCycle, maxSlots: g.maxSlots,
+      confirmedMembers: confirmed, totalSlots: g.maxSlots,
+      grossRevenue: +grossRevenue.toFixed(2),
+      profitEarned, platformTake, netEarned,
+      createdAt: g.createdAt,
+    };
+  });
+
+  const totalGross     = groupStats.reduce((a, g) => a + g.grossRevenue, 0);
+  const totalProfit    = groupStats.reduce((a, g) => a + g.profitEarned, 0);
+  const totalPlatform  = groupStats.reduce((a, g) => a + g.platformTake, 0);
+  const totalNet       = groupStats.reduce((a, g) => a + g.netEarned, 0);
+  const totalMembers   = groupStats.reduce((a, g) => a + g.confirmedMembers, 0);
+  const pendingReview  = myGroups.filter(g => g.reviewStatus === "pending").length;
+  const activeGroups   = myGroups.filter(g => g.status === "open" || g.status === "full").length;
+
+  res.json({
+    groups: groupStats,
+    summary: {
+      totalGroups: myGroups.length, activeGroups, pendingReview,
+      totalMembers, totalGross: +totalGross.toFixed(2),
+      totalProfit: +totalProfit.toFixed(2),
+      totalPlatformTake: +totalPlatform.toFixed(2),
+      totalNet: +totalNet.toFixed(2),
+      profitPercent:    settings?.profitPercent || 0,
+      organizerKeeps:   settings?.organizerKeeps || 0,
+      platformCutPercent: ORGANIZER_PLATFORM_CUT,
+      configured:       !!settings,
+    },
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ADMIN — GROUP REVIEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/groups/pending
+app.get("/api/admin/groups/pending", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  res.json(db.groups.filter(g => g.reviewStatus === "pending").map(g => {
+    const organizer = db.users.find(u => u.id === g.organizerId);
+    return { ...g, organizerDetails: organizer ? { name: organizer.name, email: organizer.email, phone: organizer.phone } : null };
+  }));
+});
+
+// PATCH /api/admin/groups/:id/review
+app.patch("/api/admin/groups/:id/review", requireSuperAdmin, (req, res) => {
+  const { decision, note = "" } = req.body; // decision: "approved" | "rejected"
+  if (!["approved","rejected"].includes(decision))
+    return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
+
+  const db    = loadDB();
+  const group = db.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  group.reviewStatus = decision;
+  group.reviewNote   = note;
+  group.reviewedAt   = new Date().toISOString();
+  group.reviewedBy   = "superadmin";
+
+  if (decision === "approved") {
+    group.status = "open";
+    // Notify organizer
+    const organizer = db.users.find(u => u.id === group.organizerId);
+    if (organizer) {
+      emailService.sendEmail({
+        to: organizer.email,
+        subject: `✅ Your group "${group.serviceName} ${group.planName}" is now live!`,
+        html: require("./emailService").sendEmail && `<p>Hi ${organizer.name},<br/><br/>Your group has been approved by the admin and is now live on SplitPass. Members can now discover and join it.<br/><br/>Log in to your dashboard to manage it.<br/><br/>— SplitPass Team</p>`,
+      }).catch(() => {});
+    }
+  } else {
+    group.status = "closed";
+    const organizer = db.users.find(u => u.id === group.organizerId);
+    if (organizer) {
+      emailService.sendEmail({
+        to: organizer.email,
+        subject: `❌ Your group "${group.serviceName} ${group.planName}" was not approved`,
+        html: `<p>Hi ${organizer.name},<br/><br/>Unfortunately your group listing was not approved.<br/><br/><b>Reason:</b> ${note || "Not specified"}<br/><br/>You may revise and resubmit.<br/><br/>— SplitPass Team</p>`,
+      }).catch(() => {});
+    }
+  }
+
+  saveDB(db);
+  res.json(group);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ADMIN — EMAIL ORGANIZERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// POST /api/admin/email-organizers
+app.post("/api/admin/email-organizers", requireSuperAdmin, async (req, res) => {
+  const { subject, body: msgBody, senderEmail, targetIds } = req.body;
+  if (!subject || !msgBody) return res.status(400).json({ error: "subject and body required" });
+
+  const db = loadDB();
+  let targets = db.users.filter(u => u.role === "moderator" && u.status === "active");
+  if (Array.isArray(targetIds) && targetIds.length > 0)
+    targets = targets.filter(u => targetIds.includes(u.id));
+
+  if (!targets.length) return res.status(400).json({ error: "No active organizers to email" });
+
+  const from = senderEmail || process.env.ADMIN_EMAIL || "admin@splitpass.com";
+  let sent = 0, failed = 0;
+
+  await Promise.allSettled(targets.map(async u => {
+    try {
+      await emailService.sendGroupMessage({
+        to:          u.email,
+        memberName:  u.name,
+        groupName:   "SplitPass Platform",
+        serviceName: "SplitPass",
+        senderName:  "SplitPass Admin",
+        senderEmail: from,
+        subject,
+        messageBody: msgBody,
+      });
+      sent++;
+    } catch { failed++; }
+  }));
+
+  // Log it
+  const db2 = loadDB();
+  if (!db2.newsletterSent) db2.newsletterSent = [];
+  db2.newsletterSent.push({
+    id: uuidv4(), type: "organizer-email",
+    subject, body: msgBody, senderEmail: from,
+    recipientCount: sent, sentAt: new Date().toISOString(), status: "sent",
+  });
+  saveDB(db2);
+
+  res.json({
+    message: `Email sent to ${sent} organizer${sent !== 1 ? "s" : ""}.${failed > 0 ? ` ${failed} failed.` : ""}`,
+    sent, failed,
+    note: process.env.EMAIL_ENABLED !== "true" ? "Set EMAIL_ENABLED=true to deliver real emails." : undefined,
+  });
+});
+
+// GET /api/admin/organizer-email-history
+app.get("/api/admin/organizer-email-history", requireSuperAdmin, (req, res) => {
+  const db = loadDB();
+  const history = (db.newsletterSent || [])
+    .filter(e => e.type === "organizer-email")
+    .slice().reverse();
+  res.json(history);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

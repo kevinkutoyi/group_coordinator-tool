@@ -100,6 +100,19 @@ export const api = {
   // Currency
   getCurrencyRate: () => req("/currency/rate"),
 
+  // Moderator dashboard & settings
+  getModeratorDashboard: ()     => req("/moderator/dashboard"),
+  getModeratorSettings:  ()     => req("/moderator/settings"),
+  saveModeratorSettings: (body) => req("/moderator/settings", { method: "PUT", body }),
+
+  // Admin — group review
+  getPendingGroups:  ()          => req("/admin/groups/pending"),
+  reviewGroup:       (id, body)  => req(`/admin/groups/${id}/review`, { method: "PATCH", body }),
+
+  // Admin — email organizers
+  emailOrganizers:        (body) => req("/admin/email-organizers",         { method: "POST", body }),
+  getOrganizerEmailHistory: ()   => req("/admin/organizer-email-history"),
+
   // Credential Vault
   getCredentials:    (gid)  => req(`/groups/${gid}/credentials`),
   saveCredentials:   (gid, body) => req(`/groups/${gid}/credentials`, { method: "PUT", body }),

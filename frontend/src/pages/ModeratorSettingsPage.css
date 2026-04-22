@@ -1,0 +1,51 @@
+.mss-page { max-width: 900px; display: flex; flex-direction: column; gap: 20px; }
+
+.mss-layout {
+  display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start;
+}
+@media (max-width: 700px) { .mss-layout { grid-template-columns: 1fr; } }
+
+.mss-form { display: flex; flex-direction: column; gap: 4px; }
+
+.mss-section-header {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; margin-top: 4px;
+}
+.mss-section-icon { font-size: 1.4rem; }
+.mss-section-title { font-weight: 700; font-size: 0.9rem; }
+.mss-section-sub { font-size: 0.75rem; color: var(--muted); }
+.mss-connected-badge {
+  margin-left: auto; padding: 3px 12px; border-radius: 99px;
+  background: rgba(74,222,128,0.12); color: var(--success);
+  border: 1px solid rgba(74,222,128,0.2); font-size: 0.75rem; font-weight: 600;
+}
+
+.mss-percent-badge {
+  min-width: 52px; text-align: center; padding: 6px 10px;
+  background: var(--accent); color: #fff; border-radius: 8px;
+  font-weight: 700; font-size: 0.9rem;
+}
+
+.mss-split-preview {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; margin-bottom: 14px;
+}
+.mss-split-title { font-weight: 700; font-size: 0.82rem; margin-bottom: 10px; color: var(--text); }
+.mss-split-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.8rem; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--muted);
+}
+.mss-split-row:last-of-type { border-bottom: none; }
+.mss-split-row span:last-child { font-weight: 600; }
+.mss-split-total { border-top: 1px solid var(--border) !important; padding-top: 8px !important; margin-top: 4px; }
+.mss-split-total span { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 40px; }
+.pw-eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 0.9rem; opacity: 0.6; }
+.pw-eye:hover { opacity: 1; }
+
+.msg-box { padding: 12px 18px; border-radius: 10px; font-size: 0.88rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.msg-ok  { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.2);  color: var(--success); }
+.msg-err { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--error); }

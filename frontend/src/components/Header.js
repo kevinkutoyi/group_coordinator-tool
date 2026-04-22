@@ -25,6 +25,9 @@ export default function Header({ page, navigate, user }) {
           <button className={`nav-link ${page==="groups"?"active":""}`} onClick={() => navigate("groups")}>Browse Groups</button>
 
           {/* Role-specific links */}
+          {role === "moderator" && (
+            <button className={`nav-link ${page==="mod-dash"?"active":""}`} onClick={() => navigate("mod-dash")}>📊 Dashboard</button>
+          )}
           {["moderator","superadmin"].includes(role) && (
             <button className={`nav-link ${page==="create"?"active":""}`} onClick={() => navigate("create")}>+ Create Group</button>
           )}
@@ -52,6 +55,8 @@ export default function Header({ page, navigate, user }) {
               {menuOpen && (
                 <div className="user-dropdown" onClick={() => setMenuOpen(false)}>
                   <button onClick={() => navigate("my-groups")}>📋 My Groups</button>
+                  {session.isModerator() && <button onClick={() => navigate("mod-dash")}>📊 Moderator Dashboard</button>}
+                  {session.isModerator() && <button onClick={() => navigate("mod-settings")}>⚙️ Settings & PesaPal</button>}
                   <button onClick={() => navigate("login")} className="divider">⚙️ Account</button>
                   <button onClick={logout} className="logout-btn">🚪 Sign Out</button>
                 </div>

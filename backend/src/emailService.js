@@ -259,8 +259,45 @@ async function runExpiryScheduler(loadDB, saveDB) {
   console.log("✅ Expiry scheduler complete");
 }
 
+// ── Template: Group approved ─────────────────────────────────────────────
+async function sendGroupApproved({ to, organizerName, groupName, serviceName }) {
+  const html = wrap(`
+<h1>✅ Your group is live!</h1>
+<p>Hi <span class="hi">${organizerName}</span>,</p>
+<p>Great news — your group <span class="hi">${groupName}</span> has been reviewed and approved by the SplitPass admin. It is now <strong style="color:#4ade80">publicly listed</strong> and members can start joining.</p>
+<table class="table">
+  <tr><td>Group</td><td>${groupName}</td></tr>
+  <tr><td>Service</td><td>${serviceName}</td></tr>
+  <tr><td>Status</td><td style="color:#4ade80;font-weight:700">✅ Live</td></tr>
+</table>
+<p>Head to your Moderator Dashboard to manage your group, set credentials, and track earnings.</p>
+<a href="${APP_URL}" class="btn">Open Dashboard →</a>
+`, `Your ${serviceName} group is now live on SplitPass`);
+  return sendEmail({ to, subject: `✅ Group approved — "${groupName}" is now live!`, html });
+}
+
+// ── Template: Group rejected ──────────────────────────────────────────────
+async function sendGroupRejected({ to, organizerName, groupName, serviceName, reason }) {
+  const html = wrap(`
+<h1>❌ Group not approved</h1>
+<p>Hi <span class="hi">${organizerName}</span>,</p>
+<p>Unfortunately your group listing <span class="hi">${groupName}</span> was not approved at this time.</p>
+<table class="table">
+  <tr><td>Group</td><td>${groupName}</td></tr>
+  <tr><td>Service</td><td>${serviceName}</td></tr>
+  <tr><td>Decision</td><td style="color:#f87171;font-weight:700">❌ Rejected</td></tr>
+  <tr><td>Reason</td><td>${reason || "Not specified"}</td></tr>
+</table>
+<p>You can revise your group listing based on the feedback above and resubmit for review. Log in to your Moderator Dashboard to edit and resubmit.</p>
+<a href="${APP_URL}" class="btn">Edit &amp; Resubmit →</a>
+<hr/>
+<p style="font-size:13px;color:#666688">If you believe this decision was made in error, reply to this email or contact support.</p>
+`, `Your ${serviceName} group listing was not approved`);
+  return sendEmail({ to, subject: `❌ Group not approved — "${groupName}"`, html });
+}
+
 module.exports = {
-  sendEmail, sendWelcome, sendCredentialsUpdated,
+  sendEmail, sendWelcome, sendCredentialsUpdated, sendGroupApproved, sendGroupRejected,
   sendExpiryWarning, sendExpiryToday,
   sendGroupMessage, sendRenewalConfirm, runExpiryScheduler,
 };

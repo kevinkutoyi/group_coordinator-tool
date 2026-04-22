@@ -181,6 +181,24 @@ export default function GroupDetailPage({ id, navigate, user }) {
           </div>
         </div>
 
+        {/* ── CREDENTIAL VAULT — full width, inside hero card, above stats ── */}
+        <div className="gd-vault-spotlight">
+          <CredentialVault
+            groupId={id}
+            groupName={`${group.serviceName} ${group.planName}`}
+            serviceName={group.serviceName}
+            serviceIcon={group.serviceIcon}
+            maxSlots={group.maxSlots}
+            onJoin={() => setShowJoin(true)}
+            onLogin={() => navigate("login")}
+            groupStatus={group.status}
+            isLoggedIn={session.isLoggedIn()}
+            isCustomer={session.isCustomer()}
+            isMyMember={!!myMember}
+            isOrganizer={isOrganizer}
+          />
+        </div>
+
         {/* Billing cycle — locked, set by organizer, prominently displayed */}
         <div className="gd-billing-cycle-bar">
           <span className="gdb-icon">🔄</span>
@@ -277,15 +295,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
               </div>
             </div>
           )}
-
-          {/* ── Credential Vault ── */}
-          <CredentialVault
-            groupId={id}
-            groupName={`${group.serviceName} ${group.planName}`}
-            serviceName={group.serviceName}
-            serviceIcon={group.serviceIcon}
-            maxSlots={group.maxSlots}
-          />
 
           <div className="pesapal-info-card">
             <div className="pesapal-logo">🔒 Secured by PesaPal</div>
