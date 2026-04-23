@@ -1,6 +1,5 @@
 {
   "watch": ["src"],
   "ext": "js,json",
-  "ignore": ["data/*", "data/db.json"],
   "delay": 500
 }

@@ -201,61 +201,87 @@ async function sendRenewalConfirm({ to, memberName, groupName, serviceName,
 }
 
 // ── Expiry scheduler: 3-day, 2-day, today ─────────────────────────────────
-async function runExpiryScheduler(loadDB, saveDB) {
-  const db  = loadDB();
-  const now = new Date();
+// Runs against PostgreSQL via the Prisma client passed in from server.js.
+async function runExpiryScheduler(prisma) {
+  if (!prisma || typeof prisma.groupMember?.findMany !== "function") {
+    throw new Error("runExpiryScheduler requires a PrismaClient instance");
+  }
 
-  for (const member of db.groupMembers) {
-    if (!member.expiresAt || member.paymentStatus !== "confirmed") continue;
-    const expiry   = new Date(member.expiresAt);
-    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
-    const group    = db.groups.find(g => g.id === member.groupId);
+  const now      = new Date();
+  const todayKey = now.toISOString().slice(0, 10);
+
+  // Pull only confirmed, currently-tracked paying members
+  const members = await prisma.groupMember.findMany({
+    where: {
+      role:          { not: "organizer" },
+      paymentStatus: "confirmed",
+      expiresAt:     { not: null },
+    },
+    include: { group: true },
+  });
+
+  for (const member of members) {
+    const group = member.group;
     if (!group) continue;
 
-    const todayKey = now.toISOString().slice(0, 10);
-    if (!member.expiryNotifications) member.expiryNotifications = [];
+    const expiry   = new Date(member.expiresAt);
+    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+    const sent     = Array.isArray(member.expiryNotifications) ? [...member.expiryNotifications] : [];
 
     const args = {
-      to: member.email, memberName: member.name,
+      to:          member.email,
+      memberName:  member.name,
       groupName:   `${group.serviceName} ${group.planName}`,
-      serviceName:  group.serviceName,
-      expiresAt:    member.expiresAt,
-      renewUrl:     APP_URL,
-      currency:    "KES",
-      memberPays:   group.memberPays,
+      serviceName: group.serviceName,
+      expiresAt:   member.expiresAt,
+      renewUrl:    APP_URL,
+      currency:   "KES",
+      memberPays:  group.memberPays,
     };
 
+    const updates = {};
     try {
       // 3-day warning
-      if (daysLeft === 3 && !member.expiryNotifications.includes(`3d-${todayKey}`)) {
+      if (daysLeft === 3 && !sent.includes(`3d-${todayKey}`)) {
         await sendExpiryWarning({ ...args, daysLeft: 3 });
-        member.expiryNotifications.push(`3d-${todayKey}`);
+        sent.push(`3d-${todayKey}`);
         console.log(`⏰ 3-day warning sent → ${member.email}`);
       }
       // 2-day warning
-      if (daysLeft === 2 && !member.expiryNotifications.includes(`2d-${todayKey}`)) {
+      if (daysLeft === 2 && !sent.includes(`2d-${todayKey}`)) {
         await sendExpiryWarning({ ...args, daysLeft: 2 });
-        member.expiryNotifications.push(`2d-${todayKey}`);
+        sent.push(`2d-${todayKey}`);
         console.log(`⏰ 2-day warning sent → ${member.email}`);
       }
-      // Expiry today
-      if (daysLeft <= 0 && !member.expiryNotifications.includes(`0d-${todayKey}`)) {
+      // Expiry today / past due
+      if (daysLeft <= 0 && !sent.includes(`0d-${todayKey}`)) {
         await sendExpiryToday({
-          to: member.email, memberName: member.name,
-          groupName: `${group.serviceName} ${group.planName}`,
+          to:          member.email,
+          memberName:  member.name,
+          groupName:   `${group.serviceName} ${group.planName}`,
           serviceName: group.serviceName,
-          renewUrl: APP_URL, currency: "KES", memberPays: group.memberPays,
+          renewUrl:    APP_URL,
+          currency:   "KES",
+          memberPays:  group.memberPays,
         });
-        member.expiryNotifications.push(`0d-${todayKey}`);
-        member.paymentStatus = "expired";
+        sent.push(`0d-${todayKey}`);
+        updates.paymentStatus = "expired";
         console.log(`🔴 Expiry-today notice sent → ${member.email}`);
+      }
+
+      // Persist any new notifications / status change
+      if (sent.length !== (member.expiryNotifications || []).length ||
+          updates.paymentStatus) {
+        await prisma.groupMember.update({
+          where: { id: member.id },
+          data:  { expiryNotifications: sent, ...updates },
+        });
       }
     } catch (err) {
       console.error(`Expiry email error for ${member.id}:`, err.message);
     }
   }
 
-  saveDB(db);
   console.log("✅ Expiry scheduler complete");
 }
 

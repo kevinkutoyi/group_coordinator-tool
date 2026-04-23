@@ -4,14 +4,15 @@ A full-stack web app to coordinate legal group-buys for Spotify, Netflix, Claude
 
 ## Tech Stack
 - **Frontend**: React 18, plain CSS (no UI library)
-- **Backend**: Node.js + Express, JSON file-based DB (no external DB needed)
+- **Backend**: Node.js + Express, PostgreSQL via Prisma ORM
 
 ## Project Structure
 ```
 groupbuy/
 ├── backend/
-│   ├── src/server.js       ← Express API
-│   ├── data/db.json        ← auto-created JSON database
+│   ├── src/server.js       ← Express API (Prisma-backed)
+│   ├── prisma/schema.prisma ← PostgreSQL schema
+│   ├── prisma/migrations/  ← SQL migrations
 │   └── package.json
 └── frontend/
     ├── public/index.html
