@@ -1,9 +1,3 @@
-
-  // User email modal
-  const [emailTarget, setEmailTarget]   = useState(null);
-  const [emailForm, setEmailForm]       = useState({ subject: "", body: "" });
-  const [emailBusy, setEmailBusy]       = useState(false);
-  const [emailModalMsg, setEmailModalMsg] = useState(null);
 import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
 import "./AdminDashboardPage.css";
@@ -56,6 +50,12 @@ export default function AdminDashboardPage({ navigate }) {
   const [expiredLoading, setExpiredLoading] = useState(false);
   const [expiredMsg, setExpiredMsg]         = useState(null);
   const [remindAllBusy, setRemindAllBusy]   = useState(false);
+
+  // User email modal
+  const [emailTarget, setEmailTarget]   = useState(null);
+  const [emailForm, setEmailForm]       = useState({ subject: "", body: "" });
+  const [emailBusy, setEmailBusy]       = useState(false);
+  const [emailModalMsg, setEmailModalMsg] = useState(null);
 
   useEffect(() => {
     if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
