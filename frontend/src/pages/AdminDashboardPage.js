@@ -280,7 +280,7 @@ export default function AdminDashboardPage({ navigate }) {
       )}
 
       {/* User list */}
-      {!["pending-payments","groups","newsletter","group-review","org-email","payouts"].includes(tab) && (filtered.length === 0 ? (
+      {!["pending-payments","groups","newsletter","group-review","org-email","payouts","expired"].includes(tab) && (filtered.length === 0 ? (
         <div className="empty-state"><div className="emoji">✅</div><h3>Nothing here</h3><p>No users in this category.</p></div>
       ) : (
         <div className="admin-user-list">
