@@ -47,6 +47,11 @@ export default function GroupDetailPage({ id, navigate, user }) {
   }, [id]);
 
   const CYCLE_MONTHS = { monthly: 1, quarterly: 3, biannually: 6, annually: 12 };
+
+  function daysLeft(expiresAt) {
+    if (!expiresAt) return null;
+    return Math.ceil((new Date(expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+  }
   const groupMonths = CYCLE_MONTHS[group?.billingCycle] || 1;
 
   // New fee model: memberPays = base (fee comes OUT of it, not added on top)
@@ -322,6 +327,47 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 <button className="btn btn-sm pesapal-btn" onClick={() => setCurrency(m)} disabled={payingId === m.id}>
                   {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay via PesaPal"}
                 </button>
+              )}
+
+              {/* Renew button — expired or expiring within 7 days */}
+              {m.userId === currentUserId && (
+                m.paymentStatus === "expired" ||
+                (m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && daysLeft(m.expiresAt) <= 7)
+              ) && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  style={{ background: "linear-gradient(90deg, #f59e0b, #ef4444)", border: "none" }}
+                  disabled={payingId === m.id}
+                  onClick={async () => {
+                    setPayingId(m.id);
+                    try {
+                      await api.renewSlot(id);
+                      await reload();
+                      setCurrency({ ...m, memberPays: group.pricePerSlot });
+                    } catch (err) {
+                      setMsg({ type: "err", text: err.message });
+                      setPayingId(null);
+                    }
+                  }}
+                >
+                  {payingId === m.id ? <><span className="spinner" /> …</> : "🔄 Renew Subscription"}
+                </button>
+              )}
+
+              {/* Expiry badge */}
+              {m.userId === currentUserId && m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && (
+                <span style={{
+                  fontSize: "0.72rem", fontWeight: 600, marginLeft: 4,
+                  color: daysLeft(m.expiresAt) <= 0  ? "var(--error)"   :
+                         daysLeft(m.expiresAt) <= 3  ? "var(--error)"   :
+                         daysLeft(m.expiresAt) <= 7  ? "var(--warning)" : "var(--success)",
+                }}>
+                  {daysLeft(m.expiresAt) <= 0
+                    ? "⛔ Expired"
+                    : daysLeft(m.expiresAt) <= 7
+                    ? `⚠️ Expires in ${daysLeft(m.expiresAt)}d`
+                    : `✓ ${daysLeft(m.expiresAt)}d left`}
+                </span>
               )}
             </div>
           ))}
