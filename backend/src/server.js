@@ -694,6 +694,14 @@ app.post("/api/pesapal/ipn", async (req, res) => {
   } catch (err) { console.error("IPN error:", err.message); }
 });
 
+app.delete("/api/admin/members/:id", requireSuperAdmin, async (req, res) => {
+  const member = await prisma.groupMember.findUnique({ where: { id: req.params.id } });
+  if (!member) return res.status(404).json({ error: "Member not found" });
+  await prisma.groupMember.delete({ where: { id: req.params.id } });
+  console.log("[ADMIN] Deleted expired member:", member.name, member.email);
+  res.json({ ok: true, message: member.name + " removed from group." });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  ADMIN - EXPIRED SUBSCRIPTIONS
 // ═══════════════════════════════════════════════════════════════════════════

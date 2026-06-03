@@ -122,6 +122,17 @@ export default function AdminDashboardPage({ navigate }) {
     finally { setBusy(b => ({ ...b, [memberId]: false })); }
   }
 
+  async function deleteExpiredMember(memberId, name) {
+    if (!window.confirm("Remove " + name + " from this group? This will delete their membership record.")) return;
+    setBusy(b => ({ ...b, ["del_" + memberId]: true })); setExpiredMsg(null);
+    try {
+      await api.deleteGroupMember(memberId);
+      setExpiredMsg({ type: "ok", text: name + " removed successfully." });
+      loadExpiredMembers();
+    } catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
+    finally { setBusy(b => ({ ...b, ["del_" + memberId]: false })); }
+  }
+
   async function sendPaymentReminder(memberId) {
     setBusy(b => ({...b, [memberId]: true}));
     try {
@@ -937,11 +948,19 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                     <span style={{color:"var(--muted)",marginLeft:8}}>{"(" + new Date(m.expiresAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) + ")"}</span>
                   </div>
                 </div>
-                <button className="btn btn-sm btn-primary"
-                  style={{whiteSpace:"nowrap",background:"linear-gradient(90deg,#f59e0b,#ef4444)",border:"none"}}
-                  disabled={busy[m.id]} onClick={()=>remindExpiredOne(m.id)}>
-                  {busy[m.id] ? <><span className="spinner"/> Sending…</> : "📧 Send Reminder"}
-                </button>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                  <button className="btn btn-sm btn-primary"
+                    style={{whiteSpace:"nowrap",background:"linear-gradient(90deg,#f59e0b,#ef4444)",border:"none"}}
+                    disabled={busy[m.id]} onClick={()=>remindExpiredOne(m.id)}>
+                    {busy[m.id] ? <><span className="spinner"/> Sending…</> : "📧 Send Reminder"}
+                  </button>
+                  <button className="btn btn-sm btn-danger"
+                    style={{whiteSpace:"nowrap"}}
+                    disabled={busy["del_" + m.id]}
+                    onClick={()=>deleteExpiredMember(m.id, m.name)}>
+                    {busy["del_" + m.id] ? <><span className="spinner"/> Deleting…</> : "🗑️ Remove"}
+                  </button>
+                </div>
               </div>
             </div>
           ))}
