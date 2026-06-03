@@ -165,4 +165,5 @@ export const api = {
   remindExpiredAll:       ()     => req("/admin/expired-members/remind-all", { method: "POST" }),
   remindExpiredMember:    (id)   => req(`/admin/expired-members/${id}/remind`, { method: "POST" }),
   deleteGroupMember:      (mid)  => req(`/admin/members/${mid}`, { method: "DELETE" }),
+  sendUserEmail:          (body) => req("/admin/users/email", { method: "POST", body }),
 };

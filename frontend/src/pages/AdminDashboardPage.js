@@ -1,3 +1,9 @@
+
+  // User email modal
+  const [emailTarget, setEmailTarget]   = useState(null);
+  const [emailForm, setEmailForm]       = useState({ subject: "", body: "" });
+  const [emailBusy, setEmailBusy]       = useState(false);
+  const [emailModalMsg, setEmailModalMsg] = useState(null);
 import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
 import "./AdminDashboardPage.css";
@@ -120,6 +126,17 @@ export default function AdminDashboardPage({ navigate }) {
     try { const r = await api.remindExpiredMember(memberId); setExpiredMsg({ type: "ok", text: r.message }); }
     catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
     finally { setBusy(b => ({ ...b, [memberId]: false })); }
+  }
+
+  async function sendEmailToUser() {
+    if (!emailTarget || !emailForm.subject || !emailForm.body) return;
+    setEmailBusy(true); setEmailModalMsg(null);
+    try {
+      const r = await api.sendUserEmail({ userId: emailTarget.id, subject: emailForm.subject, body: emailForm.body });
+      setEmailModalMsg({ type: "ok", text: r.message });
+      setEmailForm({ subject: "", body: "" });
+    } catch (err) { setEmailModalMsg({ type: "err", text: err.message }); }
+    finally { setEmailBusy(false); }
   }
 
   async function deleteExpiredMember(memberId, name) {
@@ -335,6 +352,12 @@ export default function AdminDashboardPage({ navigate }) {
                 {u.status === "suspended" && u.role !== "superadmin" && (
                   <button className="btn btn-sm btn-primary" disabled={busy[u.id]} onClick={() => unsuspend(u.id)}>
                     {busy[u.id] ? <span className="spinner"/> : "✅ Unsuspend"}
+                  </button>
+                )}
+                {u.role !== "superadmin" && (
+                  <button className="btn btn-sm btn-outline" style={{borderColor:"rgba(124,106,255,0.3)",color:"var(--accent)"}}
+                    onClick={() => { setEmailTarget(u); setEmailForm({ subject: "", body: "" }); setEmailModalMsg(null); }}>
+                    ✉️ Email
                   </button>
                 )}
               </div>
@@ -964,6 +987,44 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Email User Modal ── */}
+      {emailTarget && (
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setEmailTarget(null)}>
+          <div className="modal" style={{maxWidth:520}}>
+            <h3>✉️ Email {emailTarget.name}</h3>
+            <p style={{color:"var(--muted)",fontSize:"0.82rem",marginBottom:16}}>
+              Sending to: <strong style={{color:"var(--text)"}}>{emailTarget.email}</strong>
+              <span style={{marginLeft:8,fontSize:"0.75rem",background:"var(--bg3)",padding:"2px 8px",borderRadius:99}}>{emailTarget.role}</span>
+            </p>
+            <div className="form-group">
+              <label>Subject</label>
+              <input value={emailForm.subject}
+                onChange={e => setEmailForm(f => ({ ...f, subject: e.target.value }))}
+                placeholder="e.g. Important update about your account"/>
+            </div>
+            <div className="form-group">
+              <label>Message</label>
+              <textarea rows={6} value={emailForm.body}
+                onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))}
+                placeholder={"Hi " + emailTarget.name + ",\n\nWrite your message here...\n\n— SplitSubs Admin"}
+                style={{resize:"vertical",fontFamily:"monospace",fontSize:"0.82rem"}}/>
+            </div>
+            {emailModalMsg && (
+              <div className={"msg-box " + (emailModalMsg.type==="ok"?"msg-ok":"msg-err")}
+                style={{marginBottom:12}} onClick={()=>setEmailModalMsg(null)}>
+                {emailModalMsg.text} <span style={{opacity:.4}}>✕</span>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => { setEmailTarget(null); setEmailModalMsg(null); }}>Cancel</button>
+              <button className="btn btn-primary" disabled={emailBusy || !emailForm.subject || !emailForm.body} onClick={sendEmailToUser}>
+                {emailBusy ? <><span className="spinner"/> Sending…</> : "📨 Send Email"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
