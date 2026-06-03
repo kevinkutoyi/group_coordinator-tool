@@ -158,4 +158,10 @@ export const api = {
   adminGetSupportThreads:  ()    => req("/admin/support/threads"),
   adminGetSupportThread:   (id)  => req(`/admin/support/threads/${id}`),
   adminReplySupport:       (id, body) => req(`/admin/support/threads/${id}/reply`, { method: "POST", body: { body } }),
+  renewSlot:              (gid)  => req(`/groups/${gid}/renew`, { method: "POST" }),
+
+  // Expired subscriptions
+  getExpiredMembers:      ()     => req("/admin/expired-members"),
+  remindExpiredAll:       ()     => req("/admin/expired-members/remind-all", { method: "POST" }),
+  remindExpiredMember:    (id)   => req(`/admin/expired-members/${id}/remind`, { method: "POST" }),
 };

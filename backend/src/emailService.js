@@ -389,8 +389,33 @@ ${heroImage ? `<a href="${url}"><img src="${heroImage}" alt="${title}" style="wi
   return sendEmail({ to, subject: `📝 ${title}`, html });
 }
 
+
+async function sendExpiredRenewalReminder({ to, memberName, groupName, serviceName, planName,
+  memberPays, billingCycle, expiresAt, daysExpired, renewUrl }) {
+  const expStr = new Date(expiresAt).toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" });
+  const html = wrap(
+    "<h1>Your " + serviceName + " subscription has expired</h1>" +
+    "<div class='badge-red'>Expired " + daysExpired + " day" + (daysExpired !== 1 ? "s" : "") + " ago</div>" +
+    "<p>Hi <span class='hi'>" + memberName + "</span>,</p>" +
+    "<p>Your slot in <span class='hi'>" + groupName + "</span> expired on <span style='color:#f87171;font-weight:600'>" + expStr + "</span>.</p>" +
+    "<p>Renew now to get back in — your spot may still be available.</p>" +
+    "<table class='table'>" +
+    "<tr><td>Group</td><td>" + groupName + "</td></tr>" +
+    "<tr><td>Service</td><td>" + serviceName + " - " + planName + "</td></tr>" +
+    "<tr><td>Billing cycle</td><td><span class='pill'>" + (billingCycle || "Monthly") + "</span></td></tr>" +
+    "<tr><td>Renewal amount</td><td style='color:#4ade80;font-weight:700'>$" + memberPays + "</td></tr>" +
+    "<tr><td>Expired on</td><td style='color:#f87171'>" + expStr + "</td></tr>" +
+    "</table>" +
+    "<a href='" + renewUrl + "' class='btn' style='background:linear-gradient(90deg,#f59e0b,#ef4444)'>Renew My Subscription</a>" +
+    "<hr/>" +
+    "<p style='font-size:13px;color:#666688'>If you no longer wish to be part of this group, simply ignore this email.</p>",
+    "Your " + serviceName + " expired " + daysExpired + " day" + (daysExpired !== 1 ? "s" : "") + " ago"
+  );
+  return sendEmail({ to, subject: "Renew now - " + serviceName + " expired " + daysExpired + "d ago", html });
+}
+
 module.exports = {
   sendEmail, sendWelcome, sendCredentialsUpdated, sendGroupApproved, sendGroupRejected,
   sendExpiryWarning, sendExpiryToday, sendNewBlogPostNotification, sendSignupOtp, sendPasswordResetOtp, sendPaymentReminder,
-  sendGroupMessage, sendRenewalConfirm, runExpiryScheduler,
+  sendGroupMessage, sendRenewalConfirm, runExpiryScheduler, sendExpiredRenewalReminder,
 };

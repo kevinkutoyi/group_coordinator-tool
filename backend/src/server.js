@@ -695,6 +695,74 @@ app.post("/api/pesapal/ipn", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  ADMIN - EXPIRED SUBSCRIPTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get("/api/admin/expired-members", requireSuperAdmin, async (req, res) => {
+  const now = new Date();
+  const members = await prisma.groupMember.findMany({
+    where: { role: { not: "organizer" }, paymentStatus: { in: ["expired", "confirmed"] }, expiresAt: { not: null, lte: now } },
+    include: { group: true },
+    orderBy: { expiresAt: "asc" },
+  });
+  res.json(members.map(m => ({
+    id: m.id, userId: m.userId, name: m.name, email: m.email, groupId: m.groupId,
+    groupName:    m.group.serviceName + " " + m.group.planName,
+    serviceIcon:  m.group.serviceIcon,
+    serviceName:  m.group.serviceName,
+    planName:     m.group.planName,
+    memberPays:   m.memberPays || m.group.memberPays,
+    billingCycle: m.group.billingCycle,
+    expiresAt:    m.expiresAt,
+    daysExpired:  Math.floor((now - new Date(m.expiresAt)) / (1000 * 60 * 60 * 24)),
+    paymentStatus: m.paymentStatus,
+  })));
+});
+
+app.post("/api/admin/expired-members/remind-all", requireSuperAdmin, async (req, res) => {
+  const now = new Date();
+  const members = await prisma.groupMember.findMany({
+    where: { role: { not: "organizer" }, paymentStatus: { in: ["expired", "confirmed"] }, expiresAt: { not: null, lte: now } },
+    include: { group: true },
+  });
+  if (!members.length) return res.json({ message: "No expired members found.", sent: 0, failed: 0 });
+  let sent = 0, failed = 0;
+  for (const m of members) {
+    try {
+      await emailService.sendExpiredRenewalReminder({
+        to: m.email, memberName: m.name,
+        groupName: m.group.serviceName + " " + m.group.planName,
+        serviceName: m.group.serviceName, planName: m.group.planName,
+        memberPays: m.memberPays || m.group.memberPays,
+        billingCycle: m.group.billingCycle, expiresAt: m.expiresAt,
+        daysExpired: Math.floor((now - new Date(m.expiresAt)) / (1000 * 60 * 60 * 24)),
+        renewUrl: (process.env.FRONTEND_URL || "https://splitsubs.com") + "/group/" + m.groupId,
+      });
+      sent++;
+    } catch { failed++; }
+  }
+  res.json({ message: "Reminders sent to " + sent + " expired member" + (sent !== 1 ? "s" : "") + "." + (failed > 0 ? " " + failed + " failed." : ""), sent, failed });
+});
+
+app.post("/api/admin/expired-members/:memberId/remind", requireSuperAdmin, async (req, res) => {
+  const now = new Date();
+  const member = await prisma.groupMember.findUnique({ where: { id: req.params.memberId }, include: { group: true } });
+  if (!member) return res.status(404).json({ error: "Member not found" });
+  try {
+    await emailService.sendExpiredRenewalReminder({
+      to: member.email, memberName: member.name,
+      groupName: member.group.serviceName + " " + member.group.planName,
+      serviceName: member.group.serviceName, planName: member.group.planName,
+      memberPays: member.memberPays || member.group.memberPays,
+      billingCycle: member.group.billingCycle, expiresAt: member.expiresAt,
+      daysExpired: Math.floor((now - new Date(member.expiresAt)) / (1000 * 60 * 60 * 24)),
+      renewUrl: (process.env.FRONTEND_URL || "https://splitsubs.com") + "/group/" + member.groupId,
+    });
+    res.json({ message: "Reminder sent to " + member.name + ".", ok: true });
+  } catch (err) { res.status(500).json({ error: "Could not send reminder" }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  SUPER ADMIN — EARNINGS
 // ═══════════════════════════════════════════════════════════════════════════
 

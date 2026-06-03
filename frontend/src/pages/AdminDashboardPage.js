@@ -45,6 +45,12 @@ export default function AdminDashboardPage({ navigate }) {
   const [searchEmail, setSearchEmail]         = useState("");
   const [pendingPayments, setPendingPayments] = useState([]);
 
+  // Expired subscriptions
+  const [expiredMembers, setExpiredMembers] = useState([]);
+  const [expiredLoading, setExpiredLoading] = useState(false);
+  const [expiredMsg, setExpiredMsg]         = useState(null);
+  const [remindAllBusy, setRemindAllBusy]   = useState(false);
+
   useEffect(() => {
     if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
     loadAll();
@@ -92,6 +98,28 @@ export default function AdminDashboardPage({ navigate }) {
   async function suspend(id) {
     if (!window.confirm("Suspend this user?")) return;
     try { await api.suspendUser(id); loadAll(); } catch (err) { setMsg({ type:"err", text: err.message }); }
+  }
+
+  async function loadExpiredMembers() {
+    setExpiredLoading(true); setExpiredMsg(null);
+    try { const data = await api.getExpiredMembers(); setExpiredMembers(data); }
+    catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
+    finally { setExpiredLoading(false); }
+  }
+
+  async function remindExpiredAll() {
+    if (!window.confirm("Send renewal reminders to all " + expiredMembers.length + " expired members?")) return;
+    setRemindAllBusy(true); setExpiredMsg(null);
+    try { const r = await api.remindExpiredAll(); setExpiredMsg({ type: "ok", text: r.message }); loadExpiredMembers(); }
+    catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
+    finally { setRemindAllBusy(false); }
+  }
+
+  async function remindExpiredOne(memberId) {
+    setBusy(b => ({ ...b, [memberId]: true })); setExpiredMsg(null);
+    try { const r = await api.remindExpiredMember(memberId); setExpiredMsg({ type: "ok", text: r.message }); }
+    catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
+    finally { setBusy(b => ({ ...b, [memberId]: false })); }
   }
 
   async function sendPaymentReminder(memberId) {
@@ -183,6 +211,7 @@ export default function AdminDashboardPage({ navigate }) {
           {key:"org-email",    label:"✉️ Email Organizers"},
           {key:"pending-payments", label:`💳 Pending Payments${pendingPayments.length > 0 ? ` (${pendingPayments.length})` : ""}`},
           {key:"payouts",       label:`💸 Payouts${payoutQueue.length > 0 ? ` (${payoutQueue.length})` : ""}`},
+          {key:"expired", label:"🔴 Expired" + (expiredMembers.length > 0 ? " (" + expiredMembers.length + ")" : "")},
         ].map(t => (
           <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
@@ -852,6 +881,70 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === "expired" && (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+            <div>
+              <h2 className="section-h2" style={{margin:0}}>🔴 Expired Subscriptions</h2>
+              <p style={{color:"var(--muted)",fontSize:"0.82rem",marginTop:4,marginBottom:0}}>Members whose subscriptions have lapsed. Send personalised renewal reminders.</p>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button className="btn btn-sm btn-outline" onClick={loadExpiredMembers} disabled={expiredLoading}>
+                {expiredLoading ? <span className="spinner"/> : "↻ Refresh"}
+              </button>
+              {expiredMembers.length > 0 && (
+                <button className="btn btn-sm btn-primary" style={{background:"linear-gradient(90deg,#f59e0b,#ef4444)",border:"none"}}
+                  disabled={remindAllBusy||expiredLoading} onClick={remindExpiredAll}>
+                  {remindAllBusy ? <><span className="spinner"/> Sending…</> : "📨 Remind All (" + expiredMembers.length + ")"}
+                </button>
+              )}
+            </div>
+          </div>
+          {expiredMsg && (
+            <div className={"msg-box " + (expiredMsg.type==="ok"?"msg-ok":"msg-err")} style={{marginBottom:16}} onClick={()=>setExpiredMsg(null)}>
+              {expiredMsg.text} <span style={{opacity:.4}}>✕</span>
+            </div>
+          )}
+          {expiredMembers.length > 0 && (
+            <div className="stats-row" style={{marginBottom:20}}>
+              <div className="stat-card"><div className="stat-value" style={{color:"var(--error)"}}>{expiredMembers.length}</div><div className="stat-label">Total Expired</div></div>
+              <div className="stat-card"><div className="stat-value" style={{color:"var(--warning)"}}>{expiredMembers.filter(m=>m.daysExpired<=7).length}</div><div className="stat-label">Expired 7d or less</div></div>
+              <div className="stat-card"><div className="stat-value" style={{color:"var(--error)"}}>{expiredMembers.filter(m=>m.daysExpired>7).length}</div><div className="stat-label">Expired over 7d</div></div>
+              <div className="stat-card"><div className="stat-value" style={{color:"var(--accent)"}}>{"$" + expiredMembers.reduce((a,m)=>a+(m.memberPays||0),0).toFixed(2)}</div><div className="stat-label">Potential Revenue</div></div>
+            </div>
+          )}
+          {expiredLoading ? <div style={{textAlign:"center",padding:60}}><span className="spinner"/></div>
+          : expiredMembers.length === 0 ? (
+            <div className="empty-state"><div className="emoji">🎉</div><h3>No expired subscriptions</h3><p>All confirmed members are still active.</p></div>
+          ) : expiredMembers.map(m => (
+            <div key={m.id} className="card" style={{marginBottom:12,padding:16,
+              borderLeft:m.daysExpired<=3?"3px solid var(--error)":m.daysExpired<=7?"3px solid var(--warning)":"3px solid var(--border)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+                <div style={{fontSize:"1.8rem"}}>{m.serviceIcon}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:"0.95rem"}}>{m.name}</div>
+                  <div style={{fontSize:"0.78rem",color:"var(--muted)",wordBreak:"break-all"}}>{m.email}</div>
+                  <div style={{fontSize:"0.78rem",marginTop:4}}>
+                    <strong style={{color:"var(--text)"}}>{m.groupName}</strong>
+                    {" · "}<span style={{color:"var(--accent)"}}>{"$" + m.memberPays + "/mo"}</span>
+                    {" · "}<span style={{color:"var(--muted)"}}>{m.billingCycle}</span>
+                  </div>
+                  <div style={{fontSize:"0.74rem",marginTop:3}}>
+                    <span style={{color:"var(--error)",fontWeight:600}}>{"🔴 Expired " + m.daysExpired + " day" + (m.daysExpired!==1?"s":"") + " ago"}</span>
+                    <span style={{color:"var(--muted)",marginLeft:8}}>{"(" + new Date(m.expiresAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) + ")"}</span>
+                  </div>
+                </div>
+                <button className="btn btn-sm btn-primary"
+                  style={{whiteSpace:"nowrap",background:"linear-gradient(90deg,#f59e0b,#ef4444)",border:"none"}}
+                  disabled={busy[m.id]} onClick={()=>remindExpiredOne(m.id)}>
+                  {busy[m.id] ? <><span className="spinner"/> Sending…</> : "📧 Send Reminder"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
