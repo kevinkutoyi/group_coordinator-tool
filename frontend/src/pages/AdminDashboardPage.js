@@ -26,6 +26,11 @@ export default function AdminDashboardPage({ navigate }) {
   const [orgEmailMsg, setOrgEmailMsg]   = useState(null);
   const [orgEmailHistory, setOrgEmailHistory] = useState([]);
 
+  // Delete group
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy]       = useState(false);
+
   // Payouts
   const [payoutQueue, setPayoutQueue]   = useState([]);
   const [payoutHistory, setPayoutHistory] = useState([]);
@@ -35,6 +40,10 @@ export default function AdminDashboardPage({ navigate }) {
   const [feeInput, setFeeInput]         = useState("8");
   const [feeBusy, setFeeBusy]           = useState(false);
   const [feeMsg, setFeeMsg]             = useState(null);
+
+  // Search + pending payments
+  const [searchEmail, setSearchEmail]         = useState("");
+  const [pendingPayments, setPendingPayments] = useState([]);
 
   useEffect(() => {
     if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
@@ -85,13 +94,40 @@ export default function AdminDashboardPage({ navigate }) {
     try { await api.suspendUser(id); loadAll(); } catch (err) { setMsg({ type:"err", text: err.message }); }
   }
 
+  async function sendPaymentReminder(memberId) {
+    setBusy(b => ({...b, [memberId]: true}));
+    try {
+      const r = await api.remindPendingPayment(memberId);
+      setMsg({ type:"ok", text: r.message });
+    } catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setBusy(b => ({...b, [memberId]: false})); }
+  }
+
+  async function handleDeleteGroup() {
+    if (!deleteTarget) return;
+    if (deleteConfirm.trim().toUpperCase() !== "DELETE") { setMsg({ type:"err", text:"Type DELETE to confirm." }); return; }
+    setDeleteBusy(true);
+    try {
+      const r = await api.deleteGroup(deleteTarget.id);
+      const d = r.deleted || {};
+      setMsg({ type:"ok", text:`Deleted "${d.serviceName||""} — ${d.planName||""}". Removed ${d.members||0} members, ${d.payments||0} payments, ${d.pesapalOrders||0} orders, ${d.platformEarnings||0} earnings.` });
+      setDeleteTarget(null); setDeleteConfirm(""); loadAll();
+    } catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setDeleteBusy(false); }
+  }
+
   const filtered = allUsers.filter(u => {
     if (tab === "pending")    return u.role === "moderator" && u.status === "pending";
     if (tab === "moderators") return u.role === "moderator";
     if (tab === "customers")  return u.role === "customer";
     if (tab === "groups")     return false; // handled separately
+    if (tab === "pending-payments") return false; // handled separately
     return true;
-  });
+  }).filter(u => !searchEmail.trim() || u.email.toLowerCase().includes(searchEmail.toLowerCase().trim()));
+
+  const filteredPendingPayments = pendingPayments.filter(pp =>
+    !searchEmail.trim() || pp.email.toLowerCase().includes(searchEmail.toLowerCase().trim()) || pp.name?.toLowerCase().includes(searchEmail.toLowerCase().trim())
+  );
 
   const statusColor = { active:"var(--success)", pending:"var(--warning)", suspended:"var(--error)" };
   const roleBg = { customer:"rgba(74,222,128,0.12)", moderator:"rgba(124,106,255,0.12)", superadmin:"rgba(255,106,142,0.12)" };
@@ -145,14 +181,77 @@ export default function AdminDashboardPage({ navigate }) {
           {key:"newsletter",  label:`📧 Newsletter${subscribers ? ` (${subscribers.total})` : ""}`},
           {key:"group-review", label:`🔍 Group Review (${pendingGroups.length})`},
           {key:"org-email",    label:"✉️ Email Organizers"},
+          {key:"pending-payments", label:`💳 Pending Payments${pendingPayments.length > 0 ? ` (${pendingPayments.length})` : ""}`},
           {key:"payouts",       label:`💸 Payouts${payoutQueue.length > 0 ? ` (${payoutQueue.length})` : ""}`},
         ].map(t => (
           <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
       </div>
 
+      {/* Search bar (visible on user-list and pending-payments tabs) */}
+      {["pending","moderators","customers","all","pending-payments"].includes(tab) && (
+        <div style={{ marginBottom:16 }}>
+          <input
+            type="search"
+            value={searchEmail}
+            onChange={e => setSearchEmail(e.target.value)}
+            placeholder="🔍 Search by email or name…"
+            style={{ width:"100%", padding:"11px 16px", background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:10, color:"var(--text)", fontSize:"0.92rem", outline:"none" }}
+          />
+          {searchEmail.trim() && (
+            <p style={{ fontSize:"0.78rem", color:"var(--muted)", margin:"6px 4px 0 4px" }}>
+              Filtering by &ldquo;{searchEmail}&rdquo; · {tab === "pending-payments" ? `${filteredPendingPayments.length} pending payment${filteredPendingPayments.length !== 1 ? "s" : ""}` : `${filtered.length} user${filtered.length !== 1 ? "s" : ""}`}
+              <button className="btn btn-sm btn-outline" style={{ marginLeft:10, padding:"2px 10px" }} onClick={() => setSearchEmail("")}>Clear</button>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Pending Payments tab */}
+      {tab === "pending-payments" && (
+        <div className="card">
+          <h2 className="section-h2" style={{ marginBottom:8 }}>💳 Pending Payments</h2>
+          <p style={{ color:"var(--muted)", fontSize:"0.85rem", marginBottom:18 }}>
+            Members who joined a group but haven&rsquo;t completed payment. Click <strong>🔔 Send Reminder</strong> to nudge them with a personalised email.
+          </p>
+          {filteredPendingPayments.length === 0 ? (
+            <div className="empty-state">
+              <div className="emoji">✅</div>
+              <h3>{searchEmail.trim() ? "No matches" : "No pending payments"}</h3>
+              <p>{searchEmail.trim() ? "Try a different search." : "All joiners have either paid or expired out."}</p>
+            </div>
+          ) : filteredPendingPayments.map(pp => (
+            <div key={pp.id} className="card" style={{ marginBottom:12, padding:16 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                <div className="user-av">{pp.name?.[0]?.toUpperCase()}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:600 }}>{pp.name}</div>
+                  <div style={{ fontSize:"0.78rem", color:"var(--muted)", wordBreak:"break-all" }}>{pp.email}</div>
+                  <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:4 }}>
+                    {pp.group.serviceIcon} <strong style={{ color:"var(--text)" }}>{pp.group.serviceName} — {pp.group.planName}</strong>
+                    {" · "}${pp.memberPays}{pp.durationLabel ? ` · ${pp.durationLabel}` : ""}
+                  </div>
+                  <div style={{ fontSize:"0.74rem", color: pp.daysWaiting >= 3 ? "var(--error)" : "var(--warning)", marginTop:2 }}>
+                    ⏳ Pending {pp.daysWaiting} day{pp.daysWaiting !== 1 ? "s" : ""}
+                    {" · "}joined {new Date(pp.joinedAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={busy[pp.id]}
+                  onClick={() => sendPaymentReminder(pp.id)}
+                  style={{ whiteSpace:"nowrap" }}
+                >
+                  {busy[pp.id] ? <><span className="spinner"/> Sending…</> : "🔔 Send Reminder"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* User list */}
-      {filtered.length === 0 ? (
+      {!["pending-payments","groups","newsletter","group-review","org-email","payouts"].includes(tab) && (filtered.length === 0 ? (
         <div className="empty-state"><div className="emoji">✅</div><h3>Nothing here</h3><p>No users in this category.</p></div>
       ) : (
         <div className="admin-user-list">
@@ -182,14 +281,27 @@ export default function AdminDashboardPage({ navigate }) {
                     <button className="btn btn-sm btn-danger" onClick={() => setRejectId(u.id)}>❌ Reject</button>
                   </div>
                 )}
+                {u.status === "active" && u.role === "customer" && (
+                  <button className="btn btn-sm btn-outline" disabled={busy[u.id]} onClick={() => promote(u.id)}
+                    style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}>
+                    {busy[u.id] ? <span className="spinner"/> : "🛡️ Make Moderator"}
+                  </button>
+                )}
                 {u.status === "active" && u.role !== "superadmin" && (
-                  <button className="btn btn-sm btn-danger" onClick={() => suspend(u.id)}>⛔ Suspend</button>
+                  <button className="btn btn-sm btn-danger" disabled={busy[u.id]} onClick={() => suspend(u.id)}>
+                    {busy[u.id] ? <span className="spinner"/> : "⛔ Suspend"}
+                  </button>
+                )}
+                {u.status === "suspended" && u.role !== "superadmin" && (
+                  <button className="btn btn-sm btn-primary" disabled={busy[u.id]} onClick={() => unsuspend(u.id)}>
+                    {busy[u.id] ? <span className="spinner"/> : "✅ Unsuspend"}
+                  </button>
                 )}
               </div>
             </div>
           ))}
         </div>
-      )}
+      ))}
 
       {/* ── Newsletter tab ── */}
       {tab === "newsletter" && (
@@ -222,11 +334,11 @@ export default function AdminDashboardPage({ navigate }) {
               <div className="form-row">
                 <div className="form-group">
                   <label>Sender Name</label>
-                  <input value={nlForm.senderName} onChange={e=>setNlForm(f=>({...f,senderName:e.target.value}))} placeholder="SplitPass Team" />
+                  <input value={nlForm.senderName} onChange={e=>setNlForm(f=>({...f,senderName:e.target.value}))} placeholder="SplitSubs Team" />
                 </div>
                 <div className="form-group">
                   <label>Sender Email</label>
-                  <input type="email" value={nlForm.senderEmail} onChange={e=>setNlForm(f=>({...f,senderEmail:e.target.value}))} placeholder="newsletter@splitpass.com" />
+                  <input type="email" value={nlForm.senderEmail} onChange={e=>setNlForm(f=>({...f,senderEmail:e.target.value}))} placeholder="newsletter@splitsubs.com" />
                 </div>
               </div>
 
@@ -238,7 +350,7 @@ export default function AdminDashboardPage({ navigate }) {
               <div className="form-group">
                 <label>Message Body</label>
                 <textarea rows={8} value={nlForm.body} onChange={e=>setNlForm(f=>({...f,body:e.target.value}))}
-                  placeholder={"Hi {name},\n\nWe have exciting new groups available...\n\nCheck them out at splitpass.com\n\nBest,\nThe SplitPass Team"}
+                  placeholder={"Hi {name},\n\nWe have exciting new groups available...\n\nCheck them out at splitsubs.com\n\nBest,\nThe SplitSubs Team"}
                   style={{resize:"vertical", fontFamily:"monospace", fontSize:"0.82rem"}} />
               </div>
 
@@ -334,6 +446,9 @@ export default function AdminDashboardPage({ navigate }) {
                 <button className="btn btn-sm btn-outline" onClick={e => {e.stopPropagation(); navigate("group", g.id);}}>
                   Manage →
                 </button>
+                <button className="btn btn-sm btn-danger" title="Delete this group permanently" onClick={e => { e.stopPropagation(); setDeleteTarget(g); setDeleteConfirm(""); }}>
+                  🗑️ Delete
+                </button>
               </div>
             </div>
           ))}
@@ -407,7 +522,7 @@ export default function AdminDashboardPage({ navigate }) {
                 <label>Reply-To Email</label>
                 <input type="email" value={orgEmailForm.senderEmail}
                   onChange={e=>setOrgEmailForm(f=>({...f,senderEmail:e.target.value}))}
-                  placeholder="admin@splitpass.com"/>
+                  placeholder="admin@splitsubs.com"/>
               </div>
               <div className="form-group">
                 <label>Subject</label>
@@ -420,7 +535,7 @@ export default function AdminDashboardPage({ navigate }) {
               <label>Message</label>
               <textarea rows={8} value={orgEmailForm.body}
                 onChange={e=>setOrgEmailForm(f=>({...f,body:e.target.value}))}
-                placeholder={"Hi {name},\n\nWrite your message to all organizers here...\n\n— SplitPass Admin"}
+                placeholder={"Hi {name},\n\nWrite your message to all organizers here...\n\n— SplitSubs Admin"}
                 style={{resize:"vertical",fontFamily:"monospace",fontSize:"0.82rem"}}/>
             </div>
             {orgEmailMsg && (
@@ -497,7 +612,39 @@ export default function AdminDashboardPage({ navigate }) {
         </div>
       )}
 
-      {/* ── Payouts tab ── */}
+            {/* Delete group modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && !deleteBusy && setDeleteTarget(null)}>
+          <div className="modal">
+            <h3 style={{color:"var(--error)"}}>🗑️ Delete Group Permanently</h3>
+            <p style={{color:"var(--muted)",fontSize:"0.84rem",marginBottom:12}}>You are about to delete:</p>
+            <div style={{background:"rgba(255,106,142,0.08)",border:"1px solid rgba(255,106,142,0.25)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+              <div style={{fontWeight:600,fontSize:"0.95rem"}}>{deleteTarget.serviceIcon} {deleteTarget.serviceName} — {deleteTarget.planName}</div>
+              <div style={{fontSize:"0.76rem",color:"var(--muted)",marginTop:4}}>Organizer: {deleteTarget.organizerName} · {deleteTarget.memberCount || 0}/{deleteTarget.maxSlots} members · status <code>{deleteTarget.status}</code></div>
+            </div>
+            <div style={{background:"rgba(255,180,0,0.08)",border:"1px solid rgba(255,180,0,0.25)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:"0.82rem",lineHeight:1.55}}>
+              <strong>⚠️ This is irreversible.</strong> The following will be wiped:
+              <ul style={{margin:"8px 0 0 18px",padding:0}}>
+                <li>The group itself</li><li>All members and their roles</li><li>All credential vault slots</li>
+                <li>All payments and PesaPal orders for this group</li><li>All platform earnings for this group</li><li>All emails sent to this group</li>
+              </ul>
+              <div style={{marginTop:8,color:"var(--muted)"}}>Members will <strong>not</strong> be auto-refunded.</div>
+            </div>
+            <div className="form-group">
+              <label>Type <strong>DELETE</strong> to confirm</label>
+              <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="DELETE" autoFocus disabled={deleteBusy}/>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-outline" disabled={deleteBusy} onClick={() => { setDeleteTarget(null); setDeleteConfirm(""); }}>Cancel</button>
+              <button className="btn btn-danger" disabled={deleteBusy || deleteConfirm.trim().toUpperCase() !== "DELETE"} onClick={handleDeleteGroup}>
+                {deleteBusy ? <span className="spinner"/> : "Permanently delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+{/* ── Payouts tab ── */}
       {tab === "payouts" && (
         <div>
           {/* Sunday reminder banner */}

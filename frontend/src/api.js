@@ -1,4 +1,4 @@
-const BASE = "http://localhost:3001/api";
+const BASE = "/api";
 
 // ── Session storage for tokens ────────────────────────────────────────────
 function getStored(key) { try { return sessionStorage.getItem(key); } catch { return null; } }
@@ -29,6 +29,7 @@ export const session = {
   isModerator(){ return _user?.role === "moderator"; },
   isCustomer() { return _user?.role === "customer"; },
   onChange(fn) { _listeners.push(fn); return () => { _listeners = _listeners.filter(l => l !== fn); }; },
+
 };
 
 // ── Core fetch ────────────────────────────────────────────────────────────
@@ -52,6 +53,10 @@ async function req(path, opts = {}) {
 export const api = {
   // Auth
   signup:       (body)       => req("/auth/signup",        { method: "POST", body }),
+  verifySignup:         (email, code) => req("/auth/verify-signup", { method: "POST", body: { email, code } }),
+  forgotPassword:       (email) => req("/auth/forgot-password", { method: "POST", body: { email } }),
+  resetPassword:        (email, code, newPassword) => req("/auth/reset-password", { method: "POST", body: { email, code, newPassword } }),
+  resendOtp:            (email, purpose) => req("/auth/resend-otp", { method: "POST", body: { email, purpose } }),
   login:        (body)       => req("/auth/login",         { method: "POST", body }),
   me:           ()           => req("/auth/me"),
   refreshToken: ()           => req("/auth/refresh",       { method: "POST" }),
@@ -65,6 +70,10 @@ export const api = {
   approveUser:  (id)         => req(`/admin/users/${id}/approve`, { method: "PATCH" }),
   rejectUser:   (id, reason) => req(`/admin/users/${id}/reject`,  { method: "PATCH", body: { reason } }),
   suspendUser:  (id)         => req(`/admin/users/${id}/suspend`, { method: "PATCH" }),
+  getPendingPayments:   ()  => req(`/admin/pending-payments`),
+  remindPendingPayment: (id) => req(`/admin/pending-payments/${id}/remind`, { method: "POST" }),
+  unsuspendUser:        (id) => req(`/admin/users/${id}/unsuspend`, { method: "PATCH" }),
+  promoteToModerator:   (id) => req(`/admin/users/${id}/promote-to-moderator`, { method: "PATCH" }),
 
   // Services & durations
   getServices:  ()           => req("/services"),
@@ -89,10 +98,13 @@ export const api = {
   getNewsletterHistory: ()       => req("/admin/newsletter/history"),
   sendNewsletter:       (body)   => req("/admin/newsletter/send",   { method: "POST", body }),
   footerSubscribe:      (email)  => req("/newsletter/subscribe",    { method: "POST", body: { email } }),
+  unsubscribe:        (email) => req(`/unsubscribe?email=${encodeURIComponent(email)}`),
+  resubscribe:        (email) => req("/resubscribe", { method: "POST", body: { email } }),
 
   // Group emails (organizer / superadmin → paying members)
   getGroupEmails:       (gid)    => req(`/groups/${gid}/emails`),
   sendGroupEmail:       (gid, b) => req(`/groups/${gid}/emails/send`,           { method: "POST", body: b }),
+  sendGroupMemberEmail: (gid, b) => req(`/groups/${gid}/emails/send-to-member`, { method: "POST", body: b }),
   sendExpiryReminder:   (gid, b) => req(`/groups/${gid}/emails/expiry-reminder`,{ method: "POST", body: b }),
   getGroupMembersAdmin: (gid)    => req(`/groups/${gid}/members`),
   runExpiryScheduler:   ()       => req("/admin/expiry-scheduler",              { method: "POST" }),
@@ -108,6 +120,7 @@ export const api = {
   // Admin — group review
   getPendingGroups:  ()          => req("/admin/groups/pending"),
   reviewGroup:       (id, body)  => req(`/admin/groups/${id}/review`, { method: "PATCH", body }),
+  deleteGroup:       (id)        => req(`/admin/groups/${id}`, { method: "DELETE" }),
 
   // Admin — email organizers
   emailOrganizers:        (body) => req("/admin/email-organizers",         { method: "POST", body }),
@@ -124,4 +137,25 @@ export const api = {
   getCredentials:    (gid)  => req(`/groups/${gid}/credentials`),
   saveCredentials:   (gid, body) => req(`/groups/${gid}/credentials`, { method: "PUT", body }),
   deleteCredentials: (gid)  => req(`/groups/${gid}/credentials`, { method: "DELETE" }),
+  // ── Blog ─────────────────────────────────────────────────
+  getBlogPosts:        ()      => req("/blog"),
+  getMyBlogPosts:      ()      => req("/blog/my"),
+  publishBlogPost:     (id)    => req(`/blog/${id}`, { method: "PUT", body: { status: "published" } }),
+  unpublishBlogPost:   (id)    => req(`/blog/${id}`, { method: "PUT", body: { status: "draft" } }),
+  getBlogPost:         (slug)  => req(`/blog/${slug}`),
+  createBlogPost:      (data)  => req("/blog", { method: "POST", body: data }),
+  updateBlogPost:      (id, b) => req(`/blog/${id}`, { method: "PUT", body: b }),
+  deleteBlogPost:      (id)    => req(`/blog/${id}`, { method: "DELETE" }),
+  getPendingBlogPosts: ()      => req("/admin/blog/pending"),
+  reviewBlogPost:      (id, decision, note) => req(`/admin/blog/${id}/review`, { method: "PATCH", body: { decision, note } }),
+  // ── Support chat + presence ──────────────────────────────
+  heartbeat:               ()    => req("/presence/heartbeat", { method: "POST", body: {} }).catch(()=>{}),
+  adminHeartbeat:          ()    => req("/admin/presence/heartbeat", { method: "POST", body: {} }).catch(()=>{}),
+  getSuperadminPresence:   ()    => req("/presence/superadmin"),
+  getMySupportThread:      ()    => req("/support/me"),
+  getMyUnreadCount:        ()    => req("/support/me/unread"),
+  supportSendMessage:      (body)=> req("/support/me/message", { method: "POST", body: { body } }),
+  adminGetSupportThreads:  ()    => req("/admin/support/threads"),
+  adminGetSupportThread:   (id)  => req(`/admin/support/threads/${id}`),
+  adminReplySupport:       (id, body) => req(`/admin/support/threads/${id}/reply`, { method: "POST", body: { body } }),
 };

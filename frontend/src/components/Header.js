@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { session } from "../api";
+import SupportChatBubble from "./SupportChatBubble";
+import SupportAdminBubble from "./SupportAdminBubble";
 import "./Header.css";
 
 export default function Header({ page, navigate, user }) {
@@ -17,12 +19,18 @@ export default function Header({ page, navigate, user }) {
       <div className="header-inner">
         <button className="logo" onClick={() => navigate("home")}>
           <span className="logo-icon">⚡</span>
-          <span>SplitPass</span>
+          <span>SplitSubs</span>
         </button>
 
         <nav className="nav">
           <button className={`nav-link ${page==="home"?"active":""}`} onClick={() => navigate("home")}>Home</button>
           <button className={`nav-link ${page==="groups"?"active":""}`} onClick={() => navigate("groups")}>Browse Groups</button>
+          <SupportChatBubble />
+          <SupportAdminBubble />
+          <a href="/blog" className="nav-link">📝 Blog</a>
+          {(session.isSuperAdmin() || session.isModerator()) && (
+            <button className={`nav-link ${page==="blog-editor"?"active":""}`} onClick={() => navigate("blog-editor")}>✏️ Editor</button>
+          )}
 
           {/* Role-specific links */}
           {role === "moderator" && (
@@ -63,7 +71,7 @@ export default function Header({ page, navigate, user }) {
               )}
             </div>
           )}
-        </nav>
+                </nav>
       </div>
     </header>
   );

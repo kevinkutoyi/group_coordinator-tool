@@ -48,7 +48,8 @@ export default function MyGroupsPage({ navigate }) {
             // Only look for a paying membership (not organizer role)
             const myMembership  = g.members?.find(m => m.userId === uid && m.role !== "organizer");
             const payingMembers = g.members?.filter(m => m.role !== "organizer") || [];
-            const filled        = payingMembers.length;
+            // Only CONFIRMED payments occupy slots
+            const filled        = payingMembers.filter(m => m.paymentStatus === "confirmed").length;
 
             return (
               <div key={g.id} className="card card-clickable" onClick={() => navigate("group", g.id)}>

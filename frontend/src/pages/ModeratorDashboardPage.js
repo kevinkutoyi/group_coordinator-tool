@@ -119,7 +119,7 @@ export default function ModeratorDashboardPage({ navigate }) {
             <span>KES {(summary.totalCollected ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row mod-earn-split">
-            <span>Platform fee ({feePercent}% — kept by SplitPass)</span>
+            <span>Platform fee ({feePercent}% — kept by SplitSubs)</span>
             <span style={{ color:"var(--muted)" }}>
               − KES {((summary.totalCollected ?? 0) - (summary.totalOwed ?? 0)).toFixed(2)}
             </span>

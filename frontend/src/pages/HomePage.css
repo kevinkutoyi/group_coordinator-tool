@@ -128,3 +128,301 @@
 .rc-icon { font-size: 2.5rem; margin-bottom: 12px; }
 .rc-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
 .rc-card p { font-size: 0.84rem; color: var(--muted); margin-bottom: 20px; line-height: 1.55; }
+
+/* ── Trust + social proof bars ─────────────────────────────────── */
+.trust-section {
+  max-width: 1160px;
+  margin: 28px auto 32px;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trust-row {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(20,20,30,0.7), rgba(15,15,26,0.7));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 18px 22px;
+  flex-wrap: wrap;
+}
+
+.trust-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex: 1;
+  min-width: 140px;
+  padding: 6px 4px;
+}
+
+.trust-headline {
+  align-items: flex-start;
+  text-align: left;
+  flex: 1.6;
+  min-width: 220px;
+}
+.trust-headline h3 {
+  font-size: 0.96rem; font-weight: 700;
+  color: #fff; margin: 0 0 4px;
+}
+.trust-headline p {
+  font-size: 0.8rem; color: var(--muted);
+  margin: 0; line-height: 1.5;
+}
+
+.trust-divider {
+  width: 1px; min-height: 50px;
+  background: rgba(255,255,255,0.08);
+  flex: 0 0 1px;
+}
+@media (max-width: 800px) {
+  .trust-divider { display: none; }
+}
+
+.trust-badge {
+  align-items: center;
+}
+.trust-badge-label {
+  font-size: 0.95rem; font-weight: 700; color: #fff;
+  letter-spacing: 0.01em;
+}
+.trust-badge-card  { color: #7c6aff; }
+.trust-badge-mpesa { color: #4ade80; }
+.trust-badge-icon  { font-size: 1.3rem; margin-bottom: 2px; }
+.trust-badge-sub {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 4px;
+}
+
+/* Highlight / CTA boxes (Our Guarantee + Groups fill fast) */
+.trust-highlight {
+  background: linear-gradient(135deg, rgba(124,106,255,0.18), rgba(124,106,255,0.04));
+  border: 1px solid rgba(124,106,255,0.32);
+  border-radius: 14px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  flex: 1.7;
+  min-width: 240px;
+  transition: transform 0.18s, border-color 0.18s, background 0.18s;
+}
+.trust-highlight:hover {
+  transform: translateY(-2px);
+  border-color: rgba(124,106,255,0.55);
+  background: linear-gradient(135deg, rgba(124,106,255,0.28), rgba(124,106,255,0.08));
+}
+.trust-highlight-icon { font-size: 1.6rem; flex-shrink: 0; }
+.trust-highlight h4 {
+  margin: 0 0 3px;
+  font-size: 0.95rem; font-weight: 700;
+  color: var(--accent);
+}
+.trust-highlight p {
+  margin: 0;
+  font-size: 0.78rem; color: var(--muted);
+  line-height: 1.45;
+}
+.trust-urgent {
+  background: linear-gradient(135deg, rgba(255,213,106,0.18), rgba(255,213,106,0.04));
+  border-color: rgba(255,213,106,0.3);
+}
+.trust-urgent:hover {
+  border-color: rgba(255,213,106,0.55);
+  background: linear-gradient(135deg, rgba(255,213,106,0.28), rgba(255,213,106,0.08));
+}
+.trust-urgent h4 { color: #ffd56a; }
+
+/* Avatars */
+.trust-avatars { flex: 1.6; min-width: 220px; align-items: center; }
+.ts-avatars {
+  display: flex; align-items: center;
+  margin-bottom: 8px;
+}
+.ts-av {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.85rem; color: #fff;
+  border: 2px solid #14141e;
+  margin-left: -8px;
+  letter-spacing: 0;
+}
+.ts-av:first-child { margin-left: 0; }
+.ts-av-1 { background: linear-gradient(135deg, #ff8c42, #ff6a8e); }
+.ts-av-2 { background: linear-gradient(135deg, #4dabf7, #7c6aff); }
+.ts-av-3 { background: linear-gradient(135deg, #845ef7, #5c7cfa); }
+.ts-av-4 { background: linear-gradient(135deg, #f06595, #cc5de8); }
+.ts-av-5 { background: linear-gradient(135deg, #f06595, #fa5252); }
+.ts-av-more {
+  background: var(--bg3);
+  color: var(--accent);
+  font-size: 0.72rem;
+  border-color: rgba(124,106,255,0.3);
+}
+.trust-avatars p {
+  font-size: 0.82rem; color: var(--muted);
+  margin: 0; line-height: 1.45;
+  max-width: 260px;
+  text-align: center;
+}
+
+/* Rating */
+.trust-rating .ts-stars {
+  color: #ffd56a;
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+.trust-rating p {
+  font-size: 0.82rem; color: var(--muted);
+  margin: 0; line-height: 1.45;
+}
+.trust-rating strong { color: #fff; }
+
+/* Mobile stacking */
+@media (max-width: 800px) {
+  .trust-row { flex-direction: column; padding: 16px 18px; gap: 16px; }
+  .trust-block { min-width: 100%; padding: 6px 0; }
+  .trust-headline,
+  .trust-highlight { align-items: center; text-align: center; }
+  .trust-highlight { flex-direction: column; gap: 6px; }
+}
+@media (max-width: 480px) {
+  .trust-section { padding: 0 12px; margin: 22px auto 24px; }
+  .trust-headline h3 { font-size: 0.92rem; }
+  .trust-badge-label { font-size: 0.88rem; }
+  .ts-av { width: 32px; height: 32px; font-size: 0.78rem; }
+}
+
+/* ── Animated trust ribbon (below nav) ─────────────────────────── */
+.trust-ribbon {
+  position: relative;
+  width: 100%;
+  background: linear-gradient(90deg,
+    rgba(124,106,255,0.08) 0%,
+    rgba(255,106,142,0.08) 50%,
+    rgba(124,106,255,0.08) 100%);
+  border-top:    1px solid rgba(124,106,255,0.18);
+  border-bottom: 1px solid rgba(124,106,255,0.18);
+  padding: 11px 0;
+  overflow: hidden;
+  margin-bottom: 24px;
+  /* fade edges so items appear/disappear smoothly */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+}
+
+.trust-ribbon::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255,255,255,0.04) 30%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.04) 70%,
+    transparent);
+  animation: ribbon-shimmer 6s linear infinite;
+  pointer-events: none;
+}
+@keyframes ribbon-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+.trust-ribbon-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  animation: trust-ribbon-scroll 22s linear infinite;
+  will-change: transform;
+}
+.trust-ribbon:hover .trust-ribbon-track {
+  animation-play-state: paused;
+}
+
+@keyframes trust-ribbon-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.trust-ribbon-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 22px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.trust-ribbon-icon {
+  font-size: 1.1rem;
+  display: inline-block;
+  animation: ribbon-icon-bob 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(124,106,255,0.4));
+}
+.trust-ribbon-item:nth-child(2n) .trust-ribbon-icon  { animation-delay: 0.3s; }
+.trust-ribbon-item:nth-child(3n) .trust-ribbon-icon  { animation-delay: 0.6s; }
+.trust-ribbon-item:nth-child(4n) .trust-ribbon-icon  { animation-delay: 0.9s; }
+.trust-ribbon-item:nth-child(5n) .trust-ribbon-icon  { animation-delay: 1.2s; }
+
+@keyframes ribbon-icon-bob {
+  0%, 100% { transform: translateY(0)   scale(1);    }
+  50%      { transform: translateY(-2px) scale(1.12); }
+}
+
+.trust-ribbon-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  background: linear-gradient(90deg, #fff 0%, #aaaacc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.trust-ribbon-dot {
+  font-size: 1rem;
+  color: var(--accent);
+  margin-left: 4px;
+  animation: ribbon-dot-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ribbon-dot-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50%      { opacity: 1;    transform: scale(1.2); }
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+  .trust-ribbon { padding: 9px 0; margin-bottom: 18px; }
+  .trust-ribbon-item { padding: 0 16px; gap: 7px; }
+  .trust-ribbon-icon { font-size: 0.95rem; }
+  .trust-ribbon-text { font-size: 0.78rem; }
+  .trust-ribbon-track { animation-duration: 18s; }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the gentle scroll — it's safe — but slow it down and drop bouncy effects */
+  .trust-ribbon-track { animation-duration: 60s; }
+  .trust-ribbon-icon  { animation: none; filter: none; }
+  .trust-ribbon-dot   { animation: none; opacity: 0.6; }
+  .trust-ribbon::before { animation: none; }
+}

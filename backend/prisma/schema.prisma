@@ -284,3 +284,84 @@ model PlatformSettings {
 
   @@map("platform_settings")
 }
+
+model EmailOtp {
+  id        String   @id @default(uuid())
+  email     String
+  codeHash  String
+  purpose   String   // "signup" | "reset"
+  payload   Json?
+  attempts  Int      @default(0)
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([email, purpose])
+  @@map("email_otps")
+}
+
+model BlogPost {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  title           String
+  metaTitle       String?
+  metaDescription String
+  excerpt         String?
+  content         String
+  coverImage      String?
+  coverImageAlt   String?
+  category        String   @default("general")
+  tags            String[] @default([])
+  authorId        String
+  authorName      String
+  authorBio       String?
+  status          String   @default("draft")        // draft | published | archived
+  reviewStatus    String   @default("approved")     // approved | pending | rejected
+  rejectionNote   String?
+  canonicalUrl    String?
+  ogImage         String?
+  noIndex         Boolean  @default(false)
+  viewCount       Int      @default(0)
+  readingMinutes  Int      @default(3)
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("blog_posts")
+  @@index([status, publishedAt])
+}
+
+model SupportThread {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  userName       String
+  userEmail      String
+  userRole       String
+  lastMessage    String?
+  lastSenderRole String?
+  unreadByUser   Int      @default(0)
+  unreadByAdmin  Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+  messages       SupportMessage[]
+  @@map("support_threads")
+}
+
+model SupportMessage {
+  id         String   @id @default(uuid())
+  threadId   String
+  thread     SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId   String
+  senderRole String
+  body       String
+  createdAt  DateTime @default(now())
+  @@index([threadId])
+  @@map("support_messages")
+}
+
+model UserPresence {
+  userId   String   @id
+  online   Boolean  @default(true)
+  lastSeen DateTime @default(now())
+  @@map("user_presence")
+}

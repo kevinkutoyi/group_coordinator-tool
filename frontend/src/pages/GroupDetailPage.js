@@ -58,14 +58,17 @@ export default function GroupDetailPage({ id, navigate, user }) {
   async function handleJoin(e) {
     e.preventDefault();
     if (!session.isLoggedIn()) { navigate("login"); return; }
-    if (!session.isCustomer()) {
-      setMsg({ type: "err", text: "Only customers can join groups. Moderators organise them." });
+    if (!session.isLoggedIn()) {
+      navigate("login"); return;
+    }
+    if (session.isSuperAdmin()) {
+      setMsg({ type: "err", text: "Superadmin cannot join groups as a paying member." });
       return;
     }
     setBusy(true);
     try {
       await api.joinGroup(id, {});
-      setMsg({ type: "ok", text: `Joined! Now pay your ${groupMonths}-month share via PesaPal to confirm your slot.` });
+      setMsg({ type: "ok", text: `Joined! Pay your ${groupMonths}-month share via PesaPal — the 🔑 Credential Vault unlocks the moment your payment clears.` });
       setShowJoin(false);
       reload();
     } catch (err) { setMsg({ type: "err", text: err.message }); }
@@ -92,8 +95,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
   // ── Credential vault handlers ─────────────────────────────────────────
   function startEdit() {
     const slots = creds?.exists && creds.slots?.length > 0
-      ? creds.slots.map(s => ({ label: s.label, username: s.username, password: s.password, note: s.note }))
-      : [{ label: "", username: "", password: "", note: "" }];
+      ? creds.slots.map(s => ({ label: s.label || "", inviteLink: s.inviteLink || "", address: s.address || "", note: s.note || "" }))
+      : [{ label: "", inviteLink: "", address: "", note: "" }];
     setEditSlots(slots);
     setEditNote(creds?.generalNote || "");
     setEditing(true);
@@ -101,8 +104,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
   }
 
   async function handleSave() {
-    const filled = editSlots.filter(s => s.username || s.password);
-    if (!filled.length) { setSaveMsg({ type: "err", text: "Add at least one slot with credentials." }); return; }
+    const filled = editSlots.filter(s => s.inviteLink || s.address || s.note);
+    if (!filled.length) { setSaveMsg({ type: "err", text: "Add at least one slot with an invite link, address, or note." }); return; }
     setSaving(true); setSaveMsg(null);
     try {
       await api.saveCredentials(id, { slots: editSlots, generalNote: editNote });
@@ -129,7 +132,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const canManage     = isSuperAdmin || isOrganizer || session.isModerator();
 
   const payingMembers = group.members?.filter(m => m.role !== "organizer") || [];
-  const filled        = payingMembers.length;
+  // Only CONFIRMED payments occupy slots. Pending members are listed separately below.
+  const filled        = payingMembers.filter(m => m.paymentStatus === "confirmed").length;
   const pct           = Math.round((filled / group.maxSlots) * 100);
   const spotsLeft     = group.maxSlots - filled;
   const myMember      = payingMembers.find(m => m.userId === currentUserId);
@@ -179,7 +183,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {group.status === "open" && !myMember && session.isCustomer() && !isOrganizer && (
+            {group.status === "open" && !myMember && !isOrganizer && (session.isCustomer() || session.isModerator()) && (
               <button className="btn btn-primary" onClick={() => setShowJoin(true)}>Join Group</button>
             )}
             {group.status === "open" && !session.isLoggedIn() && (
@@ -239,7 +243,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
             onLogin={() => navigate("login")}
             groupStatus={group.status}
             isLoggedIn={session.isLoggedIn()}
-            isCustomer={session.isCustomer()}
+            isCustomer={session.isCustomer() || session.isModerator()}
             isMyMember={!!myMember}
             isOrganizer={isOrganizer}
             canManage={canManage}
@@ -485,8 +489,6 @@ function CredentialVaultInline({
 }) {
   const [copied, setCopied] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [reveals, setReveals] = useState({});
-
   function copy(key, text) {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(c => ({ ...c, [key]: true }));
@@ -517,13 +519,13 @@ function CredentialVaultInline({
             <div className="cvt-preview-slot-label"><span className="cvt-slot-dot" />{serviceName} Account</div>
             <div className="cvt-fake-fields">
               <div className="cvt-fake-field">
-                <span className="cvt-fake-label">EMAIL</span>
-                <span className="cvt-fake-value cvt-blur">shared.account@example.com</span>
+                <span className="cvt-fake-label">INVITE LINK</span>
+                <span className="cvt-fake-value cvt-blur">https://invite.example.com/abc123</span>
                 <span className="cvt-fake-copy">⎘</span>
               </div>
               <div className="cvt-fake-field">
-                <span className="cvt-fake-label">PASSWORD</span>
-                <span className="cvt-fake-value cvt-blur cvt-mono">••••••••••••••</span>
+                <span className="cvt-fake-label">ADDRESS</span>
+                <span className="cvt-fake-value cvt-blur">shared.account@example.com</span>
                 <span className="cvt-fake-copy">⎘</span>
               </div>
             </div>
@@ -595,18 +597,19 @@ function CredentialVaultInline({
                 <input value={slot.label} onChange={e => onSetEditSlots(s => s.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder={`Slot ${i + 1}`} />
               </div>
             </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Email / Username</label>
-                <input value={slot.username} onChange={e => onSetEditSlots(s => s.map((x, j) => j === i ? { ...x, username: e.target.value } : x))} placeholder="shared@email.com" autoComplete="off" />
-              </div>
-              <div className="form-group">
-                <label>Password</label>
-                <input value={slot.password} onChange={e => onSetEditSlots(s => s.map((x, j) => j === i ? { ...x, password: e.target.value } : x))} placeholder="password here" type="text" autoComplete="new-password" />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Extra Note (PIN, profile, invite link, etc.)</label>
+
+<div className="form-group">
+  <label>🔗 Invite Link <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>— customer clicks Accept Invite</span></label>
+  <input value={slot.inviteLink || ""} onChange={e => onSetEditSlots(s => s.map((x, j) => j === i ? { ...x, inviteLink: e.target.value } : x))} placeholder="https://www.spotify.com/family/invite/abc123" autoComplete="off" spellCheck={false} />
+</div>
+
+<div className="form-group">
+  <label>📍 Account Address <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>— login URL or shared email</span></label>
+  <input value={slot.address || ""} onChange={e => onSetEditSlots(s => s.map((x, j) => j === i ? { ...x, address: e.target.value } : x))} placeholder="e.g. netflix.com/login or shared@email.com" autoComplete="off" spellCheck={false} />
+</div>
+
+<div className="form-group">
+              <label>📝 Additional Notes <span style={{color:"var(--muted)",fontWeight:400,fontSize:"0.75rem"}}>(optional)</span></label>
               <input value={slot.note} onChange={e => onSetEditSlots(s => s.map((x, j) => j === i ? { ...x, note: e.target.value } : x))} placeholder="e.g. Use Profile 2 · PIN: 1234" />
             </div>
           </div>
@@ -617,7 +620,7 @@ function CredentialVaultInline({
       )}
       <div className="form-group" style={{ marginTop: 16 }}>
         <label>General Note (visible to all members)</label>
-        <textarea rows={3} value={editNote} onChange={e => onSetEditNote(e.target.value)} placeholder="e.g. Use incognito mode. Don't change the password." style={{ resize: "vertical" }} />
+        <textarea rows={3} value={editNote} onChange={e => onSetEditNote(e.target.value)} placeholder="e.g. Accept the invite within 48h. Use Profile 2." style={{ resize: "vertical" }} />
       </div>
       {saveMsg && (
         <div className={`cv-save-msg ${saveMsg.type === "ok" ? "cv-msg-ok" : "cv-msg-err"}`} onClick={onSaveMsgClear}>
@@ -663,41 +666,35 @@ function CredentialVaultInline({
             <div className="cv-slot-header">
               <span className="cv-slot-badge">#{slot.slotNumber || i + 1}</span>
               <span className="cv-slot-label">{slot.label}</span>
-              <button className="cv-copy-all-btn" onClick={() => copy(`slot-all-${i}`, `${slot.label}\nUsername: ${slot.username}\nPassword: ${slot.password}${slot.note ? `\nNote: ${slot.note}` : ""}`)}>
+              <button className="cv-copy-all-btn" onClick={() => copy(`slot-all-${i}`, [slot.label, slot.inviteLink && `Invite link: ${slot.inviteLink}`, slot.address && `Address: ${slot.address}`, slot.note && `Note: ${slot.note}`, ...(Array.isArray(slot.extras) ? slot.extras.filter(e => e && (e.label || e.value)).map(e => `${e.label || "Extra"}: ${e.value || ""}`) : [])].filter(Boolean).join("\n"))}>
                 {copied[`slot-all-${i}`] ? "✓ Copied!" : "⎘ Copy All"}
               </button>
             </div>
-            {slot.username && (
+            {slot.inviteLink && (
               <div className="cv-field">
-                <div className="cv-field-label">Email / Username</div>
+                <div className="cv-field-label">🔗 Invite Link</div>
                 <div className="cv-field-row">
-                  <span className="cv-field-value">{slot.username}</span>
+                  <a href={slot.inviteLink} target="_blank" rel="noopener noreferrer" className="cv-field-value" style={{ color:"var(--accent)", textDecoration:"none", wordBreak:"break-all" }}>{slot.inviteLink}</a>
                   <div className="cv-field-actions">
-                    <button className={`cv-copy-btn ${copied[`u-${i}`] ? "copied" : ""}`} onClick={() => copy(`u-${i}`, slot.username)}>
-                      {copied[`u-${i}`] ? <><span className="cv-copy-check">✓</span> Copied!</> : <><span className="cv-copy-icon">⎘</span> Copy</>}
-                    </button>
+                    <a href={slot.inviteLink} target="_blank" rel="noopener noreferrer" className="cv-copy-btn" style={{ background:"linear-gradient(90deg, var(--accent), var(--accent2))", color:"#fff", fontWeight:600 }}>✅ Accept Invite</a>
+                    <button className={`cv-copy-btn ${copied[`inv-${i}`] ? "copied" : ""}`} onClick={() => copy(`inv-${i}`, slot.inviteLink)}>{copied[`inv-${i}`] ? <><span className="cv-copy-check">✓</span> Copied!</> : <><span className="cv-copy-icon">⎘</span> Copy</>}</button>
                   </div>
                 </div>
               </div>
             )}
-            {slot.password && (
+
+            {slot.address && (
               <div className="cv-field">
-                <div className="cv-field-label">Password</div>
+                <div className="cv-field-label">📍 Account Address</div>
                 <div className="cv-field-row">
-                  <span className={`cv-field-value ${!reveals[i] ? "cv-masked" : ""}`}>
-                    {!reveals[i] ? "•".repeat(Math.min(slot.password.length, 16)) : slot.password}
-                  </span>
+                  <span className="cv-field-value" style={{ wordBreak:"break-all" }}>{slot.address}</span>
                   <div className="cv-field-actions">
-                    <button className="cv-icon-btn" onClick={() => setReveals(r => ({ ...r, [i]: !r[i] }))}>
-                      {reveals[i] ? "🙈" : "👁️"}
-                    </button>
-                    <button className={`cv-copy-btn ${copied[`p-${i}`] ? "copied" : ""}`} onClick={() => copy(`p-${i}`, slot.password)}>
-                      {copied[`p-${i}`] ? <><span className="cv-copy-check">✓</span> Copied!</> : <><span className="cv-copy-icon">⎘</span> Copy</>}
-                    </button>
+                    <button className={`cv-copy-btn ${copied[`addr-${i}`] ? "copied" : ""}`} onClick={() => copy(`addr-${i}`, slot.address)}>{copied[`addr-${i}`] ? <><span className="cv-copy-check">✓</span> Copied!</> : <><span className="cv-copy-icon">⎘</span> Copy</>}</button>
                   </div>
                 </div>
               </div>
             )}
+
             {slot.note && (
               <div className="cv-field">
                 <div className="cv-field-label">Note</div>

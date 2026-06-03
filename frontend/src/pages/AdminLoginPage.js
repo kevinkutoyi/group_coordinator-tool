@@ -23,7 +23,7 @@ export default function AdminLoginPage({ navigate }) {
     <div className="auth-outer fade-in">
       <div className="auth-glow" />
       <div className="auth-card">
-        <button className="logo-mark" onClick={() => navigate("home")}>⚡ SplitPass</button>
+        <button className="logo-mark" onClick={() => navigate("home")}>⚡ SplitSubs</button>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:"2.5rem",marginBottom:8}}>🛡️</div>
           <h1 className="auth-title" style={{marginBottom:4}}>Super Admin Login</h1>

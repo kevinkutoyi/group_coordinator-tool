@@ -286,3 +286,83 @@
 .status-open   { background: rgba(74,222,128,0.12);  color: var(--success); border: 1px solid rgba(74,222,128,0.2); }
 .status-full   { background: rgba(251,191,36,0.12);  color: var(--warning); border: 1px solid rgba(251,191,36,0.2); }
 .status-closed { background: rgba(100,100,120,0.12); color: var(--muted);   border: 1px solid var(--border); }
+
+/* ── "Just joined" social-proof badge ──────────────────────────── */
+.gc-recent-join {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: linear-gradient(90deg, rgba(74,222,128,0.10), rgba(74,222,128,0.04));
+  border: 1px solid rgba(74,222,128,0.22);
+  border-radius: 10px;
+  padding: 7px 11px;
+  margin: 10px 0 6px;
+  font-size: 0.76rem;
+  color: rgba(74,222,128,0.95);
+  position: relative;
+  overflow: hidden;
+}
+
+.gc-recent-join::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(74,222,128,0.10), transparent);
+  transform: translateX(-100%);
+  animation: gc-rj-shimmer 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes gc-rj-shimmer {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+.gc-rj-pulse {
+  width: 8px; height: 8px;
+  background: #4ade80;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: gc-rj-pulse 1.6s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(74,222,128,0.55);
+  position: relative; z-index: 1;
+}
+@keyframes gc-rj-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(74,222,128,0.6); transform: scale(1); }
+  50%      { box-shadow: 0 0 0 7px rgba(74,222,128,0);   transform: scale(1.18); }
+}
+
+.gc-rj-text {
+  position: relative; z-index: 1;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gc-rj-text strong {
+  color: #4ade80;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  margin-right: 2px;
+}
+
+
+/* Cycling phases for the "just joined" badge */
+.gc-recent-join {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.gc-rj-visible    { opacity: 1; transform: translateY(0); }
+.gc-rj-fading-out { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+.gc-rj-hidden     { opacity: 0; transform: translateY(-4px); pointer-events: none; visibility: hidden; }
+.gc-rj-fading-in  { opacity: 1; transform: translateY(0);   animation: none; }
+
+.gc-rj-fading-in .gc-rj-text strong {
+  animation: gc-rj-text-pop 0.5s ease;
+}
+@keyframes gc-rj-text-pop {
+  0%   { transform: scale(0.92); opacity: 0; }
+  60%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}

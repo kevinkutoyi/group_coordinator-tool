@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build output
+frontend/build/
+
+# Environment files (keep .env.example if you have one)
+backend/.env
+backend/.env.bak.*
+.env
+.env.*
+
+# Backup files created by your scripts
+*.bak.*
+*.bak
+.userpass-removal-backups/
+.userpass-finish-backups/
+.vault-comprehensive-*/
+.slot-confirmed-backups/
+.delete-group-backups/
+.admin-search-pending-*/
+.blog-extras-*/
+.blog-feature-*/
+.footer-social-*/
+.member-email-*/
+.mod-link-*/
+.otp-feature-*/
+.recent-join-*/
+.signup-fix-*/
+.superadmin-display-*/
+.support-chat-*/
+.trust-ribbon-*/
+.trust-section-*/
+.unsub-*/
+.user-roles-*/
+.welcome-modal-*/
+
+# Prisma generated engine binaries
+backend/node_modules/.prisma/
+backend/node_modules/@prisma/engines/*.so.node
+backend/node_modules/@prisma/engines/schema-engine-*
+backend/node_modules/prisma/*.so.node
+
+# Misc
+.DS_Store

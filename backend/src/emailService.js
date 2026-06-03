@@ -7,7 +7,7 @@
 
 const https = require("https");
 
-const FROM    = `${process.env.EMAIL_FROM_NAME || "SplitPass"} <${process.env.EMAIL_FROM_ADDRESS || "noreply@splitpass.com"}>`;
+const FROM    = `${process.env.EMAIL_FROM_NAME || "SplitSubs"} <${process.env.EMAIL_FROM_ADDRESS || "noreply@splitsubs.com"}>`;
 const ENABLED = process.env.EMAIL_ENABLED === "true";
 const API_KEY = process.env.RESEND_API_KEY || "";
 const APP_URL = process.env.FRONTEND_URL   || "http://localhost:3000";
@@ -80,8 +80,8 @@ ${preheader ? `<span style="display:none;max-height:0;overflow:hidden">${prehead
 <div class="wrap">
   <div class="logo">⚡ Split<span>Pass</span></div>
   <div class="card">${content}</div>
-  <div class="footer"><p>SplitPass · Legal group subscription sharing<br/>
-  <a href="${APP_URL}">splitpass.com</a> · You receive this because you joined a SplitPass group.</p></div>
+  <div class="footer"><p>SplitSubs · Legal group subscription sharing<br/>
+  <a href="${APP_URL}">splitsubs.com</a> · You receive this because you joined a SplitSubs group.</p></div>
 </div></body></html>`;
 }
 
@@ -104,7 +104,7 @@ async function sendWelcome({ to, memberName, groupName, serviceName, planName,
   <tr><td>Expires</td><td>${expStr}</td></tr>
   <tr><td>Coordinator</td><td>${organizerName}</td></tr>
 </table>
-<p>Head to your group page on SplitPass to access your <strong>🔑 Credential Vault</strong> — the secure place where your login details are stored.</p>
+<p>Head to your group page on SplitSubs to access your <strong>🔑 Credential Vault</strong> — the secure place where your login details are stored.</p>
 <a href="${APP_URL}" class="btn">View My Credentials →</a>
 <hr/>
 <p style="font-size:13px;color:#666688">You'll receive reminders 3 days and 2 days before your subscription expires.</p>
@@ -117,7 +117,7 @@ async function sendCredentialsUpdated({ to, memberName, groupName, serviceName }
 <h1>🔑 Your access credentials were updated</h1>
 <p>Hi <span class="hi">${memberName}</span>,</p>
 <p>The coordinator of your <span class="hi">${groupName}</span> group has updated the access credentials.</p>
-<p>Log in to SplitPass and visit your group page to view the latest credentials in the <strong>🔑 Credential Vault</strong>.</p>
+<p>Log in to SplitSubs and visit your group page to view the latest credentials in the <strong>🔑 Credential Vault</strong>.</p>
 <a href="${APP_URL}" class="btn">View Credentials →</a>
 <hr/>
 <p style="font-size:13px;color:#666688">Never share these credentials outside your group. If you suspect misuse, contact your coordinator.</p>
@@ -290,7 +290,7 @@ async function sendGroupApproved({ to, organizerName, groupName, serviceName }) 
   const html = wrap(`
 <h1>✅ Your group is live!</h1>
 <p>Hi <span class="hi">${organizerName}</span>,</p>
-<p>Great news — your group <span class="hi">${groupName}</span> has been reviewed and approved by the SplitPass admin. It is now <strong style="color:#4ade80">publicly listed</strong> and members can start joining.</p>
+<p>Great news — your group <span class="hi">${groupName}</span> has been reviewed and approved by the SplitSubs admin. It is now <strong style="color:#4ade80">publicly listed</strong> and members can start joining.</p>
 <table class="table">
   <tr><td>Group</td><td>${groupName}</td></tr>
   <tr><td>Service</td><td>${serviceName}</td></tr>
@@ -298,7 +298,7 @@ async function sendGroupApproved({ to, organizerName, groupName, serviceName }) 
 </table>
 <p>Head to your Moderator Dashboard to manage your group, set credentials, and track earnings.</p>
 <a href="${APP_URL}" class="btn">Open Dashboard →</a>
-`, `Your ${serviceName} group is now live on SplitPass`);
+`, `Your ${serviceName} group is now live on SplitSubs`);
   return sendEmail({ to, subject: `✅ Group approved — "${groupName}" is now live!`, html });
 }
 
@@ -322,8 +322,75 @@ async function sendGroupRejected({ to, organizerName, groupName, serviceName, re
   return sendEmail({ to, subject: `❌ Group not approved — "${groupName}"`, html });
 }
 
+
+async function sendPaymentReminder({ to, memberName, groupName, serviceName, memberPays, durationLabel, groupId }) {
+  const url = `${APP_URL}/group/${groupId}`;
+  const html = wrap(`
+<h1>🔔 Complete your ${serviceName} signup</h1>
+<p>Hi <span class="hi">${memberName}</span>,</p>
+<p>You joined <span class="hi">${groupName}</span> but your payment is still pending. Until you pay, your slot is held but not locked in — and another member could take it.</p>
+<p>Once you pay, your <strong>🔑 Credential Vault</strong> unlocks instantly with the invite link, account address, and any notes the organizer has set.</p>
+<table class="table">
+  <tr><td>Group</td><td>${groupName}</td></tr>
+  <tr><td>Amount</td><td class="green">${memberPays}</td></tr>
+  ${durationLabel ? `<tr><td>Duration</td><td>${durationLabel}</td></tr>` : ""}
+</table>
+<a href="${url}" class="btn">🔒 Pay via PesaPal →</a>
+<hr/>
+<p style="font-size:13px;color:#666688">Questions? Reply to this email — we're here to help.</p>
+`, `Complete your ${serviceName} signup`);
+  return sendEmail({ to, subject: `🔔 Reminder — Complete your ${serviceName} payment`, html });
+}
+
+
+async function sendSignupOtp({ to, code, name }) {
+  const html = wrap(`
+<h1>👋 Welcome to SplitSubs</h1>
+<p>Hi <span class="hi">${name || "there"}</span>,</p>
+<p>Use this 6-digit code to verify your email and finish creating your account:</p>
+<div style="text-align:center;background:#1a1a2e;border:2px solid #7c6aff;border-radius:12px;padding:24px;margin:24px 0">
+  <div style="font-size:36px;font-family:monospace;color:#7c6aff;letter-spacing:8px;font-weight:700">${code}</div>
+</div>
+<p>This code expires in <strong>10 minutes</strong>. If you didn&rsquo;t sign up, you can ignore this email.</p>
+`, `Your SplitSubs verification code: ${code}`);
+  return sendEmail({ to, subject: `🔐 Your SplitSubs verification code: ${code}`, html });
+}
+
+async function sendPasswordResetOtp({ to, code, name }) {
+  const html = wrap(`
+<h1>🔑 Reset your password</h1>
+<p>Hi <span class="hi">${name || "there"}</span>,</p>
+<p>Use this 6-digit code to reset your SplitSubs password:</p>
+<div style="text-align:center;background:#1a1a2e;border:2px solid #7c6aff;border-radius:12px;padding:24px;margin:24px 0">
+  <div style="font-size:36px;font-family:monospace;color:#7c6aff;letter-spacing:8px;font-weight:700">${code}</div>
+</div>
+<p>This code expires in <strong>15 minutes</strong>. If you didn&rsquo;t request a password reset, you can safely ignore this email — your account is secure.</p>
+`, `SplitSubs password reset code: ${code}`);
+  return sendEmail({ to, subject: `🔑 SplitSubs password reset code: ${code}`, html });
+}
+
+
+async function sendNewBlogPostNotification({ to, name, title, excerpt, url, coverImage, authorName, readingMinutes }) {
+  const heroImage = coverImage
+    ? (coverImage.startsWith("http") ? coverImage : `${APP_URL}${coverImage}`)
+    : null;
+  const html = wrap(`
+<h1>📝 New on the SplitSubs blog</h1>
+<p>Hi <span class="hi">${name}</span>,</p>
+<p>We just published a new piece you might enjoy:</p>
+${heroImage ? `<a href="${url}"><img src="${heroImage}" alt="${title}" style="width:100%;max-width:520px;border-radius:12px;margin:14px 0;display:block"/></a>` : ""}
+<h2 style="font-size:18px;color:#fff;margin:18px 0 8px">${title}</h2>
+<p style="color:#aaaacc">${excerpt || ""}</p>
+<p style="font-size:13px;color:#888">By ${authorName} · ${readingMinutes} min read</p>
+<a href="${url}" class="btn">Read the full post →</a>
+<hr/>
+<p style="font-size:13px;color:#666688">You're receiving this because you opted into SplitSubs updates. <a href="${APP_URL}/unsubscribe?email=${encodeURIComponent(to)}" style="color:#7c6aff">Unsubscribe</a> anytime.</p>
+`, `New on SplitSubs: ${title}`);
+  return sendEmail({ to, subject: `📝 ${title}`, html });
+}
+
 module.exports = {
   sendEmail, sendWelcome, sendCredentialsUpdated, sendGroupApproved, sendGroupRejected,
-  sendExpiryWarning, sendExpiryToday,
+  sendExpiryWarning, sendExpiryToday, sendNewBlogPostNotification, sendSignupOtp, sendPasswordResetOtp, sendPaymentReminder,
   sendGroupMessage, sendRenewalConfirm, runExpiryScheduler,
 };

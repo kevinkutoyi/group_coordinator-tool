@@ -47,18 +47,23 @@ export default function PaymentCallbackPage({ params, navigate }) {
               <span style={{ fontWeight:600, color }}>{val}</span>
             </div>
           ))}
-          <p style={{ marginTop:16, fontSize:"0.85rem", color:"var(--muted)", lineHeight:1.6 }}>
-            ✅ Your slot is confirmed. The organizer will share your account access details shortly.
-          </p>
+          <div style={{ marginTop:16, padding:"14px 16px", background:"rgba(124,106,255,0.08)", border:"1px solid rgba(124,106,255,0.25)", borderRadius:10 }}>
+            <p style={{ fontSize:"0.9rem", color:"var(--text)", lineHeight:1.6, margin:0, fontWeight:600 }}>
+              🔑 Your Credential Vault is now unlocked
+            </p>
+            <p style={{ fontSize:"0.82rem", color:"var(--muted)", lineHeight:1.6, margin:"6px 0 0" }}>
+              Head to your group page to see the login details the organizer has stored for you. Access is delivered inside the vault — no DMs, no emails, instant.
+            </p>
+          </div>
         </div>
       )}
 
       {status === "failed"  && <p style={{ color:"var(--muted)", marginBottom:24 }}>Payment was not completed. No charge was made. Please try again.</p>}
-      {status === "pending" && <p style={{ color:"var(--muted)", marginBottom:24 }}>Payment is still being processed — check back in a few minutes.</p>}
-      {status === "error"   && <p style={{ color:"var(--muted)", marginBottom:24 }}>Could not verify your payment. If you were charged, contact support with your order ID.</p>}
+      {status === "pending" && <p style={{ color:"var(--muted)", marginBottom:24 }}>Payment is still being processed — check back in a few minutes. Once it clears, the 🔑 Credential Vault on your group page will unlock automatically.</p>}
+      {status === "error"   && <p style={{ color:"var(--muted)", marginBottom:24 }}>We couldn't verify your payment. If you completed the M-Pesa charge, open your group page — the Credential Vault will unlock as soon as the transaction reaches us. Otherwise, please try again.</p>}
 
       <div style={{ display:"flex", gap:12, justifyContent:"center", marginTop:24, flexWrap:"wrap" }}>
-        {groupId && <button className="btn btn-primary" onClick={() => navigate("group", groupId)}>View Group</button>}
+        {groupId && <button className="btn btn-primary" onClick={() => navigate("group", groupId)}>{status === "success" ? "Open Credential Vault" : "View Group"}</button>}
         {session.isLoggedIn() && <button className="btn btn-outline" onClick={() => navigate("my-groups")}>My Groups</button>}
         <button className="btn btn-outline" onClick={() => navigate("groups")}>Browse Groups</button>
       </div>

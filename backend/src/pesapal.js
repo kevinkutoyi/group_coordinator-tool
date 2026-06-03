@@ -5,7 +5,8 @@
  *  1. getToken()             → OAuth2 bearer token (cached 4.5 min)
  *  2. registerIPN()          → Register callback URL; treats 409 (already exists) as success
  *  3. submitOrder()          → Create payment order, get redirect URL
- *  4. getTransactionStatus() → Check payment status after IPN callback
+ *  4. 
+getTransactionStatus() → Check payment status after IPN callback
  */
 
 const axios = require("axios");
@@ -169,23 +170,33 @@ async function submitOrder(opts) {
   };
 }
 
+// ── Transaction Status ────────────────────────────── 
 // ── Transaction Status ─────────────────────────────────────────────────────
 async function getTransactionStatus(orderTrackingId) {
   const token = await getToken();
 
-  const res = await axios.get(
-    `${baseUrl()}/api/Transactions/GetTransactionStatus`,
-    {
-      params:  { orderTrackingId },
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  try {
+    const res = await axios.get(
+      `${baseUrl()}/api/Transactions/GetTransactionStatus`,
+      {
+        params:  { orderTrackingId },
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      }
+    );
+
+    const e = res.data.error;
+if (e && (e.message || e.code || e.error_type)) {
+      console.error("PesaPal GetTransactionStatus error payload:", JSON.stringify(res.data, null, 2));
+      const msg = e.message || e.code || e.error_type;
+      throw new Error(`Status check failed: ${msg}`);
     }
-  );
 
-  if (res.data.error) {
-    throw new Error(`Status check failed: ${res.data.error.message}`);
+    return res.data;
+  } catch (err) {
+    if (err.response) {
+      console.error("PesaPal HTTP error:", err.response.status, JSON.stringify(err.response.data));
+    }
+    throw err;
   }
-
-  return res.data;
 }
-
 module.exports = { getToken, registerIPN, submitOrder, getTransactionStatus };

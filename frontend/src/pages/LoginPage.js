@@ -23,7 +23,7 @@ export default function LoginPage({ navigate, params }) {
     <div className="auth-outer fade-in">
       <div className="auth-glow" />
       <div className="auth-card">
-        <button className="logo-mark" onClick={() => navigate("home")}>⚡ SplitPass</button>
+        <button className="logo-mark" onClick={() => navigate("home")}>⚡ SplitSubs</button>
         <h1 className="auth-title">Welcome Back</h1>
         <p className="auth-sub">Sign in to your account to continue</p>
 
@@ -42,6 +42,10 @@ export default function LoginPage({ navigate, params }) {
           </div>
 
           {error && <div className="auth-error">⚠️ {error}</div>}
+
+          <p style={{ textAlign:"right", margin:"-8px 0 12px 0" }}>
+            <button type="button" className="link-btn" onClick={() => navigate("forgot-password")}>Forgot your password?</button>
+          </p>
 
           <button type="submit" className="btn btn-primary auth-btn" disabled={busy}>
             {busy ? <><span className="spinner"/> Signing in…</> : "Sign In →"}

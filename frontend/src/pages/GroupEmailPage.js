@@ -16,12 +16,12 @@ const EMAIL_TEMPLATES = [
   {
     label: "💳 Payment Reminder",
     subject: "Payment reminder — {service} renewal coming up",
-    body: "Hi,\n\nThis is a friendly reminder that your {service} subscription renewal is coming up soon.\n\nPlease log in to SplitPass to renew your slot before it expires.\n\nThanks,\n{organizerName}",
+    body: "Hi,\n\nThis is a friendly reminder that your {service} subscription renewal is coming up soon.\n\nPlease log in to SplitSubs to renew your slot before it expires.\n\nThanks,\n{organizerName}",
   },
   {
     label: "⚠️ Expiry Warning",
     subject: "Action needed — {service} access expiring soon",
-    body: "Hi,\n\nYour {service} group access will expire soon. To keep your subscription active, please renew your slot on SplitPass.\n\nIf you do not renew, your slot will be released to other members.\n\nThanks,\n{organizerName}",
+    body: "Hi,\n\nYour {service} group access will expire soon. To keep your subscription active, please renew your slot on SplitSubs.\n\nIf you do not renew, your slot will be released to other members.\n\nThanks,\n{organizerName}",
   },
 ];
 
@@ -35,6 +35,9 @@ export default function GroupEmailPage({ groupId, navigate }) {
   const [busy, setBusy]         = useState(false);
   const [msg, setMsg]           = useState(null);
   const [expBusy, setExpBusy]   = useState(false);
+  const [messageMember, setMessageMember] = useState(null);
+  const [memberMsg, setMemberMsg]         = useState({ subject: "", body: "" });
+  const [memberBusy, setMemberBusy]       = useState(false);
 
   const isAdmin = session.isSuperAdmin();
 
@@ -87,6 +90,20 @@ export default function GroupEmailPage({ groupId, navigate }) {
       setMsg({ type:"ok", text: res.message });
     } catch (err) { setMsg({ type:"err", text: err.message }); }
     finally { setExpBusy(false); }
+  }
+
+  async function handleSendToMember(e) {
+    e.preventDefault();
+    if (!messageMember || !memberMsg.subject.trim() || !memberMsg.body.trim()) return;
+    setMemberBusy(true);
+    try {
+      const res = await api.sendGroupMemberEmail(groupId, { memberId: messageMember.id, subject: memberMsg.subject, body: memberMsg.body });
+      setMsg({ type:"ok", text: res.message });
+      setMessageMember(null);
+      setMemberMsg({ subject: "", body: "" });
+      loadAll();
+    } catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setMemberBusy(false); }
   }
 
   if (loading) return <div style={{ textAlign:"center", padding:60 }}><span className="spinner"/></div>;
@@ -214,7 +231,7 @@ export default function GroupEmailPage({ groupId, navigate }) {
               </div>
             </div>
             <p style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:10, lineHeight:1.5 }}>
-              Each member's name is personalised. The email arrives with the SplitPass branding.
+              Each member's name is personalised. The email arrives with the SplitSubs branding.
             </p>
           </div>
         </div>
@@ -251,6 +268,14 @@ export default function GroupEmailPage({ groupId, navigate }) {
                   <div style={{ fontSize:"0.78rem", fontWeight:600, color:expColor }}>{expLabel}</div>
                   {m.expiresAt && <div style={{ fontSize:"0.68rem", color:"var(--muted)" }}>{new Date(m.expiresAt).toLocaleDateString()}</div>}
                 </div>
+                <button
+                  className="btn btn-sm btn-outline"
+                  onClick={() => { setMessageMember(m); setMemberMsg({ subject:"", body:"" }); }}
+                  title="Send a custom email to this member"
+                  style={{ marginRight:6 }}
+                >
+                  📨 Email
+                </button>
                 <button
                   className="btn btn-sm btn-outline"
                   disabled={expBusy}
@@ -329,6 +354,43 @@ export default function GroupEmailPage({ groupId, navigate }) {
               </span>
             </div>
           ))}
+        </div>
+      )}
+    {messageMember && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setMessageMember(null)}>
+          <div className="modal" style={{ maxWidth: 540 }}>
+            <h3>📨 Email {messageMember.name}</h3>
+            <p style={{ fontSize:"0.83rem", color:"var(--muted)", marginBottom:14 }}>
+              Sending to <strong>{messageMember.email}</strong>. They'll receive a personalised SplitSubs-branded message.
+            </p>
+            <form onSubmit={handleSendToMember}>
+              <div className="form-group">
+                <label>Subject</label>
+                <input
+                  required
+                  value={memberMsg.subject}
+                  onChange={e => setMemberMsg(mm => ({ ...mm, subject: e.target.value }))}
+                  placeholder="e.g. Quick update on your access"
+                />
+              </div>
+              <div className="form-group">
+                <label>Message</label>
+                <textarea
+                  required rows={7}
+                  value={memberMsg.body}
+                  onChange={e => setMemberMsg(mm => ({ ...mm, body: e.target.value }))}
+                  placeholder="Write your message…"
+                  style={{ resize:"vertical" }}
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-outline" onClick={() => setMessageMember(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={memberBusy}>
+                  {memberBusy ? <><span className="spinner"/> Sending…</> : "📨 Send"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

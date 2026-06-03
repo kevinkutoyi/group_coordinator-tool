@@ -1,0 +1,217 @@
+.wm-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 14px;
+  animation: wm-fade-in 0.32s ease;
+}
+.wm-overlay.wm-out { animation: wm-fade-out 0.22s ease forwards; }
+
+@keyframes wm-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes wm-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+.wm-card {
+  position: relative;
+  max-width: 440px; width: 100%;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #14141e 0%, #0f0f1a 100%);
+  border: 1px solid rgba(124,106,255,0.4);
+  border-radius: 22px;
+  padding: 32px 26px 22px;
+  text-align: center;
+  box-shadow:
+    0 0 0 1px rgba(124,106,255,0.15),
+    0 24px 80px rgba(124,106,255,0.25),
+    0 8px 32px rgba(0,0,0,0.6);
+  animation: wm-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.wm-overlay.wm-out .wm-card { animation: wm-pop-out 0.22s ease forwards; }
+
+@keyframes wm-pop {
+  0%   { transform: scale(0.85) translateY(20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes wm-pop-out {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0; }
+}
+
+.wm-glow {
+  position: absolute; inset: -2px;
+  background: radial-gradient(60% 50% at 50% 0%, rgba(124,106,255,0.35), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+.wm-sparkle {
+  position: absolute; pointer-events: none;
+  font-size: 1.2rem;
+  animation: wm-sparkle 2.4s ease-in-out infinite;
+  z-index: 1;
+}
+.wm-spark-1 { top: 14px;  left: 16px;  animation-delay: 0s; }
+.wm-spark-2 { top: 10px;  right: 50%;  font-size: 0.85rem; animation-delay: 0.6s; }
+.wm-spark-3 { top: 22px;  right: 18px; animation-delay: 1.2s; }
+
+@keyframes wm-sparkle {
+  0%, 100% { transform: scale(1) rotate(0deg);   opacity: 0.5; }
+  50%      { transform: scale(1.25) rotate(20deg); opacity: 1; }
+}
+
+.wm-close {
+  position: absolute; top: 10px; right: 12px;
+  background: rgba(255,255,255,0.06);
+  border: none; color: rgba(255,255,255,0.5);
+  width: 28px; height: 28px; border-radius: 50%;
+  cursor: pointer; font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.18s, color 0.18s;
+  z-index: 10;
+}
+.wm-close:hover { background: rgba(248,113,113,0.18); color: #f87171; }
+
+.wm-urgency {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(248,113,113,0.12);
+  border: 1px solid rgba(248,113,113,0.3);
+  color: #f87171;
+  padding: 5px 12px; border-radius: 99px;
+  font-size: 0.74rem; font-weight: 700;
+  margin-bottom: 14px;
+  position: relative; z-index: 2;
+  max-width: 100%;
+}
+.wm-pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #f87171;
+  animation: wm-blink 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes wm-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+.wm-title {
+  font-family: var(--font-head, 'Syne', sans-serif);
+  font-size: 1.7rem; font-weight: 800;
+  color: #fff; margin: 0 0 10px;
+  line-height: 1.18; letter-spacing: -0.02em;
+  position: relative; z-index: 2;
+}
+.wm-grad {
+  background: linear-gradient(90deg, #7c6aff, #ff6a8e);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.wm-sub {
+  font-size: 1.15rem;
+  background: linear-gradient(90deg, #ffd56a, #ff6a8e);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.wm-desc {
+  font-size: 0.88rem; color: #aaaacc;
+  margin: 0 0 18px; line-height: 1.5;
+  position: relative; z-index: 2;
+}
+
+.wm-features {
+  list-style: none; padding: 12px 0; margin: 0 auto 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: left; max-width: 320px;
+  position: relative; z-index: 2;
+}
+.wm-features li {
+  font-size: 0.84rem; color: #e0e0f0;
+  padding: 4px 0; display: flex; align-items: center; gap: 8px;
+}
+.wm-tick { font-size: 0.9rem; flex-shrink: 0; }
+
+.wm-social {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 0.82rem; color: #aaaacc;
+  margin-bottom: 18px;
+  position: relative; z-index: 2;
+  flex-wrap: wrap;
+}
+.wm-stars { letter-spacing: 1px; font-size: 0.78rem; }
+.wm-social strong { color: #ffd56a; }
+
+.wm-cta {
+  position: relative; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  background: linear-gradient(90deg, #7c6aff, #ff6a8e);
+  color: #fff; border: none; cursor: pointer;
+  padding: 13px 18px; border-radius: 12px;
+  font-size: 0.95rem; font-weight: 700;
+  box-shadow: 0 8px 24px rgba(124,106,255,0.35);
+  transition: transform 0.18s, box-shadow 0.18s;
+  z-index: 2;
+}
+.wm-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(124,106,255,0.5); }
+.wm-cta:active { transform: translateY(0); }
+.wm-arrow { display: inline-block; transition: transform 0.18s; }
+.wm-cta:hover .wm-arrow { transform: translateX(4px); }
+.wm-shimmer {
+  position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  animation: wm-shine 2.6s ease-in-out infinite;
+}
+@keyframes wm-shine {
+  0%   { left: -100%; }
+  60%  { left: 100%; }
+  100% { left: 100%; }
+}
+
+.wm-timer {
+  margin-top: 12px;
+  font-size: 0.78rem; color: #888;
+  position: relative; z-index: 2;
+  font-family: var(--font-body);
+}
+.wm-timer strong {
+  color: #ffd56a;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  margin-left: 4px;
+  letter-spacing: 0.05em;
+}
+.wm-timer-icon {
+  display: inline-block;
+  animation: wm-tick 1s linear infinite;
+  margin-right: 3px;
+}
+@keyframes wm-tick {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-15deg); }
+}
+
+/* Phone < 480px — tighter still */
+@media (max-width: 480px) {
+  .wm-overlay { padding: 10px; }
+  .wm-card    { padding: 26px 18px 18px; border-radius: 16px; max-width: 100%; }
+  .wm-title   { font-size: 1.35rem; line-height: 1.22; }
+  .wm-sub     { font-size: 0.95rem; }
+  .wm-desc    { font-size: 0.82rem; margin-bottom: 14px; }
+  .wm-urgency { font-size: 0.7rem; padding: 4px 10px; }
+  .wm-features li { font-size: 0.8rem; }
+  .wm-social  { font-size: 0.78rem; }
+  .wm-cta     { font-size: 0.92rem; padding: 12px 16px; }
+  .wm-sparkle { font-size: 0.95rem; }
+  .wm-spark-1, .wm-spark-3 { display: none; }
+}
+
+/* Very small phones < 360px */
+@media (max-width: 360px) {
+  .wm-card  { padding: 24px 14px 16px; }
+  .wm-title { font-size: 1.2rem; }
+  .wm-sub   { font-size: 0.88rem; }
+}

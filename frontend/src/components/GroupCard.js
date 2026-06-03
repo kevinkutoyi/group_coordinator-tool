@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import "./GroupCard.css";
 
 const CYCLE_LABELS = {
@@ -131,6 +131,9 @@ export default function GroupCard({ group, onClick }) {
           </div>
         </div>
 
+        {/* Recently joined social proof — cycles every ~3.4s through all confirmed members */}
+        <RecentJoinBadge emails={group.confirmedMaskedEmails || (group.latestConfirmedMember?.maskedEmail ? [group.latestConfirmedMember.maskedEmail] : [])} />
+
         {/* Footer */}
         <div className="gc-footer">
           <span className="gc-organizer">🛡️ {group.organizerName}</span>
@@ -142,3 +145,65 @@ export default function GroupCard({ group, onClick }) {
     </div>
   );
 }
+
+// ── Cycling "just joined" badge ─────────────────────────────────────────────
+// Each card runs on its own randomized rhythm so the page never blinks in unison.
+function RecentJoinBadge({ emails }) {
+  const rnd = (min, max) => min + Math.random() * (max - min);
+  // Random starting index per mount — so cards initially show different members
+  const [idx, setIdx] = useState(() =>
+    emails && emails.length > 0 ? Math.floor(Math.random() * emails.length) : 0
+  );
+  const [phase, setPhase] = useState("visible");
+
+  useEffect(() => {
+    if (!emails || emails.length === 0) return;
+    let cancelled = false;
+    const timers = [];
+    const queue = (fn, ms) => { const t = setTimeout(() => { if (!cancelled) fn(); }, ms); timers.push(t); };
+
+    const cycle = () => {
+      if (cancelled) return;
+      // Visible — random 2.5–5s (so each card's "look at me" window is unique)
+      queue(() => {
+        setPhase("fading-out");
+        // Fade-out 400ms
+        queue(() => {
+          setPhase("hidden");
+          // Hidden — random 1.5–4.5s gap
+          queue(() => {
+            setIdx(i => (i + 1) % emails.length);
+            setPhase("fading-in");
+            // Fade-in 400ms
+            queue(() => {
+              setPhase("visible");
+              cycle();
+            }, 400);
+          }, rnd(1500, 4500));
+        }, 400);
+      }, rnd(2500, 5000));
+    };
+
+    // Stagger when each card starts its cycle (0–2.5s offset on mount)
+    queue(() => cycle(), rnd(0, 2500));
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [emails]);
+
+  if (!emails || emails.length === 0) return null;
+  const email = emails[idx % emails.length];
+  if (!email) return null;
+
+  return (
+    <div className={`gc-recent-join gc-rj-${phase}`} title="Recently confirmed paying member">
+      <span className="gc-rj-pulse" />
+      <span className="gc-rj-text">
+        <strong>{email}</strong> just joined
+      </span>
+    </div>
+  );
+}
+

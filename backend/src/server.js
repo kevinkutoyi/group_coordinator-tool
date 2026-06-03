@@ -11,6 +11,7 @@ const { validateEmail } = require("./emailValidator");
 const emailService = require("./emailService");
 
 const app    = express();
+app.set("trust proxy", 1);
 const prisma = new PrismaClient();
 const PORT   = process.env.PORT || 3001;
 const DEFAULT_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || "8");
@@ -109,39 +110,142 @@ const CYCLE_MONTHS = { monthly: 1, quarterly: 3, biannually: 6, annually: 12 };
 //  USER AUTH
 // ═══════════════════════════════════════════════════════════════════════════
 
+function genOtp() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+
 app.post("/api/auth/signup", authLimiter, async (req, res) => {
   try {
     const { name, email, password, role = "customer", phone = "", newsletter = true } = req.body;
-    if (!name || !email || !password)
-      return res.status(400).json({ error: "name, email and password are required" });
-    if (!["customer", "moderator"].includes(role))
-      return res.status(400).json({ error: "role must be customer or moderator" });
-    if (password.length < 8)
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    if (!name || !email || !password) return res.status(400).json({ error: "name, email and password are required" });
+    if (!["customer", "moderator"].includes(role)) return res.status(400).json({ error: "role must be customer or moderator" });
+    if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
 
     const emailCheck = await validateEmail(email);
     if (!emailCheck.valid) return res.status(400).json({ error: emailCheck.reason });
 
-    const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const cleanEmail = email.toLowerCase().trim();
+    const exists = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (exists) return res.status(409).json({ error: "Email already registered" });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
+    const code = genOtp();
+    const codeHash = await bcrypt.hash(code, 8);
+
+    await prisma.emailOtp.deleteMany({ where: { email: cleanEmail, purpose: "signup" } });
+    await prisma.emailOtp.create({
       data: {
-        name: name.trim(), email: email.toLowerCase().trim(), phone: phone.trim(),
-        passwordHash, role, status: role === "moderator" ? "pending" : "active",
-        newsletter: newsletter !== false,
+        email: cleanEmail, codeHash, purpose: "signup",
+        payload: { name: name.trim(), passwordHash, phone: (phone || "").trim(), role, newsletter: newsletter !== false },
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
 
-    if (role === "moderator") {
-      return res.status(201).json({
-        message: "Moderator account created. Awaiting super-admin approval before you can create groups.",
-        user: safeUser(user),
-      });
+    emailService.sendSignupOtp({ to: cleanEmail, code, name: name.trim() }).catch(e => console.error("Signup OTP email failed:", e?.message || e));
+    res.json({ message: "Verification code sent. Check your email.", email: cleanEmail });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/auth/verify-signup", authLimiter, async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) return res.status(400).json({ error: "email and code required" });
+    const cleanEmail = email.toLowerCase().trim();
+    const otp = await prisma.emailOtp.findFirst({
+      where: { email: cleanEmail, purpose: "signup", used: false, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otp) return res.status(400).json({ error: "No valid code found. Please request a new one." });
+    if (otp.attempts >= 5) return res.status(429).json({ error: "Too many attempts. Please request a new code." });
+
+    const valid = await bcrypt.compare(String(code), otp.codeHash);
+    if (!valid) {
+      await prisma.emailOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+      return res.status(400).json({ error: "Invalid code" });
+    }
+
+    const dup = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (dup) return res.status(409).json({ error: "Email already registered" });
+
+    const p = otp.payload;
+    const user = await prisma.user.create({
+      data: {
+        name: p.name, email: cleanEmail, phone: p.phone || "",
+        passwordHash: p.passwordHash, role: p.role,
+        status: p.role === "moderator" ? "pending" : "active",
+        newsletter: p.newsletter !== false,
+      },
+    });
+    await prisma.emailOtp.update({ where: { id: otp.id }, data: { used: true } });
+    if (user.role === "moderator") {
+      return res.status(201).json({ message: "Email verified! Moderator account created. Awaiting super-admin approval.", user: safeUser(user) });
     }
     const token = signToken({ id: user.id, role: user.role, name: user.name });
     res.status(201).json({ token, user: safeUser(user) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    const cleanEmail = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (user) {
+      const code = genOtp();
+      const codeHash = await bcrypt.hash(code, 8);
+      await prisma.emailOtp.deleteMany({ where: { email: cleanEmail, purpose: "reset" } });
+      await prisma.emailOtp.create({
+        data: { email: cleanEmail, codeHash, purpose: "reset", expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+      });
+      emailService.sendPasswordResetOtp({ to: cleanEmail, code, name: user.name }).catch(e => console.error("Reset OTP failed:", e?.message || e));
+    }
+    res.json({ message: "If that email is registered, a reset code was sent." });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) return res.status(400).json({ error: "email, code, and newPassword required" });
+    if (newPassword.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+    const cleanEmail = email.toLowerCase().trim();
+    const otp = await prisma.emailOtp.findFirst({
+      where: { email: cleanEmail, purpose: "reset", used: false, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otp) return res.status(400).json({ error: "No valid reset code. Please request a new one." });
+    if (otp.attempts >= 5) return res.status(429).json({ error: "Too many attempts. Please request a new code." });
+    const valid = await bcrypt.compare(String(code), otp.codeHash);
+    if (!valid) {
+      await prisma.emailOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+      return res.status(400).json({ error: "Invalid code" });
+    }
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await prisma.emailOtp.update({ where: { id: otp.id }, data: { used: true } });
+    res.json({ message: "Password updated. You can now log in with your new password." });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/auth/resend-otp", authLimiter, async (req, res) => {
+  try {
+    const { email, purpose = "signup" } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    if (!["signup", "reset"].includes(purpose)) return res.status(400).json({ error: "invalid purpose" });
+    const cleanEmail = email.toLowerCase().trim();
+    const existing = await prisma.emailOtp.findFirst({ where: { email: cleanEmail, purpose }, orderBy: { createdAt: "desc" } });
+    if (!existing) return res.status(400).json({ error: "No previous request to resend. Please start over." });
+    const code = genOtp();
+    const codeHash = await bcrypt.hash(code, 8);
+    await prisma.emailOtp.create({
+      data: { email: cleanEmail, codeHash, purpose, payload: existing.payload, expiresAt: new Date(Date.now() + (purpose === "reset" ? 15 : 10) * 60 * 1000) },
+    });
+    const u = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    const name = u?.name || existing.payload?.name || "there";
+    if (purpose === "signup") emailService.sendSignupOtp({ to: cleanEmail, code, name }).catch(() => {});
+    else emailService.sendPasswordResetOtp({ to: cleanEmail, code, name }).catch(() => {});
+    res.json({ message: "Code resent. Check your email." });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -230,6 +334,68 @@ app.patch("/api/admin/users/:id/suspend", requireSuperAdmin, async (req, res) =>
   res.json(safeUser(updated));
 });
 
+app.patch("/api/admin/users/:id/unsuspend", requireSuperAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const updated = await prisma.user.update({
+    where: { id: req.params.id },
+    data:  { status: "active", newsletter: true, rejectionNote: null },
+  });
+  console.log("✓ Unsuspended:", updated.email);
+  res.json(safeUser(updated));
+});
+
+app.patch("/api/admin/users/:id/promote-to-moderator", requireSuperAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  if (user.role === "superadmin") return res.status(400).json({ error: "Cannot change superadmin role" });
+  const updated = await prisma.user.update({
+    where: { id: req.params.id },
+    data:  { role: "moderator", status: "active", approvedAt: new Date(), approvedBy: "superadmin" },
+  });
+  console.log("✓ Promoted to moderator:", updated.email);
+  res.json(safeUser(updated));
+});
+
+app.get("/api/admin/pending-payments", requireSuperAdmin, async (req, res) => {
+  const members = await prisma.groupMember.findMany({
+    where: { role: { not: "organizer" }, paymentStatus: "pending" },
+    include: { group: { select: { id: true, serviceName: true, serviceIcon: true, planName: true, organizerName: true, memberPays: true } } },
+    orderBy: { joinedAt: "desc" },
+  });
+  const now = Date.now();
+  res.json(members.map(m => ({
+    id: m.id, userId: m.userId, name: m.name, email: m.email, joinedAt: m.joinedAt,
+    daysWaiting: Math.floor((now - new Date(m.joinedAt).getTime()) / (1000 * 60 * 60 * 24)),
+    durationLabel: m.durationLabel, memberPays: m.memberPays,
+    group: m.group,
+  })));
+});
+
+app.post("/api/admin/pending-payments/:memberId/remind", requireSuperAdmin, async (req, res) => {
+  const member = await prisma.groupMember.findUnique({
+    where: { id: req.params.memberId },
+    include: { group: true },
+  });
+  if (!member) return res.status(404).json({ error: "Member not found" });
+  if (member.paymentStatus !== "pending") return res.status(400).json({ error: "Member's payment is not pending anymore." });
+  try {
+    await emailService.sendPaymentReminder({
+      to: member.email, memberName: member.name,
+      groupName: `${member.group.serviceName} ${member.group.planName}`,
+      serviceName: member.group.serviceName,
+      memberPays: member.memberPays || member.group.memberPays,
+      durationLabel: member.durationLabel,
+      groupId: member.groupId,
+    });
+    console.log(`🔔 Payment reminder sent to ${member.email}`);
+    res.json({ message: `Reminder sent to ${member.name}.`, ok: true });
+  } catch (err) {
+    console.error("Payment reminder failed:", err);
+    res.status(500).json({ error: "Could not send reminder" });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  SERVICES & DURATIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -241,6 +407,23 @@ app.get("/api/durations", (req, res) => res.json(SUBSCRIPTION_DURATIONS));
 //  GROUPS
 // ═══════════════════════════════════════════════════════════════════════════
 
+
+// Mask the MIDDLE of an email so first + last chars stay visible, e.g.
+//   "john.doe@gmail.com"     -> "jo****oe@gmail.com"
+//   "ab@example.com"         -> "a*@example.com"
+//   "pauline7@yahoo.com"     -> "pa****e7@yahoo.com"
+function maskEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  const [user, domain] = email.split("@");
+  if (!domain) return "anon****";
+  if (user.length <= 1) return `${user}*@${domain}`;
+  if (user.length <= 3) return `${user[0]}*${user.slice(-1)}@${domain}`;
+  if (user.length <= 6) return `${user[0]}${"*".repeat(user.length - 2)}${user.slice(-1)}@${domain}`;
+  // longer than 6: keep first 2 + last 2, mask middle with at least 4 stars
+  const middleLen = Math.max(user.length - 4, 4);
+  return `${user.slice(0, 2)}${"*".repeat(middleLen)}${user.slice(-2)}@${domain}`;
+}
+
 app.get("/api/groups", async (req, res) => {
   const authHeader = req.headers.authorization || "";
   let viewerRole = "guest", viewerId = null;
@@ -251,11 +434,25 @@ app.get("/api/groups", async (req, res) => {
     : { reviewStatus: "approved" };
 
   const groups = await prisma.group.findMany({ where, include: { members: true, payments: true }, orderBy: { createdAt: "desc" } });
-  res.json(groups.map(g => ({
-    ...g,
-    memberCount: g.members.filter(m => m.role !== "organizer").length,
-    members: g.members.map(({ email, ...m }) => m),
-  })));
+  res.json(groups.map(g => {
+    const confirmed = g.members.filter(m => m.role !== "organizer" && m.paymentStatus === "confirmed");
+    const sortedConfirmed = confirmed.slice().sort((a, b) =>
+      new Date(b.joinedAt || 0) - new Date(a.joinedAt || 0)
+    );
+    const confirmedMaskedEmails = sortedConfirmed.map(m => maskEmail(m.email)).filter(Boolean);
+    return {
+      ...g,
+      memberCount: confirmed.length,
+      pendingCount: g.members.filter(m => m.role !== "organizer" && m.paymentStatus === "pending").length,
+      // Most recent first; cycle through these on the card
+      confirmedMaskedEmails,
+      // Backward-compat (single email object)
+      latestConfirmedMember: confirmedMaskedEmails[0]
+        ? { maskedEmail: confirmedMaskedEmails[0], joinedAt: sortedConfirmed[0].joinedAt }
+        : null,
+      members: g.members.map(({ email, ...m }) => m),
+    };
+  }));
 });
 
 app.get("/api/groups/:id", async (req, res) => {
@@ -284,8 +481,8 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res)
   let creatorName, creatorEmail;
 
   if (isSuperAdmin) {
-    creatorName  = process.env.ADMIN_USERNAME || "Super Admin";
-    creatorEmail = process.env.ADMIN_EMAIL    || "admin@splitpass.com";
+    creatorName  = process.env.SUPERADMIN_DISPLAY_NAME  || "SplitSubs Admin";
+    creatorEmail = process.env.SUPERADMIN_DISPLAY_EMAIL || "admin@splitsubs.com";
   } else {
     const creator = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (!creator) return res.status(404).json({ error: "User not found" });
@@ -327,16 +524,18 @@ app.patch("/api/groups/:id/status", requireAuth, async (req, res) => {
 //  GROUP MEMBERSHIP
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.post("/api/groups/:id/join", requireRole("customer", "superadmin"), async (req, res) => {
+app.post("/api/groups/:id/join", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
   const group = await prisma.group.findUnique({ where: { id: req.params.id }, include: { members: true } });
   if (!group) return res.status(404).json({ error: "Group not found" });
   if (group.status !== "open") return res.status(400).json({ error: "Group is not accepting new members" });
 
   const fixedMonths   = CYCLE_MONTHS[group.billingCycle] || 1;
   const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === fixedMonths) || SUBSCRIPTION_DURATIONS[0];
-  const payingMembers = group.members.filter(m => m.role !== "organizer");
+  const payingMembers   = group.members.filter(m => m.role !== "organizer");
+  const confirmedMembers = payingMembers.filter(m => m.paymentStatus === "confirmed");
 
-  if (payingMembers.length >= group.maxSlots) return res.status(400).json({ error: "Group is full" });
+  // Only CONFIRMED payments occupy slots. Pending members don't block new joins.
+  if (confirmedMembers.length >= group.maxSlots) return res.status(400).json({ error: "Group is full" });
   if (group.members.find(m => m.userId === req.user.id)) return res.status(400).json({ error: "You are already a member of this group" });
   if (group.organizerId === req.user.id) return res.status(400).json({ error: "You are the organizer of this group and do not pay for a slot" });
 
@@ -354,8 +553,9 @@ app.post("/api/groups/:id/join", requireRole("customer", "superadmin"), async (r
     },
   });
 
-  if (payingMembers.length + 1 >= group.maxSlots)
-    await prisma.group.update({ where: { id: group.id }, data: { status: "full" } });
+  // NOTE: We do NOT flip status to "full" on join — joining without paying must not
+  // close the group to other customers. The flip happens in the payment-verify callback
+  // once a confirmed payment count reaches maxSlots.
 
   res.status(201).json(member);
 });
@@ -364,7 +564,7 @@ app.post("/api/groups/:id/join", requireRole("customer", "superadmin"), async (r
 //  PESAPAL PAYMENT
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.post("/api/pesapal/initiate", requireRole("customer", "superadmin"), async (req, res) => {
+app.post("/api/pesapal/initiate", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
   const { groupId, memberId, currency = "KES" } = req.body;
   if (!groupId || !memberId) return res.status(400).json({ error: "groupId and memberId required" });
 
@@ -389,7 +589,7 @@ app.post("/api/pesapal/initiate", requireRole("customer", "superadmin"), async (
     const nameParts = member.name.split(" ");
     const { redirectUrl, orderTrackingId } = await pesapal.submitOrder({
       orderId, amount: amountForPesapal, currency,
-      description: `SplitPass: ${group.serviceName} ${group.planName} × ${member.months}mo — ${member.name}`,
+      description: `SplitSubs: ${group.serviceName} ${group.planName} × ${member.months}mo — ${member.name}`,
       firstName: nameParts[0], lastName: nameParts.slice(1).join(" ") || "",
       email: member.email, phone: "", callbackUrl,
     });
@@ -695,11 +895,37 @@ app.patch("/api/admin/groups/:id/review", requireSuperAdmin, async (req, res) =>
   if (group.organizer) {
     const subject = decision === "approved" ? `✅ Your group "${group.serviceName} ${group.planName}" is now live!` : `❌ Your group "${group.serviceName} ${group.planName}" was not approved`;
     const html    = decision === "approved"
-      ? `<p>Hi ${group.organizer.name},<br/><br/>Your group has been approved and is now live on SplitPass.<br/><br/>— SplitPass Team</p>`
-      : `<p>Hi ${group.organizer.name},<br/><br/>Your group was not approved.<br/><br/><b>Reason:</b> ${note || "Not specified"}<br/><br/>You may revise and resubmit.<br/><br/>— SplitPass Team</p>`;
+      ? `<p>Hi ${group.organizer.name},<br/><br/>Your group has been approved and is now live on SplitSubs.<br/><br/>— SplitSubs Team</p>`
+      : `<p>Hi ${group.organizer.name},<br/><br/>Your group was not approved.<br/><br/><b>Reason:</b> ${note || "Not specified"}<br/><br/>You may revise and resubmit.<br/><br/>— SplitSubs Team</p>`;
     emailService.sendEmail({ to: group.organizer.email, subject, html }).catch(() => {});
   }
   res.json(updated);
+});
+
+
+// ─── DELETE A GROUP ENTIRELY (super admin only, irreversible) ───────────────
+app.delete("/api/admin/groups/:id", requireSuperAdmin, async (req, res) => {
+  const { id } = req.params;
+  const group = await prisma.group.findUnique({
+    where: { id },
+    include: {
+      _count: { select: { members: true, payments: true, pesapalOrders: true, platformEarnings: true } },
+    },
+  });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  try {
+    await prisma.$transaction([
+      prisma.platformEarning.deleteMany({ where: { groupId: id } }),
+      prisma.payment.deleteMany({ where: { groupId: id } }),
+      prisma.pesapalOrder.deleteMany({ where: { groupId: id } }),
+      prisma.group.delete({ where: { id } }),
+    ]);
+    console.log(`[ADMIN] Deleted group ${id} (${group.serviceName} — ${group.planName})`);
+    res.json({ ok: true, deleted: { id, serviceName: group.serviceName, planName: group.planName, members: group._count.members, payments: group._count.payments, pesapalOrders: group._count.pesapalOrders, platformEarnings: group._count.platformEarnings } });
+  } catch (err) {
+    console.error("Delete group failed:", err);
+    res.status(500).json({ error: err.message || "Failed to delete group" });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -713,9 +939,9 @@ app.post("/api/admin/email-organizers", requireSuperAdmin, async (req, res) => {
   if (Array.isArray(targetIds) && targetIds.length > 0) where.id = { in: targetIds };
   const targets = await prisma.user.findMany({ where });
   if (!targets.length) return res.status(400).json({ error: "No active organizers to email" });
-  const from = senderEmail || process.env.ADMIN_EMAIL || "admin@splitpass.com";
+  const from = senderEmail || process.env.ADMIN_EMAIL || "admin@splitsubs.com";
   let sent = 0, failed = 0;
-  await Promise.allSettled(targets.map(async u => { try { await emailService.sendGroupMessage({ to: u.email, memberName: u.name, groupName: "SplitPass Platform", serviceName: "SplitPass", senderName: "SplitPass Admin", senderEmail: from, subject, messageBody: msgBody }); sent++; } catch { failed++; } }));
+  await Promise.allSettled(targets.map(async u => { try { await emailService.sendGroupMessage({ to: u.email, memberName: u.name, groupName: "SplitSubs Platform", serviceName: "SplitSubs", senderName: "SplitSubs Admin", senderEmail: from, subject, messageBody: msgBody }); sent++; } catch { failed++; } }));
   await prisma.newsletterCampaign.create({ data: { type: "organizer-email", subject, body: msgBody, senderEmail: from, recipientCount: sent, recipients: targets.map(u => u.email), status: "sent" } });
   res.json({ message: `Email sent to ${sent} organizer${sent !== 1 ? "s" : ""}.${failed > 0 ? ` ${failed} failed.` : ""}`, sent, failed, note: process.env.EMAIL_ENABLED !== "true" ? "Set EMAIL_ENABLED=true to deliver real emails." : undefined });
 });
@@ -751,7 +977,7 @@ app.post("/api/admin/newsletter/send", requireSuperAdmin, async (req, res) => {
   if (!subject || !body) return res.status(400).json({ error: "subject and body required" });
   const [users, footerSubs] = await Promise.all([prisma.user.findMany({ where: { newsletter: true } }), prisma.footerSubscriber.findMany()]);
   const recipients = [...new Set([...users.map(u => u.email), ...footerSubs.map(s => s.email)])];
-  const campaign = await prisma.newsletterCampaign.create({ data: { type: "newsletter", subject, body, senderName: senderName || process.env.ADMIN_USERNAME || "SplitPass Team", senderEmail: senderEmail || process.env.ADMIN_EMAIL || "newsletter@splitpass.com", recipientCount: recipients.length, recipients, status: "logged" } });
+  const campaign = await prisma.newsletterCampaign.create({ data: { type: "newsletter", subject, body, senderName: senderName || process.env.ADMIN_USERNAME || "SplitSubs Team", senderEmail: senderEmail || process.env.ADMIN_EMAIL || "newsletter@splitsubs.com", recipientCount: recipients.length, recipients, status: "logged" } });
   res.json({ message: `Newsletter logged. ${recipients.length} recipient(s) queued.`, campaignId: campaign.id, recipientCount: recipients.length });
 });
 
@@ -788,7 +1014,13 @@ app.put("/api/groups/:id/credentials", requireAuth, async (req, res) => {
   if (!Array.isArray(slots) || !slots.length) return res.status(400).json({ error: "At least one credential slot is required" });
 
   const isUpdate  = !!(await prisma.groupCredential.findUnique({ where: { groupId: group.id } }));
-  const slotData  = slots.map((s, i) => ({ slotNumber: i + 1, label: s.label || `Slot ${i + 1}`, username: s.username || "", password: s.password || "", note: s.note || "" }));
+  const slotData = slots.map((s, i) => ({
+    slotNumber: i + 1,
+    label:      s.label      || `Slot ${i + 1}`,
+    inviteLink: typeof s.inviteLink === "string" ? s.inviteLink : "",
+    address:    typeof s.address    === "string" ? s.address    : "",
+    note:       s.note       || "",
+  }));
   const credRecord = await prisma.groupCredential.upsert({ where: { groupId: group.id }, update: { slots: slotData, generalNote, updatedBy: req.user.id }, create: { groupId: group.id, slots: slotData, generalNote, updatedBy: req.user.id } });
 
   if (isUpdate) {
@@ -830,14 +1062,37 @@ app.post("/api/groups/:id/emails/send", requireAuth, async (req, res) => {
   if (!members.length) return res.status(400).json({ error: "No confirmed paying members to message yet." });
 
   const isSuperAdmin = req.user.role === "superadmin" && group.organizerId !== req.user.id;
-  const senderName   = isSuperAdmin ? (process.env.ADMIN_USERNAME || "Super Admin") : group.organizerName;
-  const fromEmail    = senderEmail || (isSuperAdmin ? process.env.ADMIN_EMAIL : group.organizerEmail) || "noreply@splitpass.com";
+  const senderName   = isSuperAdmin ? (process.env.SUPERADMIN_DISPLAY_NAME  || "SplitSubs Admin")    : group.organizerName;
+  const fromEmail    = senderEmail || (isSuperAdmin ? (process.env.SUPERADMIN_DISPLAY_EMAIL || "admin@splitsubs.com") : group.organizerEmail) || "admin@splitsubs.com";
 
   const campaign = await prisma.groupEmail.create({ data: { groupId: group.id, groupName: `${group.serviceName} ${group.planName}`, subject, body: msgBody, senderName, senderEmail: fromEmail, recipientCount: members.length, recipients: members.map(m => m.email), sentBy: req.user.id, status: "sending" } });
   let sent = 0, failed = 0;
   await Promise.allSettled(members.map(async m => { try { await emailService.sendGroupMessage({ to: m.email, memberName: m.name, groupName: `${group.serviceName} ${group.planName}`, serviceName: group.serviceName, senderName, senderEmail: fromEmail, subject, messageBody: msgBody }); sent++; } catch { failed++; } }));
   await prisma.groupEmail.update({ where: { id: campaign.id }, data: { status: failed === members.length ? "failed" : "sent", sent, failed } });
   res.json({ message: `Email sent to ${sent} member${sent !== 1 ? "s" : ""}.${failed > 0 ? ` ${failed} failed.` : ""}`, sent, failed, campaignId: campaign.id });
+});
+
+app.post("/api/groups/:id/emails/send-to-member", requireAuth, async (req, res) => {
+  const { memberId, subject, body: msgBody, senderEmail } = req.body;
+  if (!memberId || !subject || !msgBody) return res.status(400).json({ error: "memberId, subject, body required" });
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  if (group.organizerId !== req.user.id && req.user.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
+  const member = await prisma.groupMember.findFirst({ where: { id: memberId, groupId: group.id } });
+  if (!member) return res.status(404).json({ error: "Member not found in this group" });
+
+  const isSuperAdmin = req.user.role === "superadmin" && group.organizerId !== req.user.id;
+  const senderName   = isSuperAdmin ? (process.env.SUPERADMIN_DISPLAY_NAME  || "SplitSubs Admin")    : group.organizerName;
+  const fromEmail    = senderEmail || (isSuperAdmin ? (process.env.SUPERADMIN_DISPLAY_EMAIL || "admin@splitsubs.com") : group.organizerEmail) || "admin@splitsubs.com";
+
+  const campaign = await prisma.groupEmail.create({ data: { groupId: group.id, groupName: `${group.serviceName} ${group.planName}`, subject, body: msgBody, senderName, senderEmail: fromEmail, recipientCount: 1, recipients: [member.email], sentBy: req.user.id, status: "sending" } });
+  let sent = 0, failed = 0;
+  try {
+    await emailService.sendGroupMessage({ to: member.email, memberName: member.name, groupName: `${group.serviceName} ${group.planName}`, serviceName: group.serviceName, senderName, senderEmail: fromEmail, subject, messageBody: msgBody });
+    sent = 1;
+  } catch (err) { failed = 1; console.error("send-to-member failed:", err); }
+  await prisma.groupEmail.update({ where: { id: campaign.id }, data: { status: failed ? "failed" : "sent", sent, failed } });
+  res.json({ message: failed ? "Send failed — check server logs." : `Email sent to ${member.name}.`, sent, failed, campaignId: campaign.id });
 });
 
 app.post("/api/groups/:id/emails/expiry-reminder", requireAuth, async (req, res) => {
@@ -894,14 +1149,744 @@ app.get("/api/stats", async (req, res) => {
   res.json({ openGroups, fullGroups, totalMembers, totalOrganizers, totalSaved: +totalSaved.toFixed(2) });
 });
 
+// Ensures a users row exists for the file-based superadmin so FK constraints
+// (groups.organizerId, groupMembers.userId, payments.userId) resolve when the
+// superadmin creates or joins records. Idempotent — safe to run every startup.
+async function ensureSuperAdminUser() {
+  try {
+    await prisma.user.upsert({
+      where: { id: "superadmin" },
+      update: {
+        name:  process.env.ADMIN_USERNAME || "Super Admin",
+        email: process.env.ADMIN_EMAIL    || "admin@splitsubs.com",
+      },
+      create: {
+        id: "superadmin",
+        name:  process.env.ADMIN_USERNAME || "Super Admin",
+        email: process.env.ADMIN_EMAIL    || "admin@splitsubs.com",
+        phone: "",
+        passwordHash: "",
+        role: "superadmin",
+        status: "active",
+        newsletter: false,
+      },
+    });
+  } catch (e) {
+    console.error("⚠️  Failed to ensure superadmin user row:", e.message);
+  }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────
+// ─── Public unsubscribe / resubscribe ──────────────────────────────────────
+app.get("/api/unsubscribe", async (req, res) => {
+  const email = (req.query.email || "").toLowerCase().trim();
+  if (!email) return res.status(400).json({ error: "Email required" });
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) await prisma.user.update({ where: { email }, data: { newsletter: false } });
+    await prisma.footerSubscriber.deleteMany({ where: { email } });
+    console.log("📭 Unsubscribed:", email);
+    res.json({ success: true, email });
+  } catch (err) {
+    console.error("Unsubscribe error:", err);
+    res.status(500).json({ error: "Could not process unsubscribe" });
+  }
+});
+
+app.post("/api/resubscribe", async (req, res) => {
+  const email = (req.body.email || "").toLowerCase().trim();
+  if (!email) return res.status(400).json({ error: "Email required" });
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) await prisma.user.update({ where: { email }, data: { newsletter: true } });
+    console.log("📬 Resubscribed:", email);
+    res.json({ success: true, email });
+  } catch (err) {
+    console.error("Resubscribe error:", err);
+    res.status(500).json({ error: "Could not process resubscribe" });
+  }
+});
+
+
+
+// ── Blog: image upload + public static handler ─────────────────────────────
+const multer = require("multer");
+const fsBlog = require("fs");
+const pathBlog = require("path");
+const BLOG_UPLOAD_DIR = pathBlog.join(__dirname, "..", "uploads", "blog");
+if (!fsBlog.existsSync(BLOG_UPLOAD_DIR)) fsBlog.mkdirSync(BLOG_UPLOAD_DIR, { recursive: true });
+
+const blogUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, BLOG_UPLOAD_DIR),
+    filename:   (req, file, cb) => {
+      const ext = pathBlog.extname(file.originalname).toLowerCase() || ".jpg";
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(jpe?g|png|webp|gif)$/i.test(file.originalname);
+    cb(ok ? null : new Error("Image must be jpg, png, webp, or gif"), ok);
+  },
+});
+
+app.post("/api/blog/upload-image", requireRole("moderator", "superadmin"), blogUpload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+  res.json({ url: `/uploads/blog/${req.file.filename}`, size: req.file.size, name: req.file.originalname });
+});
+
+// Public static handler for blog images (served by Express; Nginx will pass-through)
+app.use("/uploads/blog", express.static(pathBlog.join(__dirname, "..", "uploads", "blog"), {
+  maxAge: "30d",
+  immutable: true,
+}));
+
+// ── Blog: newsletter notification when a post publishes ────────────────────
+async function notifyNewBlogPost(post) {
+  if (!post || post.status !== "published" || post.reviewStatus !== "approved") return;
+  if (post.noIndex) return; // skip noindexed posts
+  try {
+    // Combined audience: opted-in users + footer subscribers (deduplicated)
+    const users = await prisma.user.findMany({
+      where: { newsletter: true, status: "active" },
+      select: { email: true, name: true },
+    });
+    const subs = await prisma.footerSubscriber.findMany({ select: { email: true } }).catch(() => []);
+    const seen = new Set();
+    const audience = [];
+    for (const u of users)  if (u.email && !seen.has(u.email.toLowerCase())) { seen.add(u.email.toLowerCase()); audience.push({ email: u.email, name: u.name }); }
+    for (const s of subs)   if (s.email && !seen.has(s.email.toLowerCase())) { seen.add(s.email.toLowerCase()); audience.push({ email: s.email, name: "" }); }
+
+    console.log(`📨 Sending new-post notification to ${audience.length} recipients for "${post.title}"`);
+    let sent = 0, failed = 0;
+    for (const r of audience) {
+      try {
+        await emailService.sendNewBlogPostNotification({
+          to: r.email, name: r.name || "there",
+          title: post.title,
+          excerpt: post.excerpt || post.metaDescription,
+          url: `${(process.env.FRONTEND_URL || "https://splitsubs.com")}/blog/${post.slug}`,
+          coverImage: post.coverImage,
+          authorName: post.authorName,
+          readingMinutes: post.readingMinutes,
+        });
+        sent++;
+      } catch (e) { failed++; }
+      await new Promise(r => setTimeout(r, 500)); // 2/sec
+    }
+    console.log(`📨 Blog notification done: ${sent} sent, ${failed} failed`);
+  } catch (err) {
+    console.error("notifyNewBlogPost error:", err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BLOG / SEO
+// ═══════════════════════════════════════════════════════════════════════════
+const { marked } = require("marked");
+const slugify = require("slugify");
+marked.setOptions({ gfm: true, breaks: true, headerIds: true });
+
+const SITE_URL = process.env.FRONTEND_URL || "https://splitsubs.com";
+const SITE_NAME = "SplitSubs";
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function readingTime(text) {
+  const words = String(text || "").trim().split(/\s+/).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function ensureUniqueSlug(base, currentId = null) {
+  return prisma.blogPost.findFirst({ where: { slug: base, NOT: currentId ? { id: currentId } : undefined } })
+    .then(existing => existing ? `${base}-${Date.now().toString(36).slice(-4)}` : base);
+}
+
+// ── SSR: blog list page ────────────────────────────────────────────────────
+app.get("/blog", async (req, res) => {
+  try {
+    const posts = await prisma.blogPost.findMany({
+      where: { status: "published", reviewStatus: "approved" },
+      orderBy: { publishedAt: "desc" },
+      take: 50,
+    });
+    const html = renderBlogListHtml(posts, req);
+    res.set("Content-Type", "text/html; charset=utf-8").send(html);
+  } catch (err) {
+    console.error("Blog list SSR error:", err);
+    res.status(500).send("Error rendering blog");
+  }
+});
+
+// ── SSR: single post page ──────────────────────────────────────────────────
+app.get("/blog/:slug", async (req, res) => {
+  try {
+    const post = await prisma.blogPost.findUnique({ where: { slug: req.params.slug } });
+    if (!post || post.status !== "published" || post.reviewStatus !== "approved") {
+      return res.status(404).send(renderNotFoundHtml(req.params.slug));
+    }
+    // Increment view count async
+    prisma.blogPost.update({ where: { id: post.id }, data: { viewCount: { increment: 1 } } }).catch(() => {});
+    // Related posts (same category, exclude current)
+    const related = await prisma.blogPost.findMany({
+      where: { status: "published", reviewStatus: "approved", category: post.category, NOT: { id: post.id } },
+      orderBy: { publishedAt: "desc" }, take: 3,
+    });
+    const html = renderBlogPostHtml(post, related, req);
+    res.set("Content-Type", "text/html; charset=utf-8").send(html);
+  } catch (err) {
+    console.error("Blog post SSR error:", err);
+    res.status(500).send("Error rendering blog post");
+  }
+});
+
+// ── sitemap.xml ────────────────────────────────────────────────────────────
+app.get("/sitemap.xml", async (req, res) => {
+  try {
+    const posts = await prisma.blogPost.findMany({
+      where: { status: "published", reviewStatus: "approved", noIndex: false },
+      orderBy: { publishedAt: "desc" },
+      select: { slug: true, updatedAt: true },
+    });
+    const urls = [
+      { loc: SITE_URL + "/", priority: "1.0", changefreq: "daily" },
+      { loc: SITE_URL + "/groups", priority: "0.9", changefreq: "hourly" },
+      { loc: SITE_URL + "/blog", priority: "0.8", changefreq: "daily" },
+      ...posts.map(p => ({
+        loc: `${SITE_URL}/blog/${p.slug}`,
+        lastmod: p.updatedAt.toISOString(),
+        priority: "0.7", changefreq: "weekly",
+      })),
+    ];
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map(u => `  <url>
+    <loc>${escapeHtml(u.loc)}</loc>
+    ${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ""}
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join("\n")}
+</urlset>`;
+    res.set("Content-Type", "application/xml; charset=utf-8").send(xml);
+  } catch (err) {
+    res.status(500).send("Sitemap error");
+  }
+});
+
+// ── robots.txt ─────────────────────────────────────────────────────────────
+app.get("/robots.txt", (req, res) => {
+  res.set("Content-Type", "text/plain").send(`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-login
+Disallow: /payment-callback
+Disallow: /unsubscribe
+
+Sitemap: ${SITE_URL}/sitemap.xml
+`);
+});
+
+// ── JSON API ───────────────────────────────────────────────────────────────
+app.get("/api/blog/my", requireRole("moderator", "superadmin"), async (req, res) => {
+  const where = req.user.role === "superadmin"
+    ? {}
+    : { authorId: req.user.id };
+  const posts = await prisma.blogPost.findMany({ where, orderBy: { updatedAt: "desc" } });
+  res.json(posts);
+});
+
+app.get("/api/blog", async (req, res) => {
+  const { category, tag, status } = req.query;
+  const where = {};
+  if (status === "all" && req.headers.authorization) {
+    // Auth users with admin role can see all
+    try {
+      const d = jwt.verify(req.headers.authorization.replace("Bearer ", ""), JWT_SECRET);
+      if (d.role !== "superadmin") where.status = "published";
+    } catch { where.status = "published"; }
+  } else {
+    where.status = "published";
+    where.reviewStatus = "approved";
+  }
+  if (category) where.category = category;
+  if (tag)      where.tags = { has: tag };
+  const posts = await prisma.blogPost.findMany({
+    where, orderBy: { publishedAt: "desc" }, take: 100,
+  });
+  res.json(posts);
+});
+
+app.get("/api/blog/:slug", async (req, res) => {
+  const post = await prisma.blogPost.findUnique({ where: { slug: req.params.slug } });
+  if (!post) return res.status(404).json({ error: "Not found" });
+  res.json(post);
+});
+
+app.post("/api/blog", requireRole("moderator", "superadmin"), async (req, res) => {
+  try {
+    const { title, content, metaDescription, excerpt, coverImage, coverImageAlt,
+            category, tags, metaTitle, ogImage, noIndex, status, authorBio } = req.body;
+    if (!title || !content || !metaDescription) {
+      return res.status(400).json({ error: "title, content, metaDescription required" });
+    }
+    const isAdmin = req.user.role === "superadmin";
+    const author = isAdmin
+      ? { id: "superadmin", name: process.env.SUPERADMIN_DISPLAY_NAME || "SplitSubs Admin" }
+      : { id: req.user.id, name: (await prisma.user.findUnique({ where: { id: req.user.id } }))?.name || "Author" };
+
+    const baseSlug = slugify(title, { lower: true, strict: true }).slice(0, 80) || "post";
+    const slug = await ensureUniqueSlug(baseSlug);
+
+    const post = await prisma.blogPost.create({
+      data: {
+        slug, title: String(title).slice(0, 200),
+        metaTitle: metaTitle ? String(metaTitle).slice(0, 70) : null,
+        metaDescription: String(metaDescription).slice(0, 200),
+        excerpt: excerpt ? String(excerpt).slice(0, 300) : null,
+        content: String(content),
+        coverImage:    coverImage    || null,
+        coverImageAlt: coverImageAlt || null,
+        category:      category      || "general",
+        tags:          Array.isArray(tags) ? tags.slice(0, 10) : [],
+        authorId:      author.id,
+        authorName:    author.name,
+        authorBio:     authorBio || null,
+        status:        status === "published" ? (isAdmin ? "published" : "draft") : "draft",
+        reviewStatus:  isAdmin ? "approved" : "pending",
+        ogImage:       ogImage || coverImage || null,
+        noIndex:       !!noIndex,
+        readingMinutes: readingTime(content),
+        publishedAt:   status === "published" && isAdmin ? new Date() : null,
+      },
+    });
+    res.status(201).json(post);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put("/api/blog/:id", requireRole("moderator", "superadmin"), async (req, res) => {
+  const post = await prisma.blogPost.findUnique({ where: { id: req.params.id } });
+  if (!post) return res.status(404).json({ error: "Not found" });
+  if (post.authorId !== req.user.id && req.user.role !== "superadmin") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const isAdmin = req.user.role === "superadmin";
+  const { title, content, metaDescription, excerpt, coverImage, coverImageAlt,
+          category, tags, metaTitle, ogImage, noIndex, status, authorBio } = req.body;
+  const data = {
+    ...(title           !== undefined && { title: String(title).slice(0, 200) }),
+    ...(metaTitle       !== undefined && { metaTitle: metaTitle ? String(metaTitle).slice(0, 70) : null }),
+    ...(metaDescription !== undefined && { metaDescription: String(metaDescription).slice(0, 200) }),
+    ...(excerpt         !== undefined && { excerpt: excerpt ? String(excerpt).slice(0, 300) : null }),
+    ...(content         !== undefined && { content: String(content), readingMinutes: readingTime(content) }),
+    ...(coverImage      !== undefined && { coverImage }),
+    ...(coverImageAlt   !== undefined && { coverImageAlt }),
+    ...(category        !== undefined && { category }),
+    ...(tags            !== undefined && { tags: Array.isArray(tags) ? tags.slice(0, 10) : [] }),
+    ...(ogImage         !== undefined && { ogImage }),
+    ...(noIndex         !== undefined && { noIndex: !!noIndex }),
+    ...(authorBio       !== undefined && { authorBio }),
+  };
+  if (status !== undefined) {
+    if (status === "published" && isAdmin) {
+      data.status = "published";
+      if (!post.publishedAt) data.publishedAt = new Date();
+    } else if (status === "draft" || status === "archived") {
+      data.status = status;
+    } else if (status === "published" && !isAdmin) {
+      data.reviewStatus = "pending";
+    }
+  }
+  const updated = await prisma.blogPost.update({ where: { id: post.id }, data });
+  res.json(updated);
+});
+
+app.delete("/api/blog/:id", requireRole("moderator", "superadmin"), async (req, res) => {
+  const post = await prisma.blogPost.findUnique({ where: { id: req.params.id } });
+  if (!post) return res.status(404).json({ error: "Not found" });
+  if (post.authorId !== req.user.id && req.user.role !== "superadmin") return res.status(403).json({ error: "Forbidden" });
+  await prisma.blogPost.delete({ where: { id: post.id } });
+  res.json({ message: "Deleted" });
+});
+
+// Admin review queue
+app.get("/api/admin/blog/pending", requireSuperAdmin, async (req, res) => {
+  const posts = await prisma.blogPost.findMany({
+    where: { reviewStatus: "pending" }, orderBy: { createdAt: "desc" },
+  });
+  res.json(posts);
+});
+app.patch("/api/admin/blog/:id/review", requireSuperAdmin, async (req, res) => {
+  const { decision, note = "" } = req.body;
+  if (!["approved", "rejected"].includes(decision)) return res.status(400).json({ error: "decision invalid" });
+  const post = await prisma.blogPost.findUnique({ where: { id: req.params.id } });
+  if (!post) return res.status(404).json({ error: "Not found" });
+  const data = decision === "approved"
+    ? { reviewStatus: "approved", status: "published", publishedAt: post.publishedAt || new Date(), rejectionNote: null }
+    : { reviewStatus: "rejected", status: "draft", rejectionNote: note };
+  const reviewed = await prisma.blogPost.update({ where: { id: post.id }, data });
+  res.json(reviewed);
+});
+
+// ── HTML renderers ─────────────────────────────────────────────────────────
+function siteHeader(req) {
+  return `<header class="ssr-header">
+    <a href="/" class="ssr-logo">⚡ ${SITE_NAME}</a>
+    <nav class="ssr-nav" id="ssr-nav">
+      <a href="/">Home</a>
+      <a href="/groups">Browse Groups</a>
+      <a href="/blog" class="active">Blog</a>
+      <a href="/login" id="ssr-login">Log In</a>
+      <a href="/signup" id="ssr-signup" class="cta">Sign Up</a>
+    </nav>
+  </header>
+  <script>
+  (function() {
+    try {
+      var token = sessionStorage.getItem('sp_token');
+      var userJson = sessionStorage.getItem('sp_user');
+      if (token && userJson) {
+        var user = JSON.parse(userJson);
+        var loginLink = document.getElementById('ssr-login');
+        var signupLink = document.getElementById('ssr-signup');
+        if (loginLink) loginLink.remove();
+        if (signupLink) {
+          signupLink.textContent = '👤 ' + (user.name || 'Account');
+          if (user.role === 'superadmin') signupLink.href = '/admin';
+          else if (user.role === 'moderator') signupLink.href = '/mod-dash';
+          else signupLink.href = '/my-groups';
+        }
+        // Add Editor link for mod/admin
+        if (user.role === 'superadmin' || user.role === 'moderator') {
+          var nav = document.getElementById('ssr-nav');
+          var editor = document.createElement('a');
+          editor.href = '/blog-editor';
+          editor.textContent = '✏️ Editor';
+          nav.insertBefore(editor, signupLink);
+        }
+      }
+    } catch (e) {}
+  })();
+  </script>`;
+}
+
+function siteFooter() {
+  return `<footer class="ssr-footer">
+    <div>
+      <strong>⚡ ${SITE_NAME}</strong> · Share legally, save smartly.<br/>
+      <small>© ${new Date().getFullYear()} ${SITE_NAME}. All group buys use official family/group plans only.</small>
+    </div>
+  </footer>`;
+}
+
+function ssrCss() {
+  return `<style>
+    body { margin:0; font-family:'DM Sans','Segoe UI',Arial,sans-serif; background:#0a0a0f; color:#f0f0f8; line-height:1.65; }
+    .ssr-header { display:flex; justify-content:space-between; align-items:center; padding:18px 32px; border-bottom:1px solid rgba(255,255,255,0.07); background:#14141e; position:sticky; top:0; z-index:10; }
+    .ssr-logo { font-family:'Syne','Segoe UI',sans-serif; font-weight:800; font-size:1.15rem; color:#fff; text-decoration:none; }
+    .ssr-nav { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+    .ssr-nav a { color:#aaaacc; text-decoration:none; font-size:0.92rem; padding:6px 10px; border-radius:6px; }
+    .ssr-nav a:hover, .ssr-nav a.active { color:#fff; background:rgba(255,255,255,0.05); }
+    .ssr-nav a.cta { background:linear-gradient(90deg,#7c6aff,#ff6a8e); color:#fff; padding:8px 18px; border-radius:8px; font-weight:600; }
+    main { max-width:760px; margin:48px auto; padding:0 24px; }
+    main.list { max-width:1080px; }
+    h1, h2, h3, h4 { font-family:'Syne','Segoe UI',sans-serif; color:#fff; line-height:1.25; }
+    h1 { font-size:2.4rem; margin:0 0 14px; letter-spacing:-0.02em; }
+    h2 { font-size:1.7rem; margin:32px 0 12px; }
+    h3 { font-size:1.3rem; margin:24px 0 10px; }
+    p { color:#cccce0; margin:0 0 18px; font-size:1.05rem; }
+    a { color:#7c6aff; }
+    .post-meta { color:#888; font-size:0.85rem; margin-bottom:24px; }
+    .post-cover { width:100%; border-radius:14px; margin:24px 0; }
+    .article-content { font-size:1.05rem; }
+    .article-content img { max-width:100%; border-radius:10px; }
+    .article-content code { background:#1f1f2e; padding:2px 6px; border-radius:4px; font-family:'Courier New',monospace; font-size:0.9em; }
+    .article-content pre { background:#14141e; border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:16px; overflow:auto; }
+    .article-content pre code { background:none; padding:0; }
+    .article-content blockquote { border-left:3px solid #7c6aff; margin:18px 0; padding:8px 16px; color:#aaaacc; font-style:italic; background:rgba(124,106,255,0.05); border-radius:0 8px 8px 0; }
+    .tags { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0; }
+    .tag { background:rgba(124,106,255,0.15); color:#9d8eff; border:1px solid rgba(124,106,255,0.25); border-radius:99px; padding:4px 12px; font-size:0.78rem; text-decoration:none; }
+    .author-card { background:#14141e; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:20px; margin:36px 0; }
+    .author-card strong { color:#fff; display:block; margin-bottom:6px; }
+    .related { margin-top:48px; padding-top:32px; border-top:1px solid rgba(255,255,255,0.07); }
+    .related h2 { font-size:1.3rem; margin-bottom:18px; }
+    .related-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+    .related-card { background:#14141e; border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:18px; text-decoration:none; color:inherit; transition:border-color 0.18s; }
+    .related-card:hover { border-color:#7c6aff; }
+    .related-card .rc-title { color:#fff; font-weight:700; font-size:0.98rem; margin-bottom:6px; }
+    .related-card p { color:#aaaacc; font-size:0.84rem; margin:0; }
+    .post-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px; margin-top:24px; }
+    .post-card { background:#14141e; border:1px solid rgba(255,255,255,0.08); border-radius:14px; overflow:hidden; text-decoration:none; color:inherit; transition:transform 0.18s, border-color 0.18s; }
+    .post-card:hover { transform:translateY(-3px); border-color:#7c6aff; }
+    .post-card img { width:100%; height:180px; object-fit:cover; display:block; }
+    .post-card .pc-body { padding:18px; }
+    .post-card h2 { font-size:1.15rem; margin:0 0 8px; }
+    .post-card p { font-size:0.88rem; color:#aaaacc; margin:0 0 12px; }
+    .post-card .pc-meta { font-size:0.74rem; color:#666; }
+    .ssr-footer { text-align:center; padding:32px 24px; border-top:1px solid rgba(255,255,255,0.07); color:#888; font-size:0.84rem; margin-top:80px; }
+    @media (max-width:640px) {
+      h1 { font-size:1.7rem; } h2 { font-size:1.35rem; }
+      .ssr-header { padding:14px 18px; }
+      .ssr-nav { gap:10px; } .ssr-nav a { font-size:0.84rem; padding:4px 7px; }
+      main { padding:0 16px; margin:28px auto; }
+    }
+  </style>`;
+}
+
+function renderBlogListHtml(posts, req) {
+  const title = `Blog — ${SITE_NAME}: Save on Premium Subscriptions Legally`;
+  const desc  = `Guides, tips, and stories on splitting subscription costs legally. Save up to 70% on Spotify, Netflix, Disney+ and more by joining official family plans.`;
+  const url   = SITE_URL + "/blog";
+  const cards = posts.map(p => `
+    <a class="post-card" href="/blog/${p.slug}">
+      ${p.coverImage ? `<img src="${escapeHtml(p.coverImage)}" alt="${escapeHtml(p.coverImageAlt || p.title)}" loading="lazy"/>` : ""}
+      <div class="pc-body">
+        <h2>${escapeHtml(p.title)}</h2>
+        <p>${escapeHtml(p.excerpt || p.metaDescription || "").slice(0, 140)}${(p.excerpt || p.metaDescription || "").length > 140 ? "…" : ""}</p>
+        <div class="pc-meta">${new Date(p.publishedAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} · ${p.readingMinutes} min read · ${escapeHtml(p.category)}</div>
+      </div>
+    </a>`).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(desc)}"/>
+<link rel="canonical" href="${url}"/>
+<meta property="og:type" content="website"/>
+<meta property="og:title" content="${escapeHtml(title)}"/>
+<meta property="og:description" content="${escapeHtml(desc)}"/>
+<meta property="og:url" content="${url}"/>
+<meta property="og:site_name" content="${SITE_NAME}"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="${escapeHtml(title)}"/>
+<meta name="twitter:description" content="${escapeHtml(desc)}"/>
+<script type="application/ld+json">${JSON.stringify({
+  "@context":"https://schema.org","@type":"Blog","name":SITE_NAME+" Blog","url":url,
+  "blogPost": posts.slice(0,10).map(p=>({"@type":"BlogPosting","headline":p.title,"url":`${SITE_URL}/blog/${p.slug}`,"datePublished":p.publishedAt,"author":{"@type":"Person","name":p.authorName}}))
+})}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+${ssrCss()}
+</head>
+<body>
+${siteHeader(req)}
+<main class="list">
+  <h1>The SplitSubs Blog</h1>
+  <p class="post-meta">Guides, tips, and stories on splitting subscriptions legally and saving on premium plans.</p>
+  ${posts.length === 0 ? `<p>No posts yet. Check back soon.</p>` : `<div class="post-grid">${cards}</div>`}
+</main>
+${siteFooter()}
+</body></html>`;
+}
+
+function renderBlogPostHtml(post, related, req) {
+  const title = post.metaTitle || `${post.title} | ${SITE_NAME}`;
+  const url   = `${SITE_URL}/blog/${post.slug}`;
+  const og    = post.ogImage || post.coverImage || `${SITE_URL}/og-default.png`;
+  const html  = marked.parse(post.content || "");
+  const tags  = (post.tags || []).map(t => `<a href="/blog?tag=${encodeURIComponent(t)}" class="tag">#${escapeHtml(t)}</a>`).join("");
+  const relatedCards = related.map(r => `
+    <a class="related-card" href="/blog/${r.slug}">
+      <div class="rc-title">${escapeHtml(r.title)}</div>
+      <p>${escapeHtml((r.excerpt || r.metaDescription || "").slice(0, 90))}${(r.excerpt || r.metaDescription || "").length > 90 ? "…" : ""}</p>
+    </a>`).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(post.metaDescription)}"/>
+<link rel="canonical" href="${escapeHtml(post.canonicalUrl || url)}"/>
+${post.noIndex ? '<meta name="robots" content="noindex,nofollow"/>' : '<meta name="robots" content="index,follow"/>'}
+<meta name="author" content="${escapeHtml(post.authorName)}"/>
+<meta property="og:type" content="article"/>
+<meta property="og:title" content="${escapeHtml(post.title)}"/>
+<meta property="og:description" content="${escapeHtml(post.metaDescription)}"/>
+<meta property="og:url" content="${url}"/>
+<meta property="og:site_name" content="${SITE_NAME}"/>
+<meta property="og:image" content="${escapeHtml(og)}"/>
+<meta property="article:published_time" content="${post.publishedAt ? post.publishedAt.toISOString() : ""}"/>
+<meta property="article:modified_time" content="${post.updatedAt.toISOString()}"/>
+<meta property="article:author" content="${escapeHtml(post.authorName)}"/>
+${(post.tags||[]).map(t => `<meta property="article:tag" content="${escapeHtml(t)}"/>`).join("\n")}
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="${escapeHtml(post.title)}"/>
+<meta name="twitter:description" content="${escapeHtml(post.metaDescription)}"/>
+<meta name="twitter:image" content="${escapeHtml(og)}"/>
+<script type="application/ld+json">${JSON.stringify({
+  "@context":"https://schema.org","@type":"BlogPosting",
+  "headline": post.title, "description": post.metaDescription,
+  "image": og, "datePublished": post.publishedAt, "dateModified": post.updatedAt,
+  "author": { "@type":"Person", "name": post.authorName },
+  "publisher": { "@type":"Organization", "name": SITE_NAME, "logo":{"@type":"ImageObject","url":SITE_URL+"/logo512.png"} },
+  "mainEntityOfPage": { "@type":"WebPage", "@id": url },
+  "keywords": (post.tags||[]).join(", "),
+})}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+${ssrCss()}
+</head>
+<body>
+${siteHeader(req)}
+<main>
+  <article>
+    <h1>${escapeHtml(post.title)}</h1>
+    <p class="post-meta">By <strong>${escapeHtml(post.authorName)}</strong> · ${new Date(post.publishedAt).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})} · ${post.readingMinutes} min read · ${escapeHtml(post.category)}</p>
+    ${post.coverImage ? `<img class="post-cover" src="${escapeHtml(post.coverImage)}" alt="${escapeHtml(post.coverImageAlt || post.title)}"/>` : ""}
+    <div class="article-content">${html}</div>
+    ${tags ? `<div class="tags">${tags}</div>` : ""}
+    ${post.authorBio ? `<div class="author-card"><strong>About ${escapeHtml(post.authorName)}</strong>${escapeHtml(post.authorBio)}</div>` : ""}
+  </article>
+  ${related.length > 0 ? `<section class="related"><h2>Related Posts</h2><div class="related-grid">${relatedCards}</div></section>` : ""}
+</main>
+${siteFooter()}
+</body></html>`;
+}
+
+function renderNotFoundHtml(slug) {
+  return `<!DOCTYPE html><html><head><title>Not Found — ${SITE_NAME}</title><meta name="robots" content="noindex"/>${ssrCss()}</head>
+<body>${siteHeader({})}
+<main><h1>Post not found</h1><p>The post "${escapeHtml(slug)}" doesn't exist or has been removed. Browse <a href="/blog">all posts</a> instead.</p></main>
+${siteFooter()}</body></html>`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUPPORT CHAT + PRESENCE
+// ═══════════════════════════════════════════════════════════════════════════
+const ONLINE_WINDOW_MS = 90 * 1000;
+
+app.post("/api/presence/heartbeat", requireAuth, async (req, res) => {
+  await prisma.userPresence.upsert({
+    where: { userId: req.user.id },
+    create: { userId: req.user.id, online: true, lastSeen: new Date() },
+    update: { online: true, lastSeen: new Date() },
+  });
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/presence/heartbeat", requireSuperAdmin, async (req, res) => {
+  await prisma.userPresence.upsert({
+    where: { userId: "superadmin" },
+    create: { userId: "superadmin", online: true, lastSeen: new Date() },
+    update: { online: true, lastSeen: new Date() },
+  });
+  res.json({ ok: true });
+});
+
+app.get("/api/presence/superadmin", async (req, res) => {
+  const p = await prisma.userPresence.findUnique({ where: { userId: "superadmin" } });
+  if (!p) return res.json({ online: false, lastSeen: null });
+  const ageMs = Date.now() - new Date(p.lastSeen).getTime();
+  res.json({ online: ageMs < ONLINE_WINDOW_MS, lastSeen: p.lastSeen });
+});
+
+app.get("/api/support/me", requireAuth, async (req, res) => {
+  let thread = await prisma.supportThread.findUnique({
+    where: { userId: req.user.id },
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
+  if (thread && thread.unreadByUser > 0) {
+    await prisma.supportThread.update({ where: { id: thread.id }, data: { unreadByUser: 0 } });
+    thread.unreadByUser = 0;
+  }
+  res.json({ thread });
+});
+
+app.get("/api/support/me/unread", requireAuth, async (req, res) => {
+  const t = await prisma.supportThread.findUnique({ where: { userId: req.user.id }, select: { unreadByUser: true } });
+  res.json({ count: t?.unreadByUser || 0 });
+});
+
+app.post("/api/support/me/message", requireAuth, async (req, res) => {
+  const body = (req.body?.body || "").trim().slice(0, 2000);
+  if (!body) return res.status(400).json({ error: "Empty message" });
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  let thread = await prisma.supportThread.findUnique({ where: { userId: user.id } });
+  if (!thread) {
+    thread = await prisma.supportThread.create({
+      data: {
+        userId: user.id, userName: user.name, userEmail: user.email, userRole: user.role,
+        lastMessage: body, lastSenderRole: user.role, unreadByAdmin: 1,
+      },
+    });
+  } else {
+    await prisma.supportThread.update({
+      where: { id: thread.id },
+      data: { lastMessage: body, lastSenderRole: user.role, unreadByAdmin: { increment: 1 }, updatedAt: new Date() },
+    });
+  }
+  const msg = await prisma.supportMessage.create({
+    data: { threadId: thread.id, senderId: user.id, senderRole: user.role, body },
+  });
+  res.status(201).json({ message: msg });
+});
+
+app.get("/api/admin/support/threads", requireSuperAdmin, async (req, res) => {
+  const threads = await prisma.supportThread.findMany({ orderBy: { updatedAt: "desc" } });
+  const userIds = threads.map(t => t.userId);
+  const presences = await prisma.userPresence.findMany({ where: { userId: { in: userIds } } });
+  const presMap = Object.fromEntries(presences.map(p => [p.userId, p]));
+  res.json(threads.map(t => {
+    const p = presMap[t.userId];
+    const ageMs = p ? Date.now() - new Date(p.lastSeen).getTime() : Infinity;
+    return { ...t, online: p ? ageMs < ONLINE_WINDOW_MS : false, lastSeen: p?.lastSeen || null };
+  }));
+});
+
+app.get("/api/admin/support/threads/:id", requireSuperAdmin, async (req, res) => {
+  const thread = await prisma.supportThread.findUnique({
+    where: { id: req.params.id },
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!thread) return res.status(404).json({ error: "Not found" });
+  if (thread.unreadByAdmin > 0) {
+    await prisma.supportThread.update({ where: { id: thread.id }, data: { unreadByAdmin: 0 } });
+    thread.unreadByAdmin = 0;
+  }
+  const p = await prisma.userPresence.findUnique({ where: { userId: thread.userId } });
+  const ageMs = p ? Date.now() - new Date(p.lastSeen).getTime() : Infinity;
+  thread.online = p ? ageMs < ONLINE_WINDOW_MS : false;
+  thread.lastSeen = p?.lastSeen || null;
+  res.json(thread);
+});
+
+app.post("/api/admin/support/threads/:id/reply", requireSuperAdmin, async (req, res) => {
+  const body = (req.body?.body || "").trim().slice(0, 2000);
+  if (!body) return res.status(400).json({ error: "Empty message" });
+  const thread = await prisma.supportThread.findUnique({ where: { id: req.params.id } });
+  if (!thread) return res.status(404).json({ error: "Not found" });
+  const msg = await prisma.supportMessage.create({
+    data: { threadId: thread.id, senderId: "superadmin", senderRole: "superadmin", body },
+  });
+  await prisma.supportThread.update({
+    where: { id: thread.id },
+    data: { lastMessage: body, lastSenderRole: "superadmin", unreadByUser: { increment: 1 }, updatedAt: new Date() },
+  });
+  await prisma.userPresence.upsert({
+    where: { userId: "superadmin" },
+    create: { userId: "superadmin", online: true, lastSeen: new Date() },
+    update: { online: true, lastSeen: new Date() },
+  });
+  res.json({ message: msg });
+});
+
 app.listen(PORT, async () => {
   const fee = await getPlatformFeePercent();
-  console.log(`\n🚀 SplitPass API  →  http://localhost:${PORT}`);
+  console.log(`\n🚀 SplitSubs API  →  http://localhost:${PORT}`);
   console.log(`🗄️  Database      →  PostgreSQL (Prisma)`);
   console.log(`💰 Platform fee   →  ${fee}%`);
   console.log(`🌍 PesaPal env    →  ${process.env.PESAPAL_ENV || "sandbox"}`);
   console.log(`📧 Email enabled  →  ${process.env.EMAIL_ENABLED === "true" ? "YES" : "NO (stub mode)"}\n`);
+  await ensureSuperAdminUser();
   try { await pesapal.registerIPN(); } catch (e) { console.warn("⚠️  IPN pre-reg skipped:", e.message); }
   async function runScheduler() { try { await emailService.runExpiryScheduler(prisma); } catch (e) { console.error("Scheduler error:", e.message); } }
   runScheduler();
