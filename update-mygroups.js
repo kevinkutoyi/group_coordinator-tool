@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
+const fs = require('fs');
+
+const content = `import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
 
 function daysLeft(expiresAt) {
@@ -259,3 +261,8 @@ export default function MyGroupsPage({ navigate }) {
     </div>
   );
 }
+`;
+
+fs.writeFileSync('frontend/src/pages/MyGroupsPage.js', content);
+console.log('✓ MyGroupsPage.js written');
+console.log('✅ Done!');
