@@ -561,6 +561,34 @@ app.post("/api/groups/:id/join", requireRole("customer", "moderator", "superadmi
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SUBSCRIPTION RENEWAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.post("/api/groups/:id/renew", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const member = await prisma.groupMember.findFirst({
+    where: { groupId: group.id, userId: req.user.id, role: { not: "organizer" } },
+  });
+  if (!member) return res.status(404).json({ error: "You are not a member of this group" });
+  if (member.paymentStatus === "pending") return res.status(400).json({ error: "You have a pending payment — complete that first." });
+  const fixedMonths = CYCLE_MONTHS[group.billingCycle] || 1;
+  const fees = await calcFee(group.pricePerSlot, fixedMonths);
+  const updated = await prisma.groupMember.update({
+    where: { id: member.id },
+    data: {
+      paymentStatus: "pending",
+      memberPays:    fees.memberPays,
+      platformFee:   fees.platformFee,
+      organizerGets: fees.organizerGets,
+      moderatorOwed: fees.moderatorOwed,
+      months:        fixedMonths,
+    },
+  });
+  res.json(updated);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  PESAPAL PAYMENT
 // ═══════════════════════════════════════════════════════════════════════════
 
