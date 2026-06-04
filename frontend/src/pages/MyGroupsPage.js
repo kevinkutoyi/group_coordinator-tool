@@ -129,7 +129,7 @@ export default function MyGroupsPage({ navigate }) {
                   const isExpiring  = !isExpired && days !== null && days <= 7;
                   const isPending   = m.paymentStatus === "pending";
                   const isConfirmed = m.paymentStatus === "confirmed" && !isExpired;
-                  const showRenew   = isExpired || isExpiring;
+                  const showRenew   = (isExpired || isExpiring) && !isPending;
                   const borderColor = isExpired ? "var(--error)" : isExpiring ? "var(--warning)" : isPending ? "rgba(124,106,255,0.4)" : "var(--border)";
 
                   return (
