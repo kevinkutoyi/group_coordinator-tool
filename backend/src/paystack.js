@@ -28,9 +28,9 @@ function paystackRequest(method, path, body = null) {
 
 async function initializeTransaction({ email, amount, reference, callbackUrl, metadata }) {
   const result = await paystackRequest("POST", "/transaction/initialize", {
-    email, amount: Math.round(amount * 100),
+    email, amount: Math.round(amount * 130 * 100), // Convert USD to KES (1 USD = 130 KES), then to cents
     reference, callback_url: callbackUrl,
-    currency: "USD", metadata: metadata || {},
+    currency: "KES", metadata: metadata || {},
   });
   if (!result.status) throw new Error(result.message || "Paystack initialization failed");
   return {
@@ -45,7 +45,7 @@ async function verifyTransaction(reference) {
   if (!result.status) throw new Error(result.message || "Verification failed");
   return {
     status:    result.data.status,
-    amount:    result.data.amount / 100,
+    amount:    result.data.amount / 100 / 130, // Convert from KES cents back to USD
     currency:  result.data.currency,
     reference: result.data.reference,
     email:     result.data.customer && result.data.customer.email,
