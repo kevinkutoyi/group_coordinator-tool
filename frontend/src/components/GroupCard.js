@@ -19,6 +19,8 @@ const SERVICE_GRADIENTS = {
   hbo:     ["#5822B4","#3d1880"],
 };
 
+const KES_RATE = 130;
+
 export default function GroupCard({ group, onClick }) {
   const filled    = group.memberCount || 0;
   const pct       = Math.round((filled / group.maxSlots) * 100);
@@ -109,6 +111,9 @@ export default function GroupCard({ group, onClick }) {
           <div className="gc-price-meta">
             <span className="gc-full-price">${group.totalPrice}/mo full plan</span>
             <span className="gc-save-badge">Save ${(group.totalPrice - group.pricePerSlot).toFixed(2)}</span>
+          </div>
+          <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 6 }}>
+            KES {Math.round(group.pricePerSlot * KES_RATE)}/{group.billingCycle === "monthly" ? "mo" : "period"}
           </div>
         </div>
 
