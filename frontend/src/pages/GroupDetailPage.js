@@ -321,7 +321,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
               <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
               {m.userId === currentUserId && m.paymentStatus === "pending" && (
                 <button className="btn btn-sm pay-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
-                  {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay Now"}
+                  {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
                 </button>
               )}
 
