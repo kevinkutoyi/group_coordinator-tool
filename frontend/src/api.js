@@ -91,7 +91,7 @@ export const api = {
 
   // Payments
   initiatePay:  (body)       => req("/paystack/initiate",  { method: "POST", body }),
-  verifyPay:    (reference)  => req(`/paystack/verify?reference=${reference}`),
+  verifyPay:    (reference, memberId, groupId) => req(`/paystack/verify?reference=${reference}${memberId ? "&memberId=" + memberId : ""}${groupId ? "&groupId=" + groupId : ""}`  ),
 
   // Newsletter
   getSubscribers:       ()       => req("/admin/newsletter/subscribers"),
