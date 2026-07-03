@@ -103,16 +103,15 @@ export default function GroupCard({ group, onClick }) {
 
         {/* Price block */}
         <div className="gc-price-block">
-          <div className="gc-price-main">
-            <span className="gc-currency">$</span>
-            <span className="gc-amount">{group.pricePerSlot}</span>
-            <span className="gc-price-sub">/{group.billingCycle === "monthly" ? "mo" : "period"}</span>
-          </div>
-          <div style={{ fontSize: "0.76rem", marginTop: 3, marginBottom: 4 }}>
-            <span style={{ color: "var(--text)", fontWeight: 600 }}>USD {group.pricePerSlot}</span>
-            <span style={{ margin: "0 5px", opacity: 0.4 }}>·</span>
-            <span style={{ color: "var(--accent)", fontWeight: 600 }}>KES {Math.round(group.pricePerSlot * KES_RATE)}</span>
-            <span style={{ color: "var(--muted)" }}> / {group.billingCycle === "monthly" ? "mo" : "period"}</span>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text)", lineHeight: 1.2 }}>
+              <span style={{ color: "var(--accent)" }}>USD {group.pricePerSlot}</span>
+              <span style={{ fontSize: "0.9rem", fontWeight: 400, color: "var(--muted)", margin: "0 8px" }}>·</span>
+              <span style={{ color: "var(--accent2)" }}>KES {Math.round(group.pricePerSlot * KES_RATE)}</span>
+            </div>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 3 }}>
+              per {group.billingCycle === "monthly" ? "month" : "period"} per slot
+            </div>
           </div>
           <div className="gc-price-meta">
             <span className="gc-full-price">${group.totalPrice}/mo full plan</span>
