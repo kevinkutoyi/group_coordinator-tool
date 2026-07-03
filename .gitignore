@@ -45,3 +45,4 @@ backend/node_modules/prisma/*.so.node
 
 # Misc
 .DS_Store
+backend/.env

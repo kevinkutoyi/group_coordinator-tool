@@ -9,8 +9,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [showJoin, setShowJoin]   = useState(false);
   const [busy, setBusy]           = useState(false);
   const [payingId, setPayingId]   = useState(null);
-  const [showCurrency, setCurrency] = useState(null);
-  const [kesToUsd, setKesToUsd]   = useState(130);
   const [msg, setMsg]             = useState(null);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
@@ -43,7 +41,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
   useEffect(() => {
     reload().finally(() => setLoading(false));
     loadCreds();
-    api.getCurrencyRate().then(r => setKesToUsd(r.KES_PER_USD)).catch(() => {});
   }, [id]);
 
   const CYCLE_MONTHS = { monthly: 1, quarterly: 3, biannually: 6, annually: 12 };
@@ -80,11 +77,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
     finally { setBusy(false); }
   }
 
-  async function handleCurrencyConfirm(member, currency) {
-    setCurrency(null);
+  async function handlePay(member) {
     setPayingId(member.id);
     try {
-      const res = await api.initiatePay({ groupId: id, memberId: member.id, currency });
+      const res = await api.initiatePay({ groupId: id, memberId: member.id });
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
   }
@@ -324,7 +320,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
               </div>
               <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
               {m.userId === currentUserId && m.paymentStatus === "pending" && (
-                <button className="btn btn-sm pesapal-btn" onClick={() => setCurrency(m)} disabled={payingId === m.id}>
+                <button className="btn btn-sm pesapal-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
                   {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay via PesaPal"}
                 </button>
               )}
@@ -343,7 +339,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     try {
                       await api.renewSlot(id);
                       await reload();
-                      setCurrency({ ...m, memberPays: group.pricePerSlot });
+                      handlePay(m);
                     } catch (err) {
                       setMsg({ type: "err", text: err.message });
                       setPayingId(null);
@@ -475,53 +471,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
         </div>
       )}
 
-      {/* ── Currency picker modal ── */}
-      {showCurrency && (() => {
-        // Derive BOTH amounts from the same canonical KES value so they are
-        // always equivalent — matches the backend initiatePay conversion logic.
-        const kesCharge = Math.round(showCurrency.memberPays * kesToUsd);  // whole shillings
-        const usdCharge = (kesCharge / kesToUsd).toFixed(2);               // back-derived USD
-        return (
-          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCurrency(null)}>
-            <div className="modal">
-              <h3>Choose Payment Currency</h3>
-              <p style={{ fontSize: "0.84rem", color: "var(--muted)", marginBottom: 20 }}>
-                Select the currency you'd like to pay in. Both options charge the same amount.
-              </p>
-              <div className="currency-grid">
-                <button className="currency-card" onClick={() => handleCurrencyConfirm(showCurrency, "KES")}>
-                  <div className="cc-flag">🇰🇪</div>
-                  <div className="cc-name">Kenyan Shilling</div>
-                  <div className="cc-code">KES</div>
-                  <div className="cc-amount">
-                    KES {kesCharge}
-                  </div>
-                  <div className="cc-rate">= ${usdCharge} USD</div>
-                  <div className="cc-methods">M-Pesa · Airtel Money · Bank</div>
-                </button>
-                <button className="currency-card" onClick={() => handleCurrencyConfirm(showCurrency, "USD")}>
-                  <div className="cc-flag">🇺🇸</div>
-                  <div className="cc-name">US Dollar</div>
-                  <div className="cc-code">USD</div>
-                  <div className="cc-amount">
-                    USD {usdCharge}
-                  </div>
-                  <div className="cc-rate">= KES {kesCharge}</div>
-                  <div className="cc-methods">Visa · Mastercard · PayPal</div>
-                </button>
-              </div>
-              <div className="info-box" style={{ marginTop: 14, marginBottom: 0, fontSize: "0.78rem" }}>
-                💡 Rate used: 1 USD = KES {kesToUsd}. Both options charge the same value —
-                KES {kesCharge} or the equivalent USD {usdCharge}.
-                KES payments go via M-Pesa, USD via card.
-              </div>
-              <div className="modal-actions">
-                <button className="btn btn-outline" onClick={() => setCurrency(null)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      
     </div>
   );
 }

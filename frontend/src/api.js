@@ -90,8 +90,8 @@ export const api = {
   joinGroup:    (id, body)   => req(`/groups/${id}/join`,  { method: "POST", body }),
 
   // Payments
-  initiatePay:  (body)       => req("/pesapal/initiate",   { method: "POST", body }),
-  verifyPay:    (orderId)    => req(`/pesapal/verify?orderId=${orderId}`),
+  initiatePay:  (body)       => req("/paystack/initiate",  { method: "POST", body }),
+  verifyPay:    (reference)  => req(`/paystack/verify?reference=${reference}`),
 
   // Newsletter
   getSubscribers:       ()       => req("/admin/newsletter/subscribers"),
@@ -110,7 +110,8 @@ export const api = {
   runExpiryScheduler:   ()       => req("/admin/expiry-scheduler",              { method: "POST" }),
 
   // Currency
-  getCurrencyRate: () => req("/currency/rate"),
+  getCurrencyRate:   () => req("/currency/rate"),
+  getPaystackConfig: () => req("/paystack/config"),
 
   // Moderator dashboard & settings
   getModeratorDashboard: ()     => req("/moderator/dashboard"),

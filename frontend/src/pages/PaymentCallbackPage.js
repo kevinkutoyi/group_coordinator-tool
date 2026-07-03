@@ -8,11 +8,11 @@ export default function PaymentCallbackPage({ params, navigate }) {
 
   useEffect(() => {
     const p = params || Object.fromEntries(new URLSearchParams(window.location.search));
-    const { orderId, groupId: gid } = p;
+    const { reference, groupId: gid } = p;
     setGroupId(gid);
-    if (!orderId) { setStatus("error"); return; }
+    if (!reference) { setStatus("error"); return; }
 
-    api.verifyPay(orderId)
+    api.verifyPay(reference)
       .then(res => {
         setData(res);
         if (res.status === "COMPLETED")      setStatus("success");

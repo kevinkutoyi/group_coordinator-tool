@@ -6,7 +6,7 @@ const jwt        = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const rateLimit  = require("express-rate-limit");
 const { PrismaClient } = require("@prisma/client");
-const pesapal    = require("./pesapal");
+const paystack   = require("./paystack");
 const { validateEmail } = require("./emailValidator");
 const emailService = require("./emailService");
 
@@ -15,6 +15,7 @@ app.set("trust proxy", 1);
 const prisma = new PrismaClient();
 const PORT   = process.env.PORT || 3001;
 const DEFAULT_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || "8");
+const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || "";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_in_production";
 
 // ── Middleware ────────────────────────────────────────────────────────────
@@ -587,13 +588,16 @@ app.post("/api/groups/:id/renew", requireRole("customer", "moderator", "superadm
   });
   res.json(updated);
 });
-
 // ═══════════════════════════════════════════════════════════════════════════
-//  PESAPAL PAYMENT
+//  PAYSTACK PAYMENT
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.post("/api/pesapal/initiate", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
-  const { groupId, memberId, currency = "KES" } = req.body;
+app.get("/api/paystack/config", (req, res) => {
+  res.json({ publicKey: PAYSTACK_PUBLIC_KEY });
+});
+
+app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
+  const { groupId, memberId } = req.body;
   if (!groupId || !memberId) return res.status(400).json({ error: "groupId and memberId required" });
 
   const [group, member] = await Promise.all([
@@ -604,51 +608,47 @@ app.post("/api/pesapal/initiate", requireRole("customer", "moderator", "superadm
   if (!member) return res.status(404).json({ error: "Membership not found" });
   if (member.paymentStatus === "confirmed") return res.status(400).json({ error: "Already paid" });
 
-  // Both amounts derived from same canonical KES value for currency parity
-  const KES_PER_USD      = parseFloat(process.env.KES_PER_USD || "130");
-  const kesAmount        = Math.round(member.memberPays * KES_PER_USD);
-  const usdAmount        = +(kesAmount / KES_PER_USD).toFixed(2);
-  const amountForPesapal = currency === "KES" ? kesAmount : usdAmount;
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
 
-  const orderId     = `SP-${Date.now()}-${uuidv4().slice(0,8).toUpperCase()}`;
-  const callbackUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment-callback?orderId=${orderId}&groupId=${groupId}&memberId=${memberId}`;
+  const reference   = "SP-" + Date.now() + "-" + uuidv4().slice(0,8).toUpperCase();
+  const callbackUrl = (process.env.FRONTEND_URL || "http://localhost:3000") + "/payment-callback?reference=" + reference + "&groupId=" + groupId + "&memberId=" + memberId;
 
   try {
-    const nameParts = member.name.split(" ");
-    const { redirectUrl, orderTrackingId } = await pesapal.submitOrder({
-      orderId, amount: amountForPesapal, currency,
-      description: `SplitSubs: ${group.serviceName} ${group.planName} × ${member.months}mo — ${member.name}`,
-      firstName: nameParts[0], lastName: nameParts.slice(1).join(" ") || "",
-      email: member.email, phone: "", callbackUrl,
+    const { authorizationUrl } = await paystack.initializeTransaction({
+      email: user.email, amount: member.memberPays,
+      reference, callbackUrl,
+      metadata: { groupId, memberId, groupName: group.serviceName + " " + group.planName, memberName: member.name, months: member.months },
     });
 
-    await prisma.pesapalOrder.create({
+    await prisma.paystackOrder.create({
       data: {
-        id: orderId, orderTrackingId, groupId, memberId,
-        userId: req.user.id, memberName: member.name, memberEmail: member.email,
+        id: reference, reference, groupId, memberId,
+        userId: req.user.id, memberName: member.name, memberEmail: user.email,
         months: member.months, baseAmount: member.baseAmount,
         platformFee: member.platformFee, moderatorOwed: member.moderatorOwed,
         organizerGets: member.moderatorOwed, moderatorId: group.organizerId,
-        memberPays: member.memberPays, chargedAmount: amountForPesapal, currency,
+        memberPays: member.memberPays, currency: "USD",
       },
     });
 
-    res.json({ redirectUrl, orderId, memberPays: member.memberPays, chargedAmount: amountForPesapal, currency, platformFee: member.platformFee });
+    res.json({ redirectUrl: authorizationUrl, reference, memberPays: member.memberPays });
   } catch (err) {
-    console.error("PesaPal initiate:", err.message);
-    res.status(502).json({ error: `Payment gateway error: ${err.message}` });
+    console.error("Paystack initiate:", err.message);
+    res.status(502).json({ error: "Payment gateway error: " + err.message });
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
 // Shared order-confirmation logic (used by both verify + IPN)
-async function confirmOrder(orderId) {
-  const order = await prisma.pesapalOrder.findUnique({ where: { id: orderId } });
+async function confirmOrder(reference) {
+  const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
   if (!order || order.status === "COMPLETED") return order;
 
-  const statusData = await pesapal.getTransactionStatus(order.orderTrackingId);
-  const code       = statusData.payment_status_description;
+  const txData = await paystack.verifyTransaction(reference);
+  const code   = txData.status;
 
-  await prisma.pesapalOrder.update({ where: { id: orderId }, data: { pesapalStatus: code } });
+  await prisma.paystackOrder.update({ where: { id: reference }, data: { paystackStatus: code } });
 
   if (code === "Completed") {
     const confirmedAt = new Date();
@@ -689,73 +689,41 @@ async function confirmOrder(orderId) {
     if (grp2 && confirmedCount >= grp2.maxSlots)
       await prisma.group.update({ where: { id: order.groupId }, data: { status: "full" } });
 
-    await prisma.pesapalOrder.update({ where: { id: orderId }, data: { status: "COMPLETED", confirmedAt } });
-  } else if (["Failed", "Invalid"].includes(code)) {
-    await prisma.pesapalOrder.update({ where: { id: orderId }, data: { status: "FAILED" } });
+    await prisma.paystackOrder.update({ where: { id: reference }, data: { status: "COMPLETED", confirmedAt } });
+  } else if (["failed", "abandoned"].includes(code)) {
+    await prisma.paystackOrder.update({ where: { id: reference }, data: { status: "FAILED" } });
   }
 
-  return prisma.pesapalOrder.findUnique({ where: { id: orderId } });
+  return prisma.paystackOrder.findUnique({ where: { id: reference } });
 }
 
-app.get("/api/pesapal/verify", async (req, res) => {
-  const { orderId } = req.query;
-  if (!orderId) return res.status(400).json({ error: "orderId required" });
-  const order = await prisma.pesapalOrder.findUnique({ where: { id: orderId } });
+app.get("/api/paystack/verify", async (req, res) => {
+  const { reference } = req.query;
+  if (!reference) return res.status(400).json({ error: "reference required" });
+  const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
   if (!order) return res.status(404).json({ error: "Order not found" });
   if (order.status === "COMPLETED")
-    return res.json({ status: "COMPLETED", memberPays: order.memberPays, platformFee: order.platformFee, organizerGets: order.organizerGets, pesapalStatus: "Completed" });
+    return res.json({ status: "COMPLETED", memberPays: order.memberPays, platformFee: order.platformFee, organizerGets: order.organizerGets });
   try {
-    const updated = await confirmOrder(orderId);
-    res.json({ status: updated.status, memberPays: updated.memberPays, platformFee: updated.platformFee, organizerGets: updated.organizerGets, pesapalStatus: updated.pesapalStatus });
+    const updated = await confirmOrder(reference);
+    res.json({ status: updated.status, memberPays: updated.memberPays, platformFee: updated.platformFee, organizerGets: updated.organizerGets });
   } catch (err) { res.status(502).json({ error: err.message }); }
-});
+})
 
-app.post("/api/pesapal/ipn", async (req, res) => {
-  const { OrderTrackingId, OrderMerchantReference } = req.body;
+app.post("/api/paystack/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const signature = req.headers["x-paystack-signature"];
+  if (!paystack.verifyWebhookSignature(req.body, signature)) return res.status(400).json({ error: "Invalid signature" });
   res.sendStatus(200);
-  if (!OrderTrackingId || !OrderMerchantReference) return;
   try {
-    const order = await prisma.pesapalOrder.findUnique({ where: { id: OrderMerchantReference } });
+    const event = JSON.parse(req.body.toString());
+    if (event.event !== "charge.success") return;
+    const reference = event.data && event.data.reference;
+    if (!reference) return;
+    const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
     if (!order || order.status === "COMPLETED") return;
-    await prisma.pesapalOrder.update({ where: { id: OrderMerchantReference }, data: { orderTrackingId: OrderTrackingId } });
-    await confirmOrder(OrderMerchantReference);
-  } catch (err) { console.error("IPN error:", err.message); }
-});
-
-app.post("/api/admin/users/email", requireSuperAdmin, async (req, res) => {
-  const { userId, subject, body: msgBody } = req.body;
-  if (!userId || !subject || !msgBody) return res.status(400).json({ error: "userId, subject and body required" });
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return res.status(404).json({ error: "User not found" });
-  try {
-    await emailService.sendEmail({
-      to: user.email,
-      subject: subject,
-      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 16px;background:#0a0a0f;color:#f0f0f8">
-        <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:28px">⚡ Split<span style="color:#7c6aff">Subs</span></div>
-        <div style="background:#14141e;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:32px">
-          <h1 style="font-size:22px;font-weight:700;margin:0 0 12px;color:#fff">${subject}</h1>
-          <p style="font-size:15px;color:#aaaacc">Hi <strong style="color:#fff">${user.name}</strong>,</p>
-          <div style="font-size:15px;line-height:1.65;color:#aaaacc;white-space:pre-wrap">${msgBody}</div>
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0"/>
-          <p style="font-size:13px;color:#666688">— SplitSubs Admin Team</p>
-        </div>
-      </div>`,
-    });
-    console.log("[ADMIN] Email sent to user:", user.email);
-    res.json({ ok: true, message: "Email sent to " + user.name + "." });
-  } catch (err) {
-    console.error("User email failed:", err.message);
-    res.status(500).json({ error: "Could not send email" });
-  }
-});
-
-app.delete("/api/admin/members/:id", requireSuperAdmin, async (req, res) => {
-  const member = await prisma.groupMember.findUnique({ where: { id: req.params.id } });
-  if (!member) return res.status(404).json({ error: "Member not found" });
-  await prisma.groupMember.delete({ where: { id: req.params.id } });
-  console.log("[ADMIN] Deleted expired member:", member.name, member.email);
-  res.json({ ok: true, message: member.name + " removed from group." });
+    await confirmOrder(reference);
+    console.log("Paystack webhook confirmed:", reference);
+  } catch (err) { console.error("Webhook error:", err.message); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2069,7 +2037,7 @@ app.listen(PORT, async () => {
   console.log(`🌍 PesaPal env    →  ${process.env.PESAPAL_ENV || "sandbox"}`);
   console.log(`📧 Email enabled  →  ${process.env.EMAIL_ENABLED === "true" ? "YES" : "NO (stub mode)"}\n`);
   await ensureSuperAdminUser();
-  try { await pesapal.registerIPN(); } catch (e) { console.warn("⚠️  IPN pre-reg skipped:", e.message); }
+  console.log("✅ Paystack webhook ready at /api/paystack/webhook");
   async function runScheduler() { try { await emailService.runExpiryScheduler(prisma); } catch (e) { console.error("Scheduler error:", e.message); } }
   runScheduler();
   setInterval(runScheduler, 24 * 60 * 60 * 1000);

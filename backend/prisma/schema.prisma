@@ -365,3 +365,26 @@ model UserPresence {
   lastSeen DateTime @default(now())
   @@map("user_presence")
 }
+
+model PaystackOrder {
+  id             String    @id
+  reference      String    @unique
+  groupId        String
+  memberId       String
+  userId         String
+  memberName     String
+  memberEmail    String
+  months         Int
+  baseAmount     Float
+  platformFee    Float
+  moderatorOwed  Float
+  organizerGets  Float
+  moderatorId    String
+  memberPays     Float
+  currency       String    @default("USD")
+  paystackStatus String?
+  status         String    @default("PENDING")
+  confirmedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
