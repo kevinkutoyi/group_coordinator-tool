@@ -33,7 +33,7 @@ export default function PaymentCallbackPage({ params, navigate }) {
         {titles[status]}
       </h1>
 
-      {status === "verifying" && <p style={{ color:"var(--muted)" }}>Checking with PesaPal, please wait…</p>}
+      {status === "verifying" && <p style={{ color:"var(--muted)" }}>Verifying your payment, please wait…</p>}
 
       {status === "success" && data && (
         <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:"var(--radius)", padding:24, margin:"20px 0", textAlign:"left" }}>
