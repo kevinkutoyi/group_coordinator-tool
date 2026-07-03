@@ -309,7 +309,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
               <div style={{ fontSize: "2rem", marginBottom: 8 }}>👥</div>
               No paying members yet. Be the first to join!
             </div>
-          ) : payingMembers.map(m => (
+          ) : canManage ? payingMembers.map(m => (
             <div key={m.id} className="member-row">
               <div className="member-avatar">{m.name?.[0]?.toUpperCase()}</div>
               <div className="member-info">
@@ -366,7 +366,32 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 </span>
               )}
             </div>
-          ))}
+          )) : (
+            <div>
+              {/* Customer view — only show their own membership status */}
+              {myMember ? (
+                <div className="member-row" style={{ background: "rgba(124,106,255,0.06)", borderRadius: 10, padding: "12px 16px" }}>
+                  <div className="member-avatar">{myMember.name?.[0]?.toUpperCase()}</div>
+                  <div className="member-info">
+                    <div className="member-name">You</div>
+                    {myMember.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {myMember.durationLabel}</div>}
+                    {myMember.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(myMember.expiresAt).toLocaleDateString()}</div>}
+                  </div>
+                  <span className={`tag tag-${myMember.paymentStatus}`}>{myMember.paymentStatus}</span>
+                  {myMember.paymentStatus === "pending" && (
+                    <button className="btn btn-sm pesapal-btn" onClick={() => handlePay(myMember)} disabled={payingId === myMember.id}>
+                      {payingId === myMember.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay Now"}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "16px 0", color: "var(--muted)", fontSize: "0.85rem" }}>
+                  <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>👥</div>
+                  {filled} of {group.maxSlots} slots filled
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
