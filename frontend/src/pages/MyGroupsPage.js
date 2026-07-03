@@ -175,7 +175,7 @@ export default function MyGroupsPage({ navigate }) {
 
                       <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                         {isPending && (
-                          <button className="btn btn-sm pesapal-btn" onClick={e => { e.stopPropagation(); navigate("group", g.id); }}>
+                          <button className="btn btn-sm pay-btn" onClick={e => { e.stopPropagation(); navigate("group", g.id); }}>
                             🔒 Complete Payment →
                           </button>
                         )}

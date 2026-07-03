@@ -320,8 +320,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
               </div>
               <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
               {m.userId === currentUserId && m.paymentStatus === "pending" && (
-                <button className="btn btn-sm pesapal-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
-                  {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay via PesaPal"}
+                <button className="btn btn-sm pay-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
+                  {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay Now"}
                 </button>
               )}
 
@@ -395,8 +395,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
           )}
 
           <div className="pesapal-info-card">
-            <div className="pesapal-logo">🔒 Secured by PesaPal</div>
-            <p>Accepted: 📱 M-Pesa &nbsp;💳 Visa/Mastercard &nbsp;🏦 Bank Transfer &nbsp;📲 Airtel Money</p>
+            <div className="pesapal-logo">🔒 Secure Payment</div>
+            <p>Accepted: 📱 Visa · Mastercard · M-Pesa · Bank Transfer</p>
             <p className="fee-note">
               A {feePercent}% platform fee is included in the price. The organizer receives ${moderatorGets}/mo per member.
             </p>
