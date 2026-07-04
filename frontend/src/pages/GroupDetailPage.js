@@ -117,6 +117,14 @@ export default function GroupDetailPage({ id, navigate, user }) {
     finally { setSaving(false); }
   }
 
+  async function adjustExpiry(memberId, days) {
+    try {
+      await api.adjustMemberExpiry(memberId, days);
+      setMsg({ type: "ok", text: (days > 0 ? "+" : "") + days + " days applied." });
+      reload();
+    } catch (err) { setMsg({ type: "err", text: err.message }); }
+  }
+
   async function handleDeleteCreds() {
     try {
       await api.deleteCredentials(id);
@@ -317,6 +325,20 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 {canManage && <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.email}</div>}
                 {m.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {m.durationLabel}</div>}
                 {m.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(m.expiresAt).toLocaleDateString()}</div>}
+                {canManage && (
+                  <div className="adjust-expiry-btns" style={{ display:"flex", gap:4, marginTop:4 }}>
+                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--error)", borderColor:"var(--error)" }}
+                      onClick={() => adjustExpiry(m.id, -7)} title="Remove 7 days">-7d</button>
+                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--error)", borderColor:"var(--error)" }}
+                      onClick={() => adjustExpiry(m.id, -1)} title="Remove 1 day">-1d</button>
+                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--success)", borderColor:"var(--success)" }}
+                      onClick={() => adjustExpiry(m.id, 1)} title="Add 1 day">+1d</button>
+                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--success)", borderColor:"var(--success)" }}
+                      onClick={() => adjustExpiry(m.id, 7)} title="Add 7 days">+7d</button>
+                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--success)", borderColor:"var(--success)" }}
+                      onClick={() => adjustExpiry(m.id, 30)} title="Add 30 days">+30d</button>
+                  </div>
+                )}
               </div>
               <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
               {m.userId === currentUserId && m.paymentStatus === "pending" && (

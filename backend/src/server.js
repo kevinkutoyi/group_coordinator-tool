@@ -2042,3 +2042,18 @@ app.listen(PORT, async () => {
   runScheduler();
   setInterval(runScheduler, 24 * 60 * 60 * 1000);
 });
+app.patch("/api/admin/members/:id/adjust-expiry", requireSuperAdmin, async (req, res) => {
+  const { days } = req.body; // positive = add days, negative = reduce days
+  if (days === undefined || days === 0) return res.status(400).json({ error: "days required (positive or negative)" });
+  const member = await prisma.groupMember.findUnique({ where: { id: req.params.id } });
+  if (!member) return res.status(404).json({ error: "Member not found" });
+  const base = member.expiresAt && new Date(member.expiresAt) > new Date() ? new Date(member.expiresAt) : new Date();
+  const newExpiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+  const updated = await prisma.groupMember.update({
+    where: { id: req.params.id },
+    data: { expiresAt: newExpiry },
+  });
+  console.log("[ADMIN] Adjusted expiry for", member.name, "by", days, "days -> new expiry:", newExpiry);
+  res.json({ ok: true, member: updated, newExpiry });
+});
+
