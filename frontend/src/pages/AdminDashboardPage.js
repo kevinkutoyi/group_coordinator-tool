@@ -80,6 +80,16 @@ export default function AdminDashboardPage({ navigate }) {
     finally { setLoading(false); }
   }, [navigate]);
 
+  async function demote(uid) {
+    setBusy(b => ({ ...b, [uid]: true }));
+    try {
+      await api.demoteToCustomer(uid);
+      const data = await api.getUsers();
+      setAllUsers(data);
+    } catch (err) { alert(err.message); }
+    finally { setBusy(b => ({ ...b, [uid]: false })); }
+  }
+
   async function approve(id) {
     setBusy(b => ({...b, [id]: true}));
     try {
@@ -342,6 +352,13 @@ export default function AdminDashboardPage({ navigate }) {
                   <button className="btn btn-sm btn-outline" disabled={busy[u.id]} onClick={() => promote(u.id)}
                     style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}>
                     {busy[u.id] ? <span className="spinner"/> : "🛡️ Make Moderator"}
+                  </button>
+                )}
+                {u.status === "active" && u.role === "moderator" && (
+                  <button className="btn btn-sm btn-outline" disabled={busy[u.id]} onClick={() => {
+                    if (window.confirm("Demote " + u.name + " from moderator to customer? They will lose moderator privileges.")) demote(u.id);
+                  }} style={{ borderColor:"rgba(251,191,36,0.3)", color:"var(--warning)" }}>
+                    {busy[u.id] ? <span className="spinner"/> : "👤 Make Customer"}
                   </button>
                 )}
                 {u.status === "active" && u.role !== "superadmin" && (

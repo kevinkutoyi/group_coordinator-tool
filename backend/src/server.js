@@ -346,6 +346,24 @@ app.patch("/api/admin/users/:id/unsuspend", requireSuperAdmin, async (req, res) 
   res.json(safeUser(updated));
 });
 
+app.patch("/api/admin/users/:id/demote-to-customer", requireSuperAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  if (user.role === "superadmin") return res.status(400).json({ error: "Cannot demote superadmin" });
+  if (user.role === "customer") return res.status(400).json({ error: "User is already a customer" });
+  const updated = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { role: "customer" },
+  });
+  // Also update their group memberships role from organizer to member if any
+  await prisma.groupMember.updateMany({
+    where: { userId: req.params.id, role: "moderator" },
+    data: { role: "member" },
+  });
+  console.log("[ADMIN] Demoted to customer:", updated.email);
+  res.json({ ok: true, user: updated });
+});
+
 app.patch("/api/admin/users/:id/promote-to-moderator", requireSuperAdmin, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return res.status(404).json({ error: "User not found" });
