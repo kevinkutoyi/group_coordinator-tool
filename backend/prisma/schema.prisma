@@ -94,7 +94,10 @@ model GroupMember {
   paymentStatus String    @default("pending")  // pending | confirmed | expired
   joinedAt      DateTime  @default(now())
   expiresAt     DateTime?
-  expiryNotifications String[] @default([])
+  expiryNotifications   String[]  @default([])
+  expiryAdjustmentDays  Int       @default(0)   // total days added(+) or removed(-) by admin
+  expiryAdjustedAt      DateTime?               // when admin last adjusted
+  expiryAdjustedNote    String?                 // optional note from admin
 
   // Relations
   group   Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
