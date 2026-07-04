@@ -325,22 +325,36 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 {canManage && <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.email}</div>}
                 {m.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {m.durationLabel}</div>}
                 {m.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(m.expiresAt).toLocaleDateString()}</div>}
-                {canManage && (
-                  <div className="adjust-expiry-btns" style={{ display:"flex", gap:4, marginTop:4 }}>
-                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--error)", borderColor:"var(--error)" }}
-                      onClick={() => adjustExpiry(m.id, -7)} title="Remove 7 days">-7d</button>
-                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--error)", borderColor:"var(--error)" }}
-                      onClick={() => adjustExpiry(m.id, -1)} title="Remove 1 day">-1d</button>
-                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--success)", borderColor:"var(--success)" }}
-                      onClick={() => adjustExpiry(m.id, 1)} title="Add 1 day">+1d</button>
-                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--success)", borderColor:"var(--success)" }}
-                      onClick={() => adjustExpiry(m.id, 7)} title="Add 7 days">+7d</button>
-                    <button className="btn btn-sm btn-outline" style={{ padding:"2px 8px", fontSize:"0.7rem", color:"var(--success)", borderColor:"var(--success)" }}
-                      onClick={() => adjustExpiry(m.id, 30)} title="Add 30 days">+30d</button>
+                {canManage && m.expiresAt && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5, flexWrap:"wrap" }}>
+                      <span style={{
+                        fontSize:"0.68rem", fontWeight:700, padding:"2px 8px", borderRadius:99,
+                        background: (m.expiryAdjustmentDays||0) > 0 ? "rgba(74,222,128,0.12)" : (m.expiryAdjustmentDays||0) < 0 ? "rgba(248,113,113,0.12)" : "rgba(255,255,255,0.06)",
+                        color: (m.expiryAdjustmentDays||0) > 0 ? "var(--success)" : (m.expiryAdjustmentDays||0) < 0 ? "var(--error)" : "var(--muted)",
+                        border: "1px solid " + ((m.expiryAdjustmentDays||0) > 0 ? "rgba(74,222,128,0.25)" : (m.expiryAdjustmentDays||0) < 0 ? "rgba(248,113,113,0.25)" : "rgba(255,255,255,0.1)"),
+                      }}>
+                        🛡️ Admin: {(m.expiryAdjustmentDays||0) > 0 ? "+" : ""}{m.expiryAdjustmentDays||0}d adjusted
+                      </span>
+                      {m.expiryAdjustedAt && (
+                        <span style={{ fontSize:"0.65rem", color:"var(--muted)" }}>
+                          Last adjusted: {new Date(m.expiryAdjustedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                      {[-30,-7,-1,1,7,30].map(d => (
+                        <button key={d} className="btn btn-sm btn-outline"
+                          style={{ padding:"2px 8px", fontSize:"0.7rem",
+                            color: d < 0 ? "var(--error)" : "var(--success)",
+                            borderColor: d < 0 ? "rgba(248,113,113,0.4)" : "rgba(74,222,128,0.4)" }}
+                          onClick={() => adjustExpiry(m.id, d)}>
+                          {d > 0 ? "+" : ""}{d}d
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
-              <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
               {m.userId === currentUserId && m.paymentStatus === "pending" && (
                 <button className="btn btn-sm pay-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
                   {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
