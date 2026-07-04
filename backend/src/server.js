@@ -2051,9 +2051,14 @@ app.patch("/api/admin/members/:id/adjust-expiry", requireSuperAdmin, async (req,
   const newExpiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
   const updated = await prisma.groupMember.update({
     where: { id: req.params.id },
-    data: { expiresAt: newExpiry },
+    data: {
+      expiresAt:            newExpiry,
+      expiryAdjustmentDays: (member.expiryAdjustmentDays || 0) + days,
+      expiryAdjustedAt:     new Date(),
+      expiryAdjustedNote:   note || null,
+    },
   });
-  console.log("[ADMIN] Adjusted expiry for", member.name, "by", days, "days -> new expiry:", newExpiry);
-  res.json({ ok: true, member: updated, newExpiry });
+  console.log("[ADMIN] Expiry adjusted for", member.name, "by", days, "days. Total:", updated.expiryAdjustmentDays, "days");
+  res.json({ ok: true, member: updated, newExpiry, totalAdjustmentDays: updated.expiryAdjustmentDays });
 });
 
