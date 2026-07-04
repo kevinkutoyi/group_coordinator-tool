@@ -324,7 +324,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 <div className="member-name">{m.name}</div>
                 {canManage && <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.email}</div>}
                 {m.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {m.durationLabel}</div>}
-                {m.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(m.expiresAt).toLocaleDateString()}</div>}
+                {m.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(m.expiresAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}</div>}
                 {canManage && m.expiresAt && (
                   <div style={{ marginTop: 6 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5, flexWrap:"wrap" }}>
@@ -354,54 +354,45 @@ export default function GroupDetailPage({ id, navigate, user }) {
                       ))}
                     </div>
                   </div>
-                </div>
-              )}
-              {m.userId === currentUserId && m.paymentStatus === "pending" && (
-                <button className="btn btn-sm pay-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
-                  {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
-                </button>
-              )}
-
-              {/* Renew button — expired or expiring within 7 days */}
-              {m.userId === currentUserId && (
-                m.paymentStatus === "expired" ||
-                (m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && daysLeft(m.expiresAt) <= 7)
-              ) && (
-                <button
-                  className="btn btn-sm btn-primary"
-                  style={{ background: "linear-gradient(90deg, #f59e0b, #ef4444)", border: "none" }}
-                  disabled={payingId === m.id}
-                  onClick={async () => {
-                    setPayingId(m.id);
-                    try {
-                      await api.renewSlot(id);
-                      await reload();
-                      handlePay(m);
-                    } catch (err) {
-                      setMsg({ type: "err", text: err.message });
-                      setPayingId(null);
-                    }
-                  }}
-                >
-                  {payingId === m.id ? <><span className="spinner" /> …</> : "🔄 Renew Subscription"}
-                </button>
-              )}
-
-              {/* Expiry badge */}
-              {m.userId === currentUserId && m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && (
-                <span style={{
-                  fontSize: "0.72rem", fontWeight: 600, marginLeft: 4,
-                  color: daysLeft(m.expiresAt) <= 0  ? "var(--error)"   :
-                         daysLeft(m.expiresAt) <= 3  ? "var(--error)"   :
-                         daysLeft(m.expiresAt) <= 7  ? "var(--warning)" : "var(--success)",
-                }}>
-                  {daysLeft(m.expiresAt) <= 0
-                    ? "⛔ Expired"
-                    : daysLeft(m.expiresAt) <= 7
-                    ? `⚠️ Expires in ${daysLeft(m.expiresAt)}d`
-                    : `✓ ${daysLeft(m.expiresAt)}d left`}
-                </span>
-              )}
+                )}
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+                <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
+                {m.userId === currentUserId && m.paymentStatus === "pending" && (
+                  <button className="btn btn-sm pay-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
+                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
+                  </button>
+                )}
+                {m.userId === currentUserId && (
+                  m.paymentStatus === "expired" ||
+                  (m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && daysLeft(m.expiresAt) <= 7)
+                ) && (
+                  <button className="btn btn-sm btn-primary"
+                    style={{ background: "linear-gradient(90deg, #f59e0b, #ef4444)", border: "none" }}
+                    disabled={payingId === m.id}
+                    onClick={async () => {
+                      setPayingId(m.id);
+                      try {
+                        await api.renewSlot(id);
+                        await reload();
+                        handlePay(m);
+                      } catch (err) {
+                        setMsg({ type: "err", text: err.message });
+                        setPayingId(null);
+                      }
+                    }}>
+                    {payingId === m.id ? <><span className="spinner" /> …</> : "🔄 Renew"}
+                  </button>
+                )}
+                {m.userId === currentUserId && m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && (
+                  <span style={{
+                    fontSize: "0.72rem", fontWeight: 600,
+                    color: daysLeft(m.expiresAt) <= 0 ? "var(--error)" : daysLeft(m.expiresAt) <= 3 ? "var(--error)" : daysLeft(m.expiresAt) <= 7 ? "var(--warning)" : "var(--success)",
+                  }}>
+                    {daysLeft(m.expiresAt) <= 0 ? "⛔ Expired" : daysLeft(m.expiresAt) <= 7 ? `⚠️ ${daysLeft(m.expiresAt)}d left` : `✓ ${daysLeft(m.expiresAt)}d left`}
+                  </span>
+                )}
+              </div>
             </div>
           )) : (
             <div>
