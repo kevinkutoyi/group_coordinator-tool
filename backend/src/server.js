@@ -650,7 +650,7 @@ async function confirmOrder(reference) {
 
   await prisma.paystackOrder.update({ where: { id: reference }, data: { paystackStatus: code } });
 
-  if (code === "Completed") {
+  if (code === "success") {
     const confirmedAt = new Date();
     const exp = new Date(); exp.setMonth(exp.getMonth() + (order.months || 1));
 
