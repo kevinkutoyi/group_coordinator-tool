@@ -325,7 +325,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 {canManage && <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{m.email}</div>}
                 {m.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {m.durationLabel}</div>}
                 {m.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(m.expiresAt).toLocaleDateString()}</div>}
-                {canManage && m.expiresAt && <> (
+                {canManage && m.expiresAt && (
                   <div style={{ marginTop: 6 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5, flexWrap:"wrap" }}>
                       <span style={{
@@ -354,7 +354,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                       ))}
                     </div>
                   </div>
-                </>
+                </div>
               )}
               {m.userId === currentUserId && m.paymentStatus === "pending" && (
                 <button className="btn btn-sm pay-btn" onClick={() => handlePay(m)} disabled={payingId === m.id}>
