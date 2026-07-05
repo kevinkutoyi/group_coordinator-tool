@@ -2074,6 +2074,7 @@ app.patch("/api/admin/members/:id/adjust-expiry", requireSuperAdmin, async (req,
       expiryAdjustmentDays: (member.expiryAdjustmentDays || 0) + days,
       expiryAdjustedAt:     new Date(),
       expiryAdjustedNote:   note || null,
+      paymentStatus:        newExpiry <= new Date() ? "expired" : "confirmed",
     },
   });
   console.log("[ADMIN] Expiry adjusted for", member.name, "by", days, "days. Total:", updated.expiryAdjustmentDays, "days");
