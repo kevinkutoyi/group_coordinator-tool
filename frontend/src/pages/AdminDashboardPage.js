@@ -387,14 +387,14 @@ export default function AdminDashboardPage({ navigate }) {
                   </button>
                 )}
                 {u.role !== "superadmin" && (
-                  <button className="btn btn-sm btn-outline" style={{borderColor:"rgba(124,106,255,0.3)",color:"var(--accent)"}}
-                {u.role !== "superadmin" && (
                   <button className="btn btn-sm btn-outline"
                     style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}
                     onClick={() => loadProfile(u)}>
                     👤 Profile
                   </button>
                 )}
+                {u.role !== "superadmin" && (
+                  <button className="btn btn-sm btn-outline" style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}
                     onClick={() => { setEmailTarget(u); setEmailForm({ subject: "", body: "" }); setEmailModalMsg(null); }}>
                     ✉️ Email
                   </button>
