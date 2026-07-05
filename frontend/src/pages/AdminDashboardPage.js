@@ -52,6 +52,10 @@ export default function AdminDashboardPage({ navigate }) {
   const [remindAllBusy, setRemindAllBusy]   = useState(false);
 
   // User email modal
+  const [profileTarget, setProfileTarget] = useState(null);
+  const [profileData, setProfileData]     = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
   const [emailTarget, setEmailTarget]   = useState(null);
   const [emailForm, setEmailForm]       = useState({ subject: "", body: "" });
   const [emailBusy, setEmailBusy]       = useState(false);
@@ -136,6 +140,17 @@ export default function AdminDashboardPage({ navigate }) {
     try { const r = await api.remindExpiredMember(memberId); setExpiredMsg({ type: "ok", text: r.message }); }
     catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
     finally { setBusy(b => ({ ...b, [memberId]: false })); }
+  }
+
+  async function loadProfile(user) {
+    setProfileTarget(user);
+    setProfileData(null);
+    setProfileLoading(true);
+    try {
+      const data = await api.getUserProfile(user.id);
+      setProfileData(data);
+    } catch (err) { console.error(err); }
+    finally { setProfileLoading(false); }
   }
 
   async function sendEmailToUser() {
@@ -373,6 +388,13 @@ export default function AdminDashboardPage({ navigate }) {
                 )}
                 {u.role !== "superadmin" && (
                   <button className="btn btn-sm btn-outline" style={{borderColor:"rgba(124,106,255,0.3)",color:"var(--accent)"}}
+                {u.role !== "superadmin" && (
+                  <button className="btn btn-sm btn-outline"
+                    style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}
+                    onClick={() => loadProfile(u)}>
+                    👤 Profile
+                  </button>
+                )}
                     onClick={() => { setEmailTarget(u); setEmailForm({ subject: "", body: "" }); setEmailModalMsg(null); }}>
                     ✉️ Email
                   </button>
@@ -1039,6 +1061,101 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
               <button className="btn btn-outline" onClick={() => { setEmailTarget(null); setEmailModalMsg(null); }}>Cancel</button>
               <button className="btn btn-primary" disabled={emailBusy || !emailForm.subject || !emailForm.body} onClick={sendEmailToUser}>
                 {emailBusy ? <><span className="spinner"/> Sending…</> : "📨 Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── User Profile Modal ── */}
+      {profileTarget && (
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setProfileTarget(null)}>
+          <div className="modal" style={{ maxWidth:620, maxHeight:"85vh", overflowY:"auto" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+              <div>
+                <h3 style={{ margin:0 }}>👤 {profileTarget.name}</h3>
+                <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:4 }}>{profileTarget.email}</div>
+              </div>
+              <button className="btn btn-sm btn-outline" onClick={() => setProfileTarget(null)}>✕</button>
+            </div>
+
+            {profileLoading ? (
+              <div style={{ textAlign:"center", padding:40 }}><span className="spinner"/></div>
+            ) : profileData ? (
+              <div>
+                {/* Basic info */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+                  {[
+                    { label:"Role", value: profileData.role },
+                    { label:"Status", value: profileData.status },
+                    { label:"Phone", value: profileData.phone || "—" },
+                    { label:"Joined", value: new Date(profileData.joinedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) },
+                    { label:"Last Active", value: profileData.lastSeen ? new Date(profileData.lastSeen).toLocaleString("en-GB", { day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "Never" },
+                    { label:"Online Now", value: profileData.online ? "🟢 Yes" : "⚫ No" },
+                    { label:"Total Spent", value: "$" + (profileData.totalSpent || 0).toFixed(2) },
+                    { label:"Subscriptions", value: profileData.subscriptions.length },
+                  ].map(item => (
+                    <div key={item.label} style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 14px" }}>
+                      <div style={{ fontSize:"0.7rem", color:"var(--muted)", marginBottom:3 }}>{item.label}</div>
+                      <div style={{ fontWeight:600, fontSize:"0.88rem" }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Subscriptions */}
+                <h4 style={{ margin:"0 0 10px", fontSize:"0.88rem", color:"var(--muted)", textTransform:"uppercase", letterSpacing:1 }}>Subscriptions</h4>
+                {profileData.subscriptions.length === 0 ? (
+                  <div style={{ color:"var(--muted)", fontSize:"0.82rem", marginBottom:16 }}>No subscriptions yet.</div>
+                ) : profileData.subscriptions.map(s => {
+                  const days = s.expiresAt ? Math.ceil((new Date(s.expiresAt) - new Date()) / (1000*60*60*24)) : null;
+                  return (
+                    <div key={s.id} style={{ background:"var(--bg3)", borderRadius:10, padding:"12px 14px", marginBottom:8,
+                      borderLeft: s.paymentStatus === "confirmed" ? "3px solid var(--success)" : s.paymentStatus === "expired" ? "3px solid var(--error)" : "3px solid var(--border)" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <span style={{ fontSize:"1.4rem" }}>{s.serviceIcon}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:600, fontSize:"0.88rem" }}>{s.groupName}</div>
+                          <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>{s.billingCycle} · {"$" + s.memberPays + "/mo"}</div>
+                          {s.expiresAt && (
+                            <div style={{ fontSize:"0.72rem", marginTop:3 }}>
+                              <span style={{ color: days !== null && days <= 0 ? "var(--error)" : days !== null && days <= 7 ? "var(--warning)" : "var(--muted)" }}>
+                                {days !== null && days <= 0 ? "⛔ Expired " + Math.abs(days) + "d ago" : days !== null && days <= 7 ? "⚠️ Expires in " + days + "d" : "Expires " + new Date(s.expiresAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
+                              </span>
+                              {s.expiryAdjustmentDays !== 0 && (
+                                <span style={{ marginLeft:8, fontSize:"0.68rem", color: s.expiryAdjustmentDays > 0 ? "var(--success)" : "var(--error)" }}>
+                                  🛡️ {s.expiryAdjustmentDays > 0 ? "+" : ""}{s.expiryAdjustmentDays}d admin adj.
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div style={{ fontSize:"0.7rem", color:"var(--muted)", marginTop:2 }}>Joined {new Date(s.joinedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}</div>
+                        </div>
+                        <span className={"tag tag-" + s.paymentStatus} style={{ fontSize:"0.68rem" }}>{s.paymentStatus}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Payment history */}
+                {profileData.payments.length > 0 && (
+                  <>
+                    <h4 style={{ margin:"16px 0 10px", fontSize:"0.88rem", color:"var(--muted)", textTransform:"uppercase", letterSpacing:1 }}>Payment History</h4>
+                    {profileData.payments.map(p => (
+                      <div key={p.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid var(--border)", fontSize:"0.82rem" }}>
+                        <span style={{ color:"var(--muted)" }}>{p.confirmedAt ? new Date(p.confirmedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}</span>
+                        <span>{p.months} month{p.months !== 1 ? "s" : ""}</span>
+                        <span style={{ color:"var(--success)", fontWeight:600 }}>{"$" + (p.amount || 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            <div className="modal-actions" style={{ marginTop:20 }}>
+              <button className="btn btn-outline" onClick={() => setProfileTarget(null)}>Close</button>
+              <button className="btn btn-primary" onClick={() => { setProfileTarget(null); setEmailTarget(profileTarget); setEmailForm({ subject:"", body:"" }); setEmailModalMsg(null); }}>
+                ✉️ Send Email
               </button>
             </div>
           </div>

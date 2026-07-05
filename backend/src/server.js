@@ -2104,3 +2104,62 @@ app.post("/api/admin/users/email", requireSuperAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/users/:id/profile", requireSuperAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: {
+      memberships: {
+        include: { group: true },
+        orderBy: { joinedAt: "desc" },
+      },
+    },
+  });
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  // Get last seen from presence
+  const presence = await prisma.userPresence.findUnique({ where: { userId: req.params.id } }).catch(() => null);
+
+  // Get payment history
+  const payments = await prisma.payment.findMany({
+    where: { userId: req.params.id },
+    orderBy: { confirmedAt: "desc" },
+    take: 20,
+  });
+
+  res.json({
+    id:          user.id,
+    name:        user.name,
+    email:       user.email,
+    phone:       user.phone,
+    role:        user.role,
+    status:      user.status,
+    joinedAt:    user.createdAt,
+    approvedAt:  user.approvedAt,
+    lastSeen:    presence?.lastSeen || null,
+    online:      presence ? (Date.now() - new Date(presence.lastSeen).getTime()) < 5 * 60 * 1000 : false,
+    subscriptions: user.memberships.map(m => ({
+      id:            m.id,
+      groupId:       m.groupId,
+      groupName:     m.group.serviceName + " " + m.group.planName,
+      serviceIcon:   m.group.serviceIcon,
+      serviceName:   m.group.serviceName,
+      planName:      m.group.planName,
+      billingCycle:  m.group.billingCycle,
+      paymentStatus: m.paymentStatus,
+      memberPays:    m.memberPays,
+      joinedAt:      m.joinedAt,
+      expiresAt:     m.expiresAt,
+      expiryAdjustmentDays: m.expiryAdjustmentDays,
+      expiryAdjustedAt:     m.expiryAdjustedAt,
+    })),
+    payments: payments.map(p => ({
+      id:          p.id,
+      amount:      p.memberPays || p.amount,
+      currency:    p.currency,
+      confirmedAt: p.confirmedAt,
+      months:      p.months,
+    })),
+    totalSpent: payments.reduce((a, p) => a + (p.memberPays || p.amount || 0), 0),
+  });
+});
+

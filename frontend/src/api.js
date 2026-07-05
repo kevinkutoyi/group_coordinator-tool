@@ -168,5 +168,6 @@ export const api = {
   deleteGroupMember:      (mid)  => req(`/admin/members/${mid}`, { method: "DELETE" }),
   adjustMemberExpiry:     (mid, days) => req(`/admin/members/${mid}/adjust-expiry`, { method: "PATCH", body: { days } }),
   demoteToCustomer:       (uid)  => req(`/admin/users/${uid}/demote-to-customer`, { method: "PATCH" }),
+  getUserProfile:         (uid)  => req(`/admin/users/${uid}/profile`),
   sendUserEmail:          (body) => req("/admin/users/email", { method: "POST", body }),
 };
