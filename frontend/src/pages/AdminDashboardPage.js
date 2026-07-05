@@ -1092,7 +1092,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                     { label:"Joined", value: new Date(profileData.joinedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) },
                     { label:"Last Active", value: profileData.lastSeen ? new Date(profileData.lastSeen).toLocaleString("en-GB", { day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "Never" },
                     { label:"Online Now", value: profileData.online ? "🟢 Yes" : "⚫ No" },
-                    { label:"Total Spent", value: "$" + (profileData.totalSpent || 0).toFixed(2) },
+                    { label:"Total Spent", value: "KES " + Math.round((profileData.totalSpent || 0) * 130).toLocaleString() },
                     { label:"Subscriptions", value: profileData.subscriptions.length },
                   ].map(item => (
                     <div key={item.label} style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 14px" }}>
@@ -1115,7 +1115,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                         <span style={{ fontSize:"1.4rem" }}>{s.serviceIcon}</span>
                         <div style={{ flex:1 }}>
                           <div style={{ fontWeight:600, fontSize:"0.88rem" }}>{s.groupName}</div>
-                          <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>{s.billingCycle} · {"$" + s.memberPays + "/mo"}</div>
+                          <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>{s.billingCycle} · {"KES " + Math.round(s.memberPays * 130) + "/mo"}</div>
                           {s.expiresAt && (
                             <div style={{ fontSize:"0.72rem", marginTop:3 }}>
                               <span style={{ color: days !== null && days <= 0 ? "var(--error)" : days !== null && days <= 7 ? "var(--warning)" : "var(--muted)" }}>
