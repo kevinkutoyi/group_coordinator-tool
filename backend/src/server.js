@@ -2119,9 +2119,9 @@ app.get("/api/admin/users/:id/profile", requireSuperAdmin, async (req, res) => {
   // Get last seen from presence
   const presence = await prisma.userPresence.findUnique({ where: { userId: req.params.id } }).catch(() => null);
 
-  // Get payment history
-  const payments = await prisma.payment.findMany({
-    where: { userId: req.params.id },
+  // Get Paystack payment history only
+  const paystackPayments = await prisma.paystackOrder.findMany({
+    where: { userId: req.params.id, status: "COMPLETED" },
     orderBy: { confirmedAt: "desc" },
     take: 20,
   });
@@ -2152,14 +2152,14 @@ app.get("/api/admin/users/:id/profile", requireSuperAdmin, async (req, res) => {
       expiryAdjustmentDays: m.expiryAdjustmentDays,
       expiryAdjustedAt:     m.expiryAdjustedAt,
     })),
-    payments: payments.map(p => ({
+    payments: paystackPayments.map(p => ({
       id:          p.id,
-      amount:      p.memberPays || p.amount,
+      amount:      p.memberPays,
       currency:    p.currency,
       confirmedAt: p.confirmedAt,
       months:      p.months,
     })),
-    totalSpent: payments.reduce((a, p) => a + (p.memberPays || p.amount || 0), 0),
+    totalSpent: paystackPayments.reduce((a, p) => a + (p.memberPays || 0), 0),
   });
 });
 
