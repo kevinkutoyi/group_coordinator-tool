@@ -169,30 +169,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
   return (
     <div className="gd fade-in">
       <button className="btn btn-outline btn-sm" onClick={() => navigate("groups")} style={{ marginBottom: 20 }}>
-              {canManage && (
-                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin only)</span></div>
-                  {group.renewDate && (() => {
-                    const days = Math.ceil((new Date(group.renewDate) - new Date()) / (1000*60*60*24));
-                    const color = days <= 0 ? "var(--error)" : days <= 3 ? "var(--error)" : days <= 7 ? "var(--warning)" : "var(--success)";
-                    return <div style={{ fontSize:"0.78rem", color, fontWeight:600, marginBottom:8 }}>
-                      {days <= 0 ? "⛔ OVERDUE by " + Math.abs(days) + "d" : days <= 3 ? "⚠️ Due in " + days + "d" : days <= 7 ? "⚠️ Due in " + days + "d" : "✓ Due in " + days + "d"}
-                      {" — "}{new Date(group.renewDate).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
-                    </div>;
-                  })()}
-                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <input type="date" value={renewDate}
-                      onChange={e => setRenewDate(e.target.value)}
-                      style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem" }}
-                    />
-                    <button className="btn btn-sm btn-primary" disabled={renewDateBusy} onClick={saveRenewDate}>
-                      {renewDateBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
-                    </button>
-                    {renewDate && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setRenewDate(""); }}>✕ Clear</button>}
-                  </div>
-                  {renewDateMsg && <div className={"msg-box " + (renewDateMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setRenewDateMsg(null)}>{renewDateMsg.text}</div>}
-                </div>
-              )}
         ← Back to Groups
       </button>
 
@@ -256,6 +232,30 @@ export default function GroupDetailPage({ id, navigate, user }) {
             )}
           </div>
         </div>
+              {canManage && (
+                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin only)</span></div>
+                  {group.renewDate && (() => {
+                    const days = Math.ceil((new Date(group.renewDate) - new Date()) / (1000*60*60*24));
+                    const color = days <= 0 ? "var(--error)" : days <= 3 ? "var(--error)" : days <= 7 ? "var(--warning)" : "var(--success)";
+                    return <div style={{ fontSize:"0.78rem", color, fontWeight:600, marginBottom:8 }}>
+                      {days <= 0 ? "⛔ OVERDUE by " + Math.abs(days) + "d" : days <= 3 ? "⚠️ Due in " + days + "d" : days <= 7 ? "⚠️ Due in " + days + "d" : "✓ Due in " + days + "d"}
+                      {" — "}{new Date(group.renewDate).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
+                    </div>;
+                  })()}
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <input type="date" value={renewDate}
+                      onChange={e => setRenewDate(e.target.value)}
+                      style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem" }}
+                    />
+                    <button className="btn btn-sm btn-primary" disabled={renewDateBusy} onClick={saveRenewDate}>
+                      {renewDateBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
+                    </button>
+                    {renewDate && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setRenewDate(""); }}>✕ Clear</button>}
+                  </div>
+                  {renewDateMsg && <div className={"msg-box " + (renewDateMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setRenewDateMsg(null)}>{renewDateMsg.text}</div>}
+                </div>
+              )}
 
         {group.description && <p className="gd-desc">{group.description}</p>}
 
