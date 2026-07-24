@@ -131,15 +131,6 @@ export default function CreateGroupPage({ navigate }) {
             <div className="billing-grid">
               {BILLING_CYCLES.map(c => (
                 <button
-              <div className="form-group" style={{ marginTop: 16 }}>
-                <label>📅 Subscription Renew Date <span style={{ fontSize:"0.75rem", color:"var(--muted)", fontWeight:400 }}>(when you need to renew the actual plan)</span></label>
-                <input type="date" value={form.renewDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={set("renewDate")}
-                  style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.9rem" }}
-                />
-                <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>Admin will be notified 3 days before this date.</div>
-              </div>
                   key={c.value}
                   type="button"
                   className={`billing-card ${form.billingCycle === c.value ? "selected" : ""}`}
@@ -150,6 +141,15 @@ export default function CreateGroupPage({ navigate }) {
               ))}
             </div>
           </div>
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label>📅 Subscription Renew Date <span style={{ fontSize:"0.75rem", color:"var(--muted)", fontWeight:400 }}>(when you need to renew the actual plan)</span></label>
+              <input type="date" value={form.renewDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={set("renewDate")}
+                style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.9rem" }}
+              />
+              <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>Admin will be notified 3 days before this date.</div>
+            </div>
 
           <div className="form-group">
             <label>Description (optional)</label>
