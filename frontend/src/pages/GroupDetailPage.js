@@ -244,10 +244,18 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     </div>;
                   })()}
                   <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <input type="date" value={renewDate}
-                      onChange={e => setRenewDate(e.target.value)}
-                      style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem" }}
-                    />
+                    <div style={{ position:"relative", display:"inline-block" }}>
+                      <input type="date" value={renewDate}
+                        onChange={e => setRenewDate(e.target.value)}
+                        style={{
+                          padding:"8px 12px", borderRadius:8,
+                          border:"1px solid var(--border)",
+                          background:"var(--bg2)", color:"var(--text)",
+                          fontSize:"0.85rem", cursor:"pointer",
+                          colorScheme:"dark", minWidth:160,
+                        }}
+                      />
+                    </div>
                     <button className="btn btn-sm btn-primary" disabled={renewDateBusy} onClick={saveRenewDate}>
                       {renewDateBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
                     </button>
