@@ -492,7 +492,7 @@ app.get("/api/groups/:id", async (req, res) => {
 });
 
 app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res) => {
-  const { serviceId, planName, totalPrice, maxSlots, description, billingCycle = "monthly" } = req.body;
+  const { renewDate, serviceId, planName, totalPrice, maxSlots, description, billingCycle = "monthly" } = req.body;
   if (!serviceId || !planName || !totalPrice || !maxSlots)
     return res.status(400).json({ error: "serviceId, planName, totalPrice, maxSlots required" });
 
@@ -523,6 +523,7 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res)
       platformFee: fees.platformFee, memberPays: fees.memberPays, feePercent: fees.feePercent,
       organizerId: req.user.id, organizerName: creatorName, organizerEmail: creatorEmail,
       description: description || "", billingCycle,
+      renewDate:     renewDate ? new Date(renewDate) : null,
       status:       isSuperAdmin ? "open"     : "pending_review",
       reviewStatus: isSuperAdmin ? "approved" : "pending",
     },

@@ -58,6 +58,8 @@ model Group {
   status         String   @default("open")     // open | full | closed | pending_review
   reviewStatus   String   @default("pending")  // pending | approved | rejected
   reviewNote     String   @default("")
+  renewDate      DateTime?               // when organizer needs to renew the actual subscription
+  renewReminderSent Boolean  @default(false) // track if 3-day reminder was sent
   reviewedAt     DateTime?
   reviewedBy     String?
   createdAt      DateTime @default(now())
