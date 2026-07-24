@@ -531,6 +531,21 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res)
   res.status(201).json(group);
 });
 
+app.patch("/api/groups/:id/renew-date", requireRole("moderator", "superadmin"), async (req, res) => {
+  const { renewDate } = req.body;
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const updated = await prisma.group.update({
+    where: { id: req.params.id },
+    data: {
+      renewDate: renewDate ? new Date(renewDate) : null,
+      renewReminderSent: false, // reset so reminder can be sent again
+    },
+  });
+  console.log("[GROUP] Renew date set for", group.serviceName, group.planName, "->", renewDate);
+  res.json({ ok: true, group: updated });
+});
+
 app.patch("/api/groups/:id/status", requireAuth, async (req, res) => {
   const { status } = req.body;
   const group = await prisma.group.findUnique({ where: { id: req.params.id } });

@@ -159,7 +159,8 @@ export const api = {
   adminGetSupportThreads:  ()    => req("/admin/support/threads"),
   adminGetSupportThread:   (id)  => req(`/admin/support/threads/${id}`),
   adminReplySupport:       (id, body) => req(`/admin/support/threads/${id}/reply`, { method: "POST", body: { body } }),
-  renewSlot:              (gid)  => req(`/groups/${gid}/renew`, { method: "POST" }),
+  renewSlot:              (gid)        => req(`/groups/${gid}/renew`, { method: "POST" }),
+  setGroupRenewDate:      (gid, date)  => req(`/groups/${gid}/renew-date`, { method: "PATCH", body: { renewDate: date } }),
 
   // Expired subscriptions
   getExpiredMembers:      ()     => req("/admin/expired-members"),
