@@ -926,7 +926,7 @@ function CredentialVaultInline({
       <div style={{ margin:"0 0 16px", padding:"12px 16px", background:"rgba(124,106,255,0.06)", borderRadius:10, border:"1px solid rgba(124,106,255,0.15)" }}>
         <div style={{ fontWeight:700, fontSize:"0.88rem", marginBottom:6 }}>📺 How to log in to your {serviceName} account</div>
         <div style={{ fontSize:"0.78rem", color:"var(--muted)", lineHeight:1.6 }}>
-          Use the email and password below to sign in on {serviceName}. If it asks for a verification code, check the <strong style={{ color:"var(--accent)" }}>🔑 OTP / Verification Code</strong> section above — click <em>Check</em> and then <em>Reveal</em> to see it.
+          Use the email and password below to sign in on {serviceName}. If it asks for a verification code, check the <strong style={{ color:"var(--accent)" }}>🔑 OTP / Verification Code</strong> section below — click <em>🔑 Click to Get OTP</em> and then <em>Reveal</em> to see it.
         </div>
       </div>
       <div className="cv-slots">
@@ -978,6 +978,41 @@ function CredentialVaultInline({
           </div>
         ))}
       </div>
+      {inboundEmail && (isConfirmedMember || canManage) && (
+        <div style={{ margin:"16px 0 0", padding:"12px 16px", background:"rgba(124,106,255,0.08)", borderRadius:10, border:"1px solid rgba(124,106,255,0.2)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--accent)" }}>🔑 OTP / Verification Code</div>
+            <button className="btn btn-sm btn-outline" style={{ fontSize:"0.72rem" }} onClick={fetchOtp} disabled={otpLoading}>
+              {otpLoading ? <span className="spinner"/> : "🔑 Click to Get OTP"}
+            </button>
+          </div>
+          {otpData?.otp ? (
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:"1.8rem", fontWeight:800, letterSpacing:6, color:"var(--text)", fontFamily:"monospace" }}>
+                  {otpRevealed ? otpData.otp : "•".repeat(otpData.otp.length)}
+                </span>
+                {!otpRevealed ? (
+                  <button className="btn btn-sm btn-outline" onClick={() => { setOtpRevealed(true); setTimeout(() => setOtpRevealed(false), 30000); }}>👁 Reveal</button>
+                ) : (
+                  <button className="btn btn-sm btn-outline" onClick={() => navigator.clipboard.writeText(otpData.otp)}>⊕ Copy</button>
+                )}
+              </div>
+              <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>
+                {otpRevealed && <span style={{ color:"var(--warning)", marginRight:8 }}>⚠ Auto-hides in 30s</span>}
+                <span style={{ color: otpData.expiresIn <= 2 ? "var(--error)" : "var(--warning)", fontWeight:600 }}>
+                  ⏱ Code expires in {otpData.expiresIn} min
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
+              No active code yet. Click "🔑 Click to Get OTP" above after requesting a login code from {serviceName}.
+            </div>
+          }
+        </div>
+      )}
+
       {confirmDelete && (
         <div style={{ marginTop: 16, padding: 16, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 10 }}>
           <p style={{ fontSize: "0.84rem", color: "var(--error)", marginBottom: 12 }}>⚠️ Delete all credentials? Members will lose access.</p>
