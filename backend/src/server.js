@@ -20,6 +20,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_in_production";
 
 // ── Middleware ────────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:3000" }));
+app.use('/api/inbound/email', express.raw({ type: '*/*' })); // raw body needed for Svix signature verification
 app.use(express.json());
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20,
@@ -748,10 +749,22 @@ app.get("/api/paystack/verify", async (req, res) => {
 //  RESEND INBOUND EMAIL — OTP CAPTURE
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.post("/api/inbound/email", express.json(), async (req, res) => {
-  res.sendStatus(200); // always respond quickly
+app.post("/api/inbound/email", async (req, res) => {
+  const { Webhook } = require("svix");
+  let event;
   try {
-    const event = req.body;
+    const wh = new Webhook(process.env.RESEND_WEBHOOK_SECRET);
+    event = wh.verify(req.body, {
+      "svix-id": req.headers["svix-id"],
+      "svix-timestamp": req.headers["svix-timestamp"],
+      "svix-signature": req.headers["svix-signature"],
+    });
+  } catch (err) {
+    console.error("[INBOUND] Webhook signature verification failed:", err.message);
+    return res.sendStatus(401);
+  }
+  res.sendStatus(200); // always respond quickly, after verification
+  try {
     if (event.type !== "email.received") return;
 
     const emailId = event.data?.email_id;
