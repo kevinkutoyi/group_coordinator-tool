@@ -13,10 +13,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [renewDate, setRenewDate]     = useState("");
   const [renewDateBusy, setRenewDateBusy] = useState(false);
   const [renewDateMsg, setRenewDateMsg]   = useState(null);
-  const [otpData, setOtpData]           = useState(null);
-  const [otpLoading, setOtpLoading]     = useState(false);
-  const [inboundEmailInput, setInboundEmailInput] = useState("");
-  const [inboundEmailBusy, setInboundEmailBusy]   = useState(false);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
   const [creds, setCreds]         = useState(null);
@@ -56,7 +52,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
     if (!expiresAt) return null;
     return Math.ceil((new Date(expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
   }
-  const groupMonths = CYCLE_MONTHS[group?.billingCycle] || 1;
+  const groupMonths = group ? (CYCLE_MONTHS[group.billingCycle] || 1) : 1;
 
   // New fee model: memberPays = base (fee comes OUT of it, not added on top)
   function calcMemberPays(pricePerSlot, months) {
@@ -90,29 +86,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
       const res = await api.initiatePay({ groupId: id, memberId: member.id });
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
-  }
-
-  useEffect(() => {
-    if (group?.inboundEmail) setInboundEmailInput(group.inboundEmail);
-  }, [group?.inboundEmail]);
-
-  async function fetchOtp() {
-    setOtpLoading(true);
-    try {
-      const data = await api.getGroupOtp(id);
-      setOtpData(data);
-    } catch (err) { console.error(err); }
-    finally { setOtpLoading(false); }
-  }
-
-  async function saveInboundEmail() {
-    setInboundEmailBusy(true);
-    try {
-      await api.setGroupInboundEmail(id, inboundEmailInput);
-      setMsg({ type: "ok", text: "Inbound email saved." });
-      reload();
-    } catch (err) { setMsg({ type: "err", text: err.message }); }
-    finally { setInboundEmailBusy(false); }
   }
 
   async function saveRenewDate() {
@@ -259,24 +232,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
             )}
           </div>
         </div>
-              {canManage && (
-                <div style={{ marginTop:8, padding:"12px 14px", background:"rgba(124,106,255,0.06)", borderRadius:10, border:"1px solid rgba(124,106,255,0.15)" }}>
-                  <div style={{ fontSize:"0.78rem", fontWeight:600, marginBottom:6, color:"var(--accent)" }}>📬 Inbound Email <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(for OTP capture)</span></div>
-                  <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>Set the email address used for this {group.serviceName} account. OTPs sent here appear automatically in the vault.</div>
-                  {group.inboundEmail && <div style={{ fontSize:"0.72rem", color:"var(--success)", marginBottom:8, fontWeight:600 }}>✓ Current: {group.inboundEmail}</div>}
-                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <input type="email" value={inboundEmailInput}
-                      onChange={e => setInboundEmailInput(e.target.value)}
-                      placeholder="e.g. netflix-group1@inbound.splitsubs.com"
-                      style={{ flex:1, padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem", minWidth:200 }}
-                    />
-                    <button className="btn btn-sm btn-primary" disabled={inboundEmailBusy} onClick={saveInboundEmail}>
-                      {inboundEmailBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
-                    </button>
-                    {group.inboundEmail && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setInboundEmailInput(""); saveInboundEmail(); }}>✕ Clear</button>}
-                  </div>
-                </div>
-              )}
               {canManage && (
                 <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
                   <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin only)</span></div>
@@ -785,36 +740,6 @@ function CredentialVaultInline({
         </div>
         <div className="cv-vault-title-block">
           <h3 className="cv-vault-title">🔓 Access Credentials Unlocked</h3>
-            {/* OTP Section */}
-            {group?.inboundEmail && (
-              <div style={{ margin:"12px 0 16px", padding:"12px 16px", background:"rgba(124,106,255,0.08)", borderRadius:10, border:"1px solid rgba(124,106,255,0.2)" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                  <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--accent)" }}>🔑 OTP / Verification Code</div>
-                  <button className="btn btn-sm btn-outline" style={{ fontSize:"0.72rem" }} onClick={fetchOtp} disabled={otpLoading}>
-                    {otpLoading ? <span className="spinner"/> : "↻ Refresh"}
-                  </button>
-                </div>
-                {otpData?.otp ? (
-                  <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                      <span style={{ fontSize:"2rem", fontWeight:800, letterSpacing:6, color:"var(--text)", fontFamily:"monospace" }}>{otpData.otp}</span>
-                      <button className="btn btn-sm btn-outline" onClick={() => navigator.clipboard.writeText(otpData.otp)}>⊕ Copy</button>
-                    </div>
-                    <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>
-                      {otpData.subject && <span style={{ marginRight:8 }}>From: {otpData.subject}</span>}
-                      <span style={{ color: otpData.expiresIn <= 2 ? "var(--error)" : "var(--warning)", fontWeight:600 }}>
-                        ⏱ Expires in {otpData.expiresIn} min
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
-                    No active OTP. When {group?.serviceName} sends a verification code to <strong style={{ color:"var(--text)" }}>{group.inboundEmail}</strong>, it will appear here automatically.
-                    <button className="btn btn-sm btn-outline" style={{ marginLeft:8, fontSize:"0.72rem" }} onClick={fetchOtp}>Check now</button>
-                  </div>
-                )}
-              </div>
-            )}
           <p className="cv-vault-subtitle">
             {creds.slots?.length} slot{creds.slots?.length !== 1 ? "s" : ""} · Updated {new Date(creds.updatedAt).toLocaleDateString()}
           </p>
