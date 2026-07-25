@@ -322,6 +322,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
             canManage={canManage}
             inboundEmail={group.inboundEmail}
             groupId2={id}
+            allMembers={payingMembers}
             // lifted state
             creds={creds}
             loading={credsLoading}
@@ -601,7 +602,7 @@ function CredentialVaultInline({
   onJoin, onLogin, groupStatus, isLoggedIn, isCustomer, isMyMember, isOrganizer,
   canManage, creds, loading, editing, editSlots, editNote, saving, saveMsg,
   onStartEdit, onSetEditSlots, onSetEditNote, onSave, onCancelEdit, onDelete, onSaveMsgClear,
-  isConfirmedMember, inboundEmail, groupId2,
+  isConfirmedMember, inboundEmail, groupId2, allMembers,
 }) {
   const [otpData, setOtpData] = useState(null);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -898,7 +899,22 @@ function CredentialVaultInline({
                   {p.assignedTo ? "✓ " + p.assignedTo.name : "— unassigned"}
                 </div>
               </div>
-              <div style={{ display:"flex", gap:6 }}>
+              <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                <select
+                  value={p.assignedTo?.memberId || ""}
+                  onChange={async (e) => {
+                    const memberId = e.target.value;
+                    if (!memberId) return;
+                    try { await api.assignMemberProfile(memberId, p.id); await fetchProfiles(); }
+                    catch (err) { alert(err.message); }
+                  }}
+                  style={{ padding:"5px 8px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.78rem" }}
+                >
+                  <option value="">Assign to…</option>
+                  {(allMembers || []).map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
                 {p.assignedTo && (
                   <button className="btn btn-sm btn-outline" onClick={async () => {
                     try { await api.assignMemberProfile(p.assignedTo.memberId, null); await fetchProfiles(); }
