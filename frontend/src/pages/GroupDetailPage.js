@@ -1009,7 +1009,7 @@ function CredentialVaultInline({
             <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
               No active code yet. Click "🔑 Click to Get OTP" above after requesting a login code from {serviceName}.
             </div>
-          }
+          )}
         </div>
       )}
 
