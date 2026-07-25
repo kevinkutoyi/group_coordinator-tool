@@ -765,7 +765,7 @@ app.post("/api/inbound/email", express.json(), async (req, res) => {
     const emailContent = await new Promise((resolve, reject) => {
       const options = {
         hostname: "api.resend.com",
-        path: "/emails/" + emailId,
+        path: "/emails/receiving/" + emailId,
         method: "GET",
         headers: { Authorization: "Bearer " + process.env.RESEND_API_KEY },
       };
