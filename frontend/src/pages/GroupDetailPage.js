@@ -234,6 +234,24 @@ export default function GroupDetailPage({ id, navigate, user }) {
         </div>
               {canManage && (
                 <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📬 Inbound Email <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(for OTP capture)</span></div>
+                  <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>OTPs sent here appear automatically for confirmed members.</div>
+                  {group.inboundEmail && <div style={{ fontSize:"0.72rem", color:"var(--success)", marginBottom:8, fontWeight:600 }}>✓ Current: {group.inboundEmail}</div>}
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <input type="email" defaultValue={group.inboundEmail || ""} id="inboundEmailInput"
+                      placeholder="e.g. netflix-group1@inbound.splitsubs.com"
+                      style={{ flex:1, padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem", minWidth:200 }}
+                    />
+                    <button className="btn btn-sm btn-primary" onClick={async () => {
+                      const val = document.getElementById("inboundEmailInput").value;
+                      try { await api.setGroupInboundEmail(id, val || null); setMsg({ type:"ok", text:"Inbound email saved." }); reload(); }
+                      catch (err) { setMsg({ type:"err", text: err.message }); }
+                    }}>💾 Save</button>
+                  </div>
+                </div>
+              )}
+              {canManage && (
+                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
                   <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin only)</span></div>
                   {group.renewDate && (() => {
                     const days = Math.ceil((new Date(group.renewDate) - new Date()) / (1000*60*60*24));
@@ -299,8 +317,11 @@ export default function GroupDetailPage({ id, navigate, user }) {
             isLoggedIn={session.isLoggedIn()}
             isCustomer={session.isCustomer() || session.isModerator()}
             isMyMember={!!myMember}
+            isConfirmedMember={myMember?.paymentStatus === "confirmed"}
             isOrganizer={isOrganizer}
             canManage={canManage}
+            inboundEmail={group.inboundEmail}
+            groupId2={id}
             // lifted state
             creds={creds}
             loading={credsLoading}
@@ -580,7 +601,17 @@ function CredentialVaultInline({
   onJoin, onLogin, groupStatus, isLoggedIn, isCustomer, isMyMember, isOrganizer,
   canManage, creds, loading, editing, editSlots, editNote, saving, saveMsg,
   onStartEdit, onSetEditSlots, onSetEditNote, onSave, onCancelEdit, onDelete, onSaveMsgClear,
+  isConfirmedMember, inboundEmail, groupId2,
 }) {
+  const [otpData, setOtpData] = useState(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpRevealed, setOtpRevealed] = useState(false);
+  async function fetchOtp() {
+    setOtpLoading(true);
+    try { const data = await api.getGroupOtp(groupId2 || groupId); setOtpData(data); setOtpRevealed(false); }
+    catch (err) { console.error(err); }
+    finally { setOtpLoading(false); }
+  }
   const [copied, setCopied] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   function copy(key, text) {
@@ -751,6 +782,41 @@ function CredentialVaultInline({
           </div>
         )}
       </div>
+
+      {inboundEmail && (isConfirmedMember || canManage) && (
+        <div style={{ margin:"0 0 16px", padding:"12px 16px", background:"rgba(124,106,255,0.08)", borderRadius:10, border:"1px solid rgba(124,106,255,0.2)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--accent)" }}>🔑 OTP / Verification Code</div>
+            <button className="btn btn-sm btn-outline" style={{ fontSize:"0.72rem" }} onClick={fetchOtp} disabled={otpLoading}>
+              {otpLoading ? <span className="spinner"/> : "↻ Check"}
+            </button>
+          </div>
+          {otpData?.otp ? (
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:"1.8rem", fontWeight:800, letterSpacing:6, color:"var(--text)", fontFamily:"monospace" }}>
+                  {otpRevealed ? otpData.otp : "•".repeat(otpData.otp.length)}
+                </span>
+                {!otpRevealed ? (
+                  <button className="btn btn-sm btn-outline" onClick={() => { setOtpRevealed(true); setTimeout(() => setOtpRevealed(false), 30000); }}>👁 Reveal</button>
+                ) : (
+                  <button className="btn btn-sm btn-outline" onClick={() => navigator.clipboard.writeText(otpData.otp)}>⊕ Copy</button>
+                )}
+              </div>
+              <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>
+                {otpRevealed && <span style={{ color:"var(--warning)", marginRight:8 }}>⚠ Auto-hides in 30s</span>}
+                <span style={{ color: otpData.expiresIn <= 2 ? "var(--error)" : "var(--warning)", fontWeight:600 }}>
+                  ⏱ Code expires in {otpData.expiresIn} min
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
+              No active code. Click Check after requesting a login code from {serviceName}.
+            </div>
+          )}
+        </div>
+      )}
       {creds.generalNote && (
         <div className="cv-general-note"><span className="cv-note-icon">📌</span><span>{creds.generalNote}</span></div>
       )}
