@@ -10,7 +10,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [busy, setBusy]           = useState(false);
   const [payingId, setPayingId]   = useState(null);
   const [msg, setMsg]             = useState(null);
-  const [renewDate, setRenewDate]     = useState(group?.renewDate ? new Date(group.renewDate).toISOString().split('T')[0] : "");
+  const [renewDate, setRenewDate]     = useState("");
   const [renewDateBusy, setRenewDateBusy] = useState(false);
   const [renewDateMsg, setRenewDateMsg]   = useState(null);
   const [otpData, setOtpData]           = useState(null);
