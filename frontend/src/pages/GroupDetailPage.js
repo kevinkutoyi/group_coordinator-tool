@@ -786,7 +786,7 @@ function CredentialVaultInline({
         <div className="cv-vault-title-block">
           <h3 className="cv-vault-title">🔓 Access Credentials Unlocked</h3>
             {/* OTP Section */}
-            {group.inboundEmail && (
+            {group?.inboundEmail && (
               <div style={{ margin:"12px 0 16px", padding:"12px 16px", background:"rgba(124,106,255,0.08)", borderRadius:10, border:"1px solid rgba(124,106,255,0.2)" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                   <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--accent)" }}>🔑 OTP / Verification Code</div>
@@ -809,7 +809,7 @@ function CredentialVaultInline({
                   </div>
                 ) : (
                   <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
-                    No active OTP. When {group.serviceName} sends a verification code to <strong style={{ color:"var(--text)" }}>{group.inboundEmail}</strong>, it will appear here automatically.
+                    No active OTP. When {group?.serviceName} sends a verification code to <strong style={{ color:"var(--text)" }}>{group.inboundEmail}</strong>, it will appear here automatically.
                     <button className="btn btn-sm btn-outline" style={{ marginLeft:8, fontSize:"0.72rem" }} onClick={fetchOtp}>Check now</button>
                   </div>
                 )}
