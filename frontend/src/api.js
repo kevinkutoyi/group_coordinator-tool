@@ -162,6 +162,12 @@ export const api = {
   renewSlot:              (gid)        => req(`/groups/${gid}/renew`, { method: "POST" }),
   setGroupRenewDate:      (gid, date)  => req(`/groups/${gid}/renew-date`, { method: "PATCH", body: { renewDate: date } }),
   getGroupOtp:            (gid)        => req(`/groups/${gid}/otp`),
+  getGroupProfiles:       (gid)        => req(`/groups/${gid}/profiles`),
+  createGroupProfile:     (gid, data)  => req(`/groups/${gid}/profiles`, { method: "POST", body: data }),
+  updateGroupProfile:     (gid, pid, data) => req(`/groups/${gid}/profiles/${pid}`, { method: "PATCH", body: data }),
+  deleteGroupProfile:     (gid, pid)   => req(`/groups/${gid}/profiles/${pid}`, { method: "DELETE" }),
+  selectGroupProfile:     (gid, pid)   => req(`/groups/${gid}/profiles/${pid}/select`, { method: "POST" }),
+  assignMemberProfile:    (mid, pid)   => req(`/admin/members/${mid}/assign-profile`, { method: "PATCH", body: { profileId: pid } }),
   setGroupInboundEmail:   (gid, email) => req(`/groups/${gid}/inbound-email`, { method: "PATCH", body: { inboundEmail: email } }),
 
   // Expired subscriptions
