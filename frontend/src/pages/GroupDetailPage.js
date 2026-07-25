@@ -256,6 +256,24 @@ export default function GroupDetailPage({ id, navigate, user }) {
           </div>
         </div>
               {canManage && (
+                <div style={{ marginTop:8, padding:"12px 14px", background:"rgba(124,106,255,0.06)", borderRadius:10, border:"1px solid rgba(124,106,255,0.15)" }}>
+                  <div style={{ fontSize:"0.78rem", fontWeight:600, marginBottom:6, color:"var(--accent)" }}>📬 Inbound Email <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(for OTP capture)</span></div>
+                  <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>Set the email address used for this {group.serviceName} account. OTPs sent here appear automatically in the vault.</div>
+                  {group.inboundEmail && <div style={{ fontSize:"0.72rem", color:"var(--success)", marginBottom:8, fontWeight:600 }}>✓ Current: {group.inboundEmail}</div>}
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <input type="email" value={inboundEmailInput}
+                      onChange={e => setInboundEmailInput(e.target.value)}
+                      placeholder="e.g. netflix-group1@inbound.splitsubs.com"
+                      style={{ flex:1, padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem", minWidth:200 }}
+                    />
+                    <button className="btn btn-sm btn-primary" disabled={inboundEmailBusy} onClick={saveInboundEmail}>
+                      {inboundEmailBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
+                    </button>
+                    {group.inboundEmail && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setInboundEmailInput(""); saveInboundEmail(); }}>✕ Clear</button>}
+                  </div>
+                </div>
+              )}
+              {canManage && (
                 <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
                   <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin only)</span></div>
                   {group.renewDate && (() => {
