@@ -15,7 +15,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [renewDateMsg, setRenewDateMsg]   = useState(null);
   const [otpData, setOtpData]           = useState(null);
   const [otpLoading, setOtpLoading]     = useState(false);
-  const [inboundEmailInput, setInboundEmailInput] = useState(group?.inboundEmail || "");
+  const [inboundEmailInput, setInboundEmailInput] = useState("");
   const [inboundEmailBusy, setInboundEmailBusy]   = useState(false);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
@@ -91,6 +91,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
   }
+
+  useEffect(() => {
+    if (group?.inboundEmail) setInboundEmailInput(group.inboundEmail);
+  }, [group?.inboundEmail]);
 
   async function fetchOtp() {
     setOtpLoading(true);
