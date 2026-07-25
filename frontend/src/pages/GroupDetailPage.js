@@ -647,6 +647,7 @@ function CredentialVaultInline({
     catch (err) { alert(err.message); }
   }
   const [copied, setCopied] = useState({});
+  const [revealedPw, setRevealedPw] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   function copy(key, text) {
     navigator.clipboard.writeText(text).then(() => {
