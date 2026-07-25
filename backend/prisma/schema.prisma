@@ -58,6 +58,7 @@ model Group {
   status         String   @default("open")     // open | full | closed | pending_review
   reviewStatus   String   @default("pending")  // pending | approved | rejected
   reviewNote     String   @default("")
+  profiles       GroupProfile[]
   inboundEmail   String?                 // e.g. netflix@inbound.splitsubs.com
   latestOtp      String?                 // latest OTP received via email
   otpReceivedAt  DateTime?               // when OTP was received
@@ -101,6 +102,9 @@ model GroupMember {
   joinedAt      DateTime  @default(now())
   expiresAt     DateTime?
   expiryNotifications   String[]  @default([])
+  profileId          String?
+  profile             GroupProfile? @relation(fields: [profileId], references: [id])
+  profileSelectedAt   DateTime?
   expiryAdjustmentDays  Int       @default(0)   // total days added(+) or removed(-) by admin
   expiryAdjustedAt      DateTime?               // when admin last adjusted
   expiryAdjustedNote    String?                 // optional note from admin
@@ -396,4 +400,16 @@ model PaystackOrder {
   confirmedAt    DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+model GroupProfile {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name      String
+  pin       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   GroupMember[]
+  @@map("group_profiles")
 }

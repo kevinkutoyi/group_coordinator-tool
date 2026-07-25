@@ -532,6 +532,115 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res)
   res.status(201).json(group);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  GROUP PROFILES (Netflix-style multi-profile PIN assignment)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// List/manage profiles — shape depends on requester
+app.get("/api/groups/:id/profiles", requireAuth, async (req, res) => {
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const isOrganizer = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  const canManage = isOrganizer || isSuperAdmin || req.user.role === "moderator";
+
+  const profiles = await prisma.groupProfile.findMany({
+    where: { groupId: req.params.id },
+    include: { members: { select: { id: true, name: true, userId: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (canManage) {
+    return res.json({
+      role: "admin",
+      profiles: profiles.map(p => ({
+        id: p.id, name: p.name, pin: p.pin,
+        assignedTo: p.members[0] ? { memberId: p.members[0].id, name: p.members[0].name } : null,
+      })),
+    });
+  }
+
+  const myMember = await prisma.groupMember.findFirst({
+    where: { groupId: req.params.id, userId: req.user.id, paymentStatus: "confirmed" },
+    include: { profile: true },
+  });
+
+  if (!myMember) return res.json({ role: "none" });
+
+  if (myMember.profile) {
+    return res.json({ role: "member", myProfile: { name: myMember.profile.name, pin: myMember.profile.pin } });
+  }
+
+  const taken = new Set(profiles.filter(p => p.members.length > 0).map(p => p.id));
+  return res.json({
+    role: "member",
+    myProfile: null,
+    available: profiles.filter(p => !taken.has(p.id)).map(p => ({ id: p.id, name: p.name })),
+  });
+});
+
+// Create a profile (admin/organizer)
+app.post("/api/groups/:id/profiles", requireRole("moderator", "superadmin"), async (req, res) => {
+  const { name, pin } = req.body;
+  if (!name || !pin) return res.status(400).json({ error: "name and pin required" });
+  const profile = await prisma.groupProfile.create({
+    data: { groupId: req.params.id, name, pin },
+  });
+  console.log("[PROFILE] Created", name, "for group", req.params.id);
+  res.json({ ok: true, profile });
+});
+
+// Edit a profile (admin/organizer)
+app.patch("/api/groups/:id/profiles/:profileId", requireRole("moderator", "superadmin"), async (req, res) => {
+  const { name, pin } = req.body;
+  const profile = await prisma.groupProfile.update({
+    where: { id: req.params.profileId },
+    data: { ...(name && { name }), ...(pin && { pin }) },
+  });
+  res.json({ ok: true, profile });
+});
+
+// Delete a profile (admin/organizer) — unassigns any member first
+app.delete("/api/groups/:id/profiles/:profileId", requireRole("moderator", "superadmin"), async (req, res) => {
+  await prisma.groupMember.updateMany({ where: { profileId: req.params.profileId }, data: { profileId: null, profileSelectedAt: null } });
+  await prisma.groupProfile.delete({ where: { id: req.params.profileId } });
+  res.json({ ok: true });
+});
+
+// Member self-selects a profile (once, locked after)
+app.post("/api/groups/:id/profiles/:profileId/select", requireAuth, async (req, res) => {
+  const myMember = await prisma.groupMember.findFirst({
+    where: { groupId: req.params.id, userId: req.user.id, paymentStatus: "confirmed" },
+  });
+  if (!myMember) return res.status(403).json({ error: "Not a confirmed member of this group" });
+  if (myMember.profileId) return res.status(400).json({ error: "You already selected a profile" });
+
+  const already = await prisma.groupMember.findFirst({ where: { profileId: req.params.profileId } });
+  if (already) return res.status(409).json({ error: "That profile was just taken by someone else" });
+
+  const updated = await prisma.groupMember.update({
+    where: { id: myMember.id },
+    data: { profileId: req.params.profileId, profileSelectedAt: new Date() },
+    include: { profile: true },
+  });
+  console.log("[PROFILE] Member", req.user.id, "selected profile", req.params.profileId);
+  res.json({ ok: true, myProfile: { name: updated.profile.name, pin: updated.profile.pin } });
+});
+
+// Admin manually assigns/reassigns a member to a profile (backup override)
+app.patch("/api/admin/members/:id/assign-profile", requireRole("moderator", "superadmin"), async (req, res) => {
+  const { profileId } = req.body;
+  if (profileId) {
+    await prisma.groupMember.updateMany({ where: { profileId, id: { not: req.params.id } }, data: { profileId: null, profileSelectedAt: null } });
+  }
+  const updated = await prisma.groupMember.update({
+    where: { id: req.params.id },
+    data: { profileId: profileId || null, profileSelectedAt: profileId ? new Date() : null },
+  });
+  console.log("[PROFILE] Admin assigned member", req.params.id, "to profile", profileId);
+  res.json({ ok: true, member: updated });
+});
+
 app.patch("/api/groups/:id/renew-date", requireRole("moderator", "superadmin"), async (req, res) => {
   const { renewDate } = req.body;
   const group = await prisma.group.findUnique({ where: { id: req.params.id } });
