@@ -612,6 +612,24 @@ function CredentialVaultInline({
     catch (err) { console.error(err); }
     finally { setOtpLoading(false); }
   }
+  const [profileData, setProfileData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileRevealed, setProfileRevealed] = useState(false);
+  const [selectingId, setSelectingId] = useState(null);
+  const [profileMsg, setProfileMsg] = useState(null);
+  async function fetchProfiles() {
+    setProfileLoading(true);
+    try { const data = await api.getGroupProfiles(groupId2 || groupId); setProfileData(data); }
+    catch (err) { console.error(err); }
+    finally { setProfileLoading(false); }
+  }
+  async function selectProfile(pid) {
+    setSelectingId(pid); setProfileMsg(null);
+    try { await api.selectGroupProfile(groupId2 || groupId, pid); await fetchProfiles(); }
+    catch (err) { setProfileMsg(err.message); }
+    finally { setSelectingId(null); }
+  }
+  useEffect(() => { if (isConfirmedMember) fetchProfiles(); }, [isConfirmedMember]);
   const [copied, setCopied] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   function copy(key, text) {
@@ -814,6 +832,41 @@ function CredentialVaultInline({
             <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
               No active code. Click Check after requesting a login code from {serviceName}.
             </div>
+          )}
+        </div>
+      )}
+      {isConfirmedMember && profileData?.role === "member" && (
+        <div style={{ margin:"0 0 16px", padding:"12px 16px", background:"rgba(124,106,255,0.08)", borderRadius:10, border:"1px solid rgba(124,106,255,0.2)" }}>
+          <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--accent)", marginBottom:8 }}>🎬 Your Profile</div>
+          {profileData.myProfile ? (
+            <div>
+              <div style={{ fontSize:"0.9rem", fontWeight:700, marginBottom:6 }}>{profileData.myProfile.name}</div>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:"1.6rem", fontWeight:800, letterSpacing:6, color:"var(--text)", fontFamily:"monospace" }}>
+                  {profileRevealed ? profileData.myProfile.pin : "•".repeat(profileData.myProfile.pin.length)}
+                </span>
+                {!profileRevealed ? (
+                  <button className="btn btn-sm btn-outline" onClick={() => { setProfileRevealed(true); setTimeout(() => setProfileRevealed(false), 30000); }}>👁 Reveal PIN</button>
+                ) : (
+                  <button className="btn btn-sm btn-outline" onClick={() => navigator.clipboard.writeText(profileData.myProfile.pin)}>⊕ Copy</button>
+                )}
+              </div>
+              {profileRevealed && <div style={{ fontSize:"0.7rem", color:"var(--warning)", marginTop:4 }}>⚠ Auto-hides in 30s</div>}
+            </div>
+          ) : profileData.available?.length > 0 ? (
+            <div>
+              <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginBottom:8 }}>Pick your profile — this is permanent, only the admin can change it later.</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {profileData.available.map(p => (
+                  <button key={p.id} className="btn btn-sm btn-primary" disabled={selectingId === p.id} onClick={() => selectProfile(p.id)}>
+                    {selectingId === p.id ? <span className="spinner"/> : p.name}
+                  </button>
+                ))}
+              </div>
+              {profileMsg && <div style={{ fontSize:"0.75rem", color:"var(--error)", marginTop:8 }}>{profileMsg}</div>}
+            </div>
+          ) : (
+            <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>No profiles available yet — ask the organizer to set them up.</div>
           )}
         </div>
       )}
