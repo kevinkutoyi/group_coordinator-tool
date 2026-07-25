@@ -13,6 +13,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [renewDate, setRenewDate]     = useState(group?.renewDate ? new Date(group.renewDate).toISOString().split('T')[0] : "");
   const [renewDateBusy, setRenewDateBusy] = useState(false);
   const [renewDateMsg, setRenewDateMsg]   = useState(null);
+  const [otpData, setOtpData]           = useState(null);
+  const [otpLoading, setOtpLoading]     = useState(false);
+  const [inboundEmailInput, setInboundEmailInput] = useState(group?.inboundEmail || "");
+  const [inboundEmailBusy, setInboundEmailBusy]   = useState(false);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
   const [creds, setCreds]         = useState(null);
@@ -86,6 +90,25 @@ export default function GroupDetailPage({ id, navigate, user }) {
       const res = await api.initiatePay({ groupId: id, memberId: member.id });
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
+  }
+
+  async function fetchOtp() {
+    setOtpLoading(true);
+    try {
+      const data = await api.getGroupOtp(id);
+      setOtpData(data);
+    } catch (err) { console.error(err); }
+    finally { setOtpLoading(false); }
+  }
+
+  async function saveInboundEmail() {
+    setInboundEmailBusy(true);
+    try {
+      await api.setGroupInboundEmail(id, inboundEmailInput);
+      setMsg({ type: "ok", text: "Inbound email saved." });
+      reload();
+    } catch (err) { setMsg({ type: "err", text: err.message }); }
+    finally { setInboundEmailBusy(false); }
   }
 
   async function saveRenewDate() {
@@ -740,6 +763,36 @@ function CredentialVaultInline({
         </div>
         <div className="cv-vault-title-block">
           <h3 className="cv-vault-title">🔓 Access Credentials Unlocked</h3>
+            {/* OTP Section */}
+            {group.inboundEmail && (
+              <div style={{ margin:"12px 0 16px", padding:"12px 16px", background:"rgba(124,106,255,0.08)", borderRadius:10, border:"1px solid rgba(124,106,255,0.2)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div style={{ fontWeight:600, fontSize:"0.82rem", color:"var(--accent)" }}>🔑 OTP / Verification Code</div>
+                  <button className="btn btn-sm btn-outline" style={{ fontSize:"0.72rem" }} onClick={fetchOtp} disabled={otpLoading}>
+                    {otpLoading ? <span className="spinner"/> : "↻ Refresh"}
+                  </button>
+                </div>
+                {otpData?.otp ? (
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                      <span style={{ fontSize:"2rem", fontWeight:800, letterSpacing:6, color:"var(--text)", fontFamily:"monospace" }}>{otpData.otp}</span>
+                      <button className="btn btn-sm btn-outline" onClick={() => navigator.clipboard.writeText(otpData.otp)}>⊕ Copy</button>
+                    </div>
+                    <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>
+                      {otpData.subject && <span style={{ marginRight:8 }}>From: {otpData.subject}</span>}
+                      <span style={{ color: otpData.expiresIn <= 2 ? "var(--error)" : "var(--warning)", fontWeight:600 }}>
+                        ⏱ Expires in {otpData.expiresIn} min
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:"0.78rem", color:"var(--muted)" }}>
+                    No active OTP. When {group.serviceName} sends a verification code to <strong style={{ color:"var(--text)" }}>{group.inboundEmail}</strong>, it will appear here automatically.
+                    <button className="btn btn-sm btn-outline" style={{ marginLeft:8, fontSize:"0.72rem" }} onClick={fetchOtp}>Check now</button>
+                  </div>
+                )}
+              </div>
+            )}
           <p className="cv-vault-subtitle">
             {creds.slots?.length} slot{creds.slots?.length !== 1 ? "s" : ""} · Updated {new Date(creds.updatedAt).toLocaleDateString()}
           </p>

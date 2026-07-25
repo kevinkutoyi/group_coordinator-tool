@@ -744,6 +744,122 @@ app.get("/api/paystack/verify", async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 })
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  RESEND INBOUND EMAIL — OTP CAPTURE
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.post("/api/inbound/email", express.json(), async (req, res) => {
+  res.sendStatus(200); // always respond quickly
+  try {
+    const event = req.body;
+    if (event.type !== "email.received") return;
+
+    const emailId = event.data?.email_id;
+    const toAddresses = event.data?.to || [];
+    const subject = event.data?.subject || "";
+
+    console.log("[INBOUND] Email received for:", toAddresses, "Subject:", subject);
+
+    // Fetch full email content from Resend API
+    const https = require("https");
+    const emailContent = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: "api.resend.com",
+        path: "/emails/" + emailId,
+        method: "GET",
+        headers: { Authorization: "Bearer " + process.env.RESEND_API_KEY },
+      };
+      const req2 = https.request(options, res2 => {
+        let data = "";
+        res2.on("data", c => data += c);
+        res2.on("end", () => { try { resolve(JSON.parse(data)); } catch { resolve({}); } });
+      });
+      req2.on("error", reject);
+      req2.end();
+    });
+
+    const body = emailContent.text || emailContent.html || "";
+    console.log("[INBOUND] Email body preview:", body.substring(0, 200));
+
+    // Extract OTP — look for 4-8 digit codes
+    const otpMatch = body.match(/\b(\d{4,8})\b/);
+    const otp = otpMatch ? otpMatch[1] : null;
+
+    if (!otp) {
+      console.log("[INBOUND] No OTP found in email body");
+      return;
+    }
+
+    console.log("[INBOUND] OTP extracted:", otp);
+
+    // Find group by inbound email address
+    for (const toAddr of toAddresses) {
+      const group = await prisma.group.findFirst({
+        where: { inboundEmail: { equals: toAddr, mode: "insensitive" } },
+      });
+
+      if (group) {
+        await prisma.group.update({
+          where: { id: group.id },
+          data: {
+            latestOtp:     otp,
+            otpReceivedAt: new Date(),
+            otpSubject:    subject,
+          },
+        });
+        console.log("[INBOUND] OTP", otp, "saved to group:", group.serviceName, group.planName);
+      } else {
+        console.log("[INBOUND] No group found for email:", toAddr);
+      }
+    }
+  } catch (err) {
+    console.error("[INBOUND] Error:", err.message);
+  }
+});
+
+// Get current OTP for a group (members only)
+app.get("/api/groups/:id/otp", requireAuth, async (req, res) => {
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  // Check if user is a confirmed member or organizer
+  const isOrganizer = group.organizerId === req.user.id;
+  const isSuperAdmin = req.user.role === "superadmin";
+  const membership = await prisma.groupMember.findFirst({
+    where: { groupId: group.id, userId: req.user.id, paymentStatus: "confirmed" },
+  });
+
+  if (!isOrganizer && !isSuperAdmin && !membership)
+    return res.status(403).json({ error: "Access denied" });
+
+  // OTP expires after 10 minutes
+  const otpAge = group.otpReceivedAt
+    ? (Date.now() - new Date(group.otpReceivedAt).getTime()) / 1000 / 60
+    : null;
+  const otpValid = otpAge !== null && otpAge < 10;
+
+  res.json({
+    otp:          otpValid ? group.latestOtp : null,
+    subject:      otpValid ? group.otpSubject : null,
+    receivedAt:   group.otpReceivedAt,
+    expiresIn:    otpValid ? Math.round(10 - otpAge) : 0,
+    inboundEmail: group.inboundEmail,
+  });
+});
+
+// Set inbound email for a group (organizer/admin only)
+app.patch("/api/groups/:id/inbound-email", requireRole("moderator", "superadmin"), async (req, res) => {
+  const { inboundEmail } = req.body;
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  const updated = await prisma.group.update({
+    where: { id: req.params.id },
+    data: { inboundEmail: inboundEmail || null },
+  });
+  console.log("[GROUP] Inbound email set:", inboundEmail, "for", group.serviceName);
+  res.json({ ok: true, group: updated });
+});
+
 app.post("/api/paystack/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   const signature = req.headers["x-paystack-signature"];
   if (!paystack.verifyWebhookSignature(req.body, signature)) return res.status(400).json({ error: "Invalid signature" });
