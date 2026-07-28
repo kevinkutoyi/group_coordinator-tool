@@ -18,6 +18,8 @@ import GroupEmailPage from "./pages/GroupEmailPage";
 import ModeratorDashboardPage from "./pages/ModeratorDashboardPage";
 import ModeratorSettingsPage from "./pages/ModeratorSettingsPage";
 import UnsubscribePage from "./pages/UnsubscribePage";
+import BlogPage from "./pages/BlogPage";
+import BlogPostPage from "./pages/BlogPostPage";
 import WelcomeModal from "./components/WelcomeModal";
 import Footer from "./components/Footer";
 import "./App.css";
@@ -54,7 +56,7 @@ console.log("SplitSubs build", "1778098971");
 const SIMPLE_PAGES = [
   "home", "groups", "create", "signup", "login", "admin-login", "blog-editor", "forgot-password",
   "admin", "earnings", "my-groups", "mod-dash", "mod-settings",
-  "payment-callback", "unsubscribe",
+  "payment-callback", "unsubscribe", "blog",
 ];
 
 export function slugify(text) {
@@ -84,6 +86,9 @@ function pathToPage(pathname, search) {
     return { page: "group-emails", param: idMatch ? idMatch[1] : ge[1] };
   }
 
+  const bp = pathname.match(/^\/blog\/([^/]+)\/?$/);
+  if (bp) return { page: "blog-post", param: bp[1] };
+
   const stripped = pathname.replace(/^\/|\/$/g, "");
   if (SIMPLE_PAGES.includes(stripped)) {
     const queryPages = ["payment-callback", "unsubscribe", "signup", "login"];
@@ -103,6 +108,7 @@ function pageToPath(target, param) {
     return `/group/${param || ""}`;
   }
   if (target === "group-emails")  return `/group-emails/${param || ""}`;
+  if (target === "blog-post")     return `/blog/${param || ""}`;
   if (target === "unsubscribe" && param?.email) return `/unsubscribe?email=${encodeURIComponent(param.email)}`;
   return `/${target}`;
 }
@@ -174,6 +180,8 @@ export default function App() {
         {page === "home"             && <HomePage             navigate={navigate} />}
         {page === "groups"           && <GroupsPage           navigate={navigate} />}
         {page === "group"            && <GroupDetailPage      id={pageParam}      navigate={navigate} user={user} />}
+        {page === "blog"             && <BlogPage                                 navigate={navigate} />}
+        {page === "blog-post"        && <BlogPostPage           id={pageParam}      navigate={navigate} />}
         {page === "create"           && <CreateGroupPage      navigate={navigate} />}
         {page === "signup"           && <SignupPage           navigate={navigate} params={pageParam} />}
         {page === "login"            && <LoginPage            navigate={navigate} params={pageParam} />}
