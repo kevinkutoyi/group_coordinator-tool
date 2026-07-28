@@ -57,16 +57,32 @@ const SIMPLE_PAGES = [
   "payment-callback", "unsubscribe",
 ];
 
+export function slugify(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+const UUID_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
 function pathToPage(pathname, search) {
   const q = Object.fromEntries(new URLSearchParams(search || ""));
 
   if (!pathname || pathname === "/") return { page: "home", param: null };
 
   const g  = pathname.match(/^\/group\/([^/]+)\/?$/);
-  if (g)  return { page: "group", param: g[1] };
+  if (g)  {
+    const idMatch = g[1].match(UUID_RE);
+    return { page: "group", param: idMatch ? idMatch[1] : g[1] };
+  }
 
   const ge = pathname.match(/^\/group-emails\/([^/]+)\/?$/);
-  if (ge) return { page: "group-emails", param: ge[1] };
+  if (ge) {
+    const idMatch = ge[1].match(UUID_RE);
+    return { page: "group-emails", param: idMatch ? idMatch[1] : ge[1] };
+  }
 
   const stripped = pathname.replace(/^\/|\/$/g, "");
   if (SIMPLE_PAGES.includes(stripped)) {
@@ -79,7 +95,13 @@ function pathToPage(pathname, search) {
 
 function pageToPath(target, param) {
   if (target === "home")          return "/";
-  if (target === "group")         return `/group/${param || ""}`;
+  if (target === "group") {
+    if (param && typeof param === "object" && param.id) {
+      const slug = slugify(param.slug);
+      return slug ? `/group/${slug}-${param.id}` : `/group/${param.id}`;
+    }
+    return `/group/${param || ""}`;
+  }
   if (target === "group-emails")  return `/group-emails/${param || ""}`;
   if (target === "unsubscribe" && param?.email) return `/unsubscribe?email=${encodeURIComponent(param.email)}`;
   return `/${target}`;
@@ -139,7 +161,7 @@ export default function App() {
     }
 
     setPage(target);
-    setParam(param);
+    setParam(target === "group" && param && typeof param === "object" && param.id ? param.id : param);
     window.scrollTo({ top:0, behavior:"smooth" });
     window.history.pushState({}, "", pageToPath(target, param));
   }
