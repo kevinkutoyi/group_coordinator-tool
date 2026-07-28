@@ -72,10 +72,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
     }
     ld.textContent = JSON.stringify({
       "@context": "https://schema.org",
-      "@type": "Service",
+      "@type": "Product",
       name: `${group.serviceName} ${group.planName} — Shared Subscription Slot`,
       description: desc,
-      provider: { "@type": "Organization", name: "SplitSubs", url: "https://splitsubs.com" },
+      brand: { "@type": "Brand", name: "SplitSubs" },
       offers: {
         "@type": "Offer",
         price: group.memberPays || group.pricePerSlot,
