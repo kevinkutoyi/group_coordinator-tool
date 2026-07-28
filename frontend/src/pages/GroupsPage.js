@@ -71,7 +71,7 @@ export default function GroupsPage({ navigate }) {
       ) : (
         <div className="grid-2">
           {filtered.map(g => (
-            <GroupCard key={g.id} group={g} onClick={() => navigate("group", g.id)} />
+            <GroupCard key={g.id} group={g} onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })} />
           ))}
         </div>
       )}

@@ -224,7 +224,7 @@ export default function ModeratorDashboardPage({ navigate }) {
                     </div>
                   )}
                   <div style={{ display:"flex", gap:8 }}>
-                    <button className="btn btn-sm btn-outline" onClick={() => navigate("group", g.id)}>View</button>
+                    <button className="btn btn-sm btn-outline" onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>View</button>
                     <button className="btn btn-sm btn-outline" onClick={() => navigate("group-emails", g.id)}
                       style={{ color:"var(--accent)", borderColor:"rgba(124,106,255,0.3)" }}>
                       📧 Emails

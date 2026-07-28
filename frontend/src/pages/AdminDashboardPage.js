@@ -532,7 +532,7 @@ export default function AdminDashboardPage({ navigate }) {
           {groups.length === 0 ? (
             <div className="empty-state"><div className="emoji">📋</div><h3>No groups yet</h3></div>
           ) : groups.map(g => (
-            <div key={g.id} className="user-card card" style={{cursor:"pointer"}} onClick={() => navigate("group", g.id)}>
+            <div key={g.id} className="user-card card" style={{cursor:"pointer"}} onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>
               <div className="user-card-left">
                 <div style={{fontSize:"2rem"}}>{g.serviceIcon}</div>
                 <div>
@@ -555,7 +555,7 @@ export default function AdminDashboardPage({ navigate }) {
               </div>
               <div className="user-card-right">
                 <span className={`tag tag-${g.status}`}>{g.status}</span>
-                <button className="btn btn-sm btn-outline" onClick={e => {e.stopPropagation(); navigate("group", g.id);}}>
+                <button className="btn btn-sm btn-outline" onClick={e => {e.stopPropagation(); navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` });}}>
                   Manage →
                 </button>
                 <button className="btn btn-sm btn-danger" title="Delete this group permanently" onClick={e => { e.stopPropagation(); setDeleteTarget(g); setDeleteConfirm(""); }}>
@@ -615,7 +615,7 @@ export default function AdminDashboardPage({ navigate }) {
                   ❌ Reject
                 </button>
                 <button className="btn btn-sm btn-outline"
-                  onClick={() => navigate("group", g.id)}>
+                  onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>
                   👁️ Preview
                 </button>
               </div>

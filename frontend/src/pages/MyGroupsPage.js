@@ -135,7 +135,7 @@ export default function MyGroupsPage({ navigate }) {
                   return (
                     <div key={g.id} className="card"
                       style={{ borderLeft: "3px solid " + borderColor, cursor: "pointer", padding: 20 }}
-                      onClick={() => navigate("group", g.id)}>
+                      onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>
 
                       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
                         <span style={{ fontSize: "2.2rem" }}>{g.serviceIcon}</span>
@@ -175,7 +175,7 @@ export default function MyGroupsPage({ navigate }) {
 
                       <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                         {isPending && (
-                          <button className="btn btn-sm pay-btn" onClick={e => { e.stopPropagation(); navigate("group", g.id); }}>
+                          <button className="btn btn-sm pay-btn" onClick={e => { e.stopPropagation(); navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` }); }}>
                             🔒 Complete Payment →
                           </button>
                         )}
@@ -187,7 +187,7 @@ export default function MyGroupsPage({ navigate }) {
                             {renewBusy[g.id] ? <><span className="spinner" /> Renewing…</> : "🔄 Renew Subscription"}
                           </button>
                         )}
-                        <button className="btn btn-sm btn-outline" onClick={e => { e.stopPropagation(); navigate("group", g.id); }}>
+                        <button className="btn btn-sm btn-outline" onClick={e => { e.stopPropagation(); navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` }); }}>
                           View Group →
                         </button>
                       </div>
@@ -210,7 +210,7 @@ export default function MyGroupsPage({ navigate }) {
                   const monthlyRevenue = (g.pricePerSlot * filled * (1 - (g.feePercent || 8) / 100)).toFixed(2);
 
                   return (
-                    <div key={g.id} className="card" style={{ cursor: "pointer", padding: 20 }} onClick={() => navigate("group", g.id)}>
+                    <div key={g.id} className="card" style={{ cursor: "pointer", padding: 20 }} onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>
                       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
                         <span style={{ fontSize: "2.2rem" }}>{g.serviceIcon}</span>
                         <div style={{ flex: 1 }}>
@@ -244,7 +244,7 @@ export default function MyGroupsPage({ navigate }) {
                       </div>
 
                       <div style={{ marginTop: 12, display: "flex", gap: 8 }} onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-sm btn-outline" onClick={e => { e.stopPropagation(); navigate("group", g.id); }}>Manage Group →</button>
+                        <button className="btn btn-sm btn-outline" onClick={e => { e.stopPropagation(); navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` }); }}>Manage Group →</button>
                         <button className="btn btn-sm btn-outline" style={{ borderColor: "rgba(124,106,255,0.3)", color: "var(--accent)" }}
                           onClick={e => { e.stopPropagation(); navigate("group-emails", g.id); }}>📧 Email Members</button>
                       </div>
