@@ -602,24 +602,26 @@ export default function GroupDetailPage({ id, navigate, user }) {
             </div>
           )}
 
-          <div className="card">
-            <h2 className="section-h2">Payment Log</h2>
-            {!group.payments?.length ? (
-              <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>No confirmed payments yet.</p>
-            ) : group.payments.map(p => (
-              <div key={p.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>{p.memberName}</span>
-                  <span style={{ color: "var(--success)", fontWeight: 600 }}>${p.amount} · {p.months}mo</span>
-                </div>
-                {p.platformFee && (
-                  <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
-                    Platform: ${p.platformFee} · Moderator: ${p.moderatorOwed || p.organizerGets}
+          {canManageFinancials && (
+            <div className="card">
+              <h2 className="section-h2">Payment Log</h2>
+              {!group.payments?.length ? (
+                <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>No confirmed payments yet.</p>
+              ) : group.payments.map(p => (
+                <div key={p.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>{p.memberName}</span>
+                    <span style={{ color: "var(--success)", fontWeight: 600 }}>${p.amount} · {p.months}mo</span>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  {p.platformFee && (
+                    <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
+                      Platform: ${p.platformFee} · Moderator: ${p.moderatorOwed || p.organizerGets}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

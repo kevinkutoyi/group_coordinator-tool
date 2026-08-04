@@ -461,7 +461,10 @@ function sanitizeGroupFinancials(group, viewerRole, viewerId) {
     const { monthlyRevenue, profit } = computeGroupFinancials(group);
     return { ...group, monthlyRevenue, profit };
   }
-  return { ...group, renewDate: null, subscriptionCost: null, monthlyRevenue: null, profit: null };
+  // Payment log (per-member amounts, platform fee, moderator payout) is
+  // financial detail for the admin/owning organizer only — not for other
+  // moderators or customers browsing/viewing the group.
+  return { ...group, renewDate: null, subscriptionCost: null, monthlyRevenue: null, profit: null, payments: [] };
 }
 
 function urlSlugify(text) {
