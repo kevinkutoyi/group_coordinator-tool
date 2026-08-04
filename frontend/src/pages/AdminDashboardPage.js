@@ -550,6 +550,15 @@ export default function AdminDashboardPage({ navigate }) {
                       </span>
                     </div>;
                   })()}
+                  {g.subscriptionCost > 0 && (
+                    <div style={{ marginTop:4, display:"inline-flex", alignItems:"center", padding:"3px 10px", borderRadius:99,
+                      background: g.profit >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+                      border: "1px solid " + (g.profit >= 0 ? "var(--success)" : "var(--error)") }}>
+                      <span style={{ fontSize:"0.7rem", fontWeight:700, color: g.profit >= 0 ? "var(--success)" : "var(--error)" }}>
+                        {"💵 Cost: $" + g.subscriptionCost.toFixed(2) + " · 📈 Profit: " + (g.profit >= 0 ? "+" : "") + g.profit.toFixed(2) + "/mo"}
+                      </span>
+                    </div>
+                  )}
                   </div>
                 </div>
               </div>

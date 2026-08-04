@@ -13,6 +13,9 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [renewDate, setRenewDate]     = useState("");
   const [renewDateBusy, setRenewDateBusy] = useState(false);
   const [renewDateMsg, setRenewDateMsg]   = useState(null);
+  const [subCost, setSubCost]         = useState("");
+  const [subCostBusy, setSubCostBusy] = useState(false);
+  const [subCostMsg, setSubCostMsg]   = useState(null);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
   const [creds, setCreds]         = useState(null);
@@ -143,6 +146,17 @@ export default function GroupDetailPage({ id, navigate, user }) {
     finally { setRenewDateBusy(false); }
   }
 
+  async function saveSubCost() {
+    setSubCostBusy(true); setSubCostMsg(null);
+    try {
+      await api.setGroupSubscriptionCost(id, subCost === "" ? 0 : parseFloat(subCost));
+      setSubCostMsg({ type: "ok", text: "Subscription cost saved." });
+      setSubCost("");
+      reload();
+    } catch (err) { setSubCostMsg({ type: "err", text: err.message }); }
+    finally { setSubCostBusy(false); }
+  }
+
   async function handleStatusChange(newStatus) {
     try {
       await api.updateStatus(id, newStatus);
@@ -197,6 +211,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const isSuperAdmin  = session.isSuperAdmin();
   const isOrganizer   = group.organizerId === currentUserId;
   const canManage     = isSuperAdmin || isOrganizer || session.isModerator();
+  // Financial fields (renew date, subscription cost, profit) are sensitive —
+  // only the platform admin or this specific group's own creator/moderator
+  // should ever see them, unlike the broader canManage checks above.
+  const canManageFinancials = isSuperAdmin || (isOrganizer && session.isModerator());
 
   const payingMembers = group.members?.filter(m => m.role !== "organizer") || [];
   // Only CONFIRMED payments occupy slots. Pending members are listed separately below.
@@ -295,9 +313,9 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   </div>
                 </div>
               )}
-              {canManage && (
+              {canManageFinancials && (
                 <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin only)</span></div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin & organizer only)</span></div>
                   {group.renewDate && (() => {
                     const days = Math.ceil((new Date(group.renewDate) - new Date()) / (1000*60*60*24));
                     const color = days <= 0 ? "var(--error)" : days <= 3 ? "var(--error)" : days <= 7 ? "var(--warning)" : "var(--success)";
@@ -325,6 +343,41 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     {renewDate && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setRenewDate(""); }}>✕ Clear</button>}
                   </div>
                   {renewDateMsg && <div className={"msg-box " + (renewDateMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setRenewDateMsg(null)}>{renewDateMsg.text}</div>}
+                </div>
+              )}
+              {canManageFinancials && (
+                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>💵 Subscription Cost <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin & organizer only)</span></div>
+                  <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>What you actually pay for the real subscription each billing cycle — used to calculate profit.</div>
+                  <div style={{ fontSize:"0.78rem", color:"var(--text)", fontWeight:600, marginBottom:8 }}>
+                    Current: ${(group.subscriptionCost || 0).toFixed(2)}
+                    {group.monthlyRevenue != null && (
+                      <span style={{ marginLeft:12, color:"var(--muted)", fontWeight:400 }}>
+                        Revenue: ${group.monthlyRevenue.toFixed(2)}/mo
+                      </span>
+                    )}
+                    {group.profit != null && (
+                      <span style={{ marginLeft:12, fontWeight:700, color: group.profit >= 0 ? "var(--success)" : "var(--error)" }}>
+                        Profit: {group.profit >= 0 ? "+" : ""}{group.profit.toFixed(2)}/mo
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <input type="number" min="0" step="0.01" value={subCost}
+                      onChange={e => setSubCost(e.target.value)}
+                      placeholder="e.g. 19.99"
+                      style={{
+                        padding:"8px 12px", borderRadius:8,
+                        border:"1px solid var(--border)",
+                        background:"var(--bg2)", color:"var(--text)",
+                        fontSize:"0.85rem", minWidth:140,
+                      }}
+                    />
+                    <button className="btn btn-sm btn-primary" disabled={subCostBusy} onClick={saveSubCost}>
+                      {subCostBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
+                    </button>
+                  </div>
+                  {subCostMsg && <div className={"msg-box " + (subCostMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setSubCostMsg(null)}>{subCostMsg.text}</div>}
                 </div>
               )}
 

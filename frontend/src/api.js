@@ -161,6 +161,7 @@ export const api = {
   adminReplySupport:       (id, body) => req(`/admin/support/threads/${id}/reply`, { method: "POST", body: { body } }),
   renewSlot:              (gid)        => req(`/groups/${gid}/renew`, { method: "POST" }),
   setGroupRenewDate:      (gid, date)  => req(`/groups/${gid}/renew-date`, { method: "PATCH", body: { renewDate: date } }),
+  setGroupSubscriptionCost: (gid, cost) => req(`/groups/${gid}/subscription-cost`, { method: "PATCH", body: { subscriptionCost: cost } }),
   getGroupOtp:            (gid)        => req(`/groups/${gid}/otp`),
   getGroupProfiles:       (gid)        => req(`/groups/${gid}/profiles`),
   createGroupProfile:     (gid, data)  => req(`/groups/${gid}/profiles`, { method: "POST", body: data }),

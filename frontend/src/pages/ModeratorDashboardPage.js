@@ -108,6 +108,15 @@ export default function ModeratorDashboardPage({ navigate }) {
             <div className="mod-kpi-label">Groups Awaiting Review</div>
           </div>
         )}
+        {summary.totalProfit != null && (
+          <div className="mod-kpi-card">
+            <div className="mod-kpi-icon">📈</div>
+            <div className="mod-kpi-val" style={{ color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)" }}>
+              KES {summary.totalProfit.toFixed(2)}
+            </div>
+            <div className="mod-kpi-label">Est. Monthly Profit</div>
+          </div>
+        )}
       </div>
 
       {/* Earnings breakdown card */}
@@ -221,6 +230,14 @@ export default function ModeratorDashboardPage({ navigate }) {
                     <div className="mgc-earnings">
                       <div className="mgc-earn-val">KES {g.modOwed.toFixed(2)}</div>
                       <div className="mgc-earn-sub">total owed</div>
+                    </div>
+                  )}
+                  {g.reviewStatus === "approved" && g.subscriptionCost > 0 && (
+                    <div className="mgc-earnings">
+                      <div className="mgc-earn-val" style={{ color: g.profit >= 0 ? "var(--success)" : "var(--error)" }}>
+                        {g.profit >= 0 ? "+" : ""}{g.profit.toFixed(2)}
+                      </div>
+                      <div className="mgc-earn-sub">est. profit/mo</div>
                     </div>
                   )}
                   <div style={{ display:"flex", gap:8 }}>

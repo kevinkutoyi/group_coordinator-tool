@@ -23,6 +23,7 @@ export default function CreateGroupPage({ navigate }) {
     description:  "",
     billingCycle: "monthly",
     renewDate:    "",
+    subscriptionCost: "",
   });
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function CreateGroupPage({ navigate }) {
         description:  form.description,
         billingCycle: form.billingCycle,
         renewDate:    form.renewDate || null,
+        subscriptionCost: form.subscriptionCost ? parseFloat(form.subscriptionCost) : 0,
       });
       navigate("group", group.id);
     } catch (err) {
@@ -149,6 +151,14 @@ export default function CreateGroupPage({ navigate }) {
                 style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.9rem" }}
               />
               <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:4 }}>Admin will be notified 3 days before this date.</div>
+            </div>
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label>💵 Subscription Cost <span style={{ fontSize:"0.75rem", color:"var(--muted)", fontWeight:400 }}>(what you actually pay for the real plan — used for profit calc, admin & you only)</span></label>
+              <input type="number" min="0" step="0.01" value={form.subscriptionCost}
+                onChange={set("subscriptionCost")}
+                placeholder="e.g. 19.99"
+                style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.9rem" }}
+              />
             </div>
 
           <div className="form-group">

@@ -444,6 +444,26 @@ function maskEmail(email) {
   return `${user.slice(0, 2)}${"*".repeat(middleLen)}${user.slice(-2)}@${domain}`;
 }
 
+// Renew date + subscription cost are sensitive financial info — only the
+// group's own organizer (moderator) or a superadmin should ever see them.
+function computeGroupFinancials(group) {
+  const feePercent   = group.feePercent ?? 8;
+  const confirmed    = (group.members || []).filter(m => m.role !== "organizer" && m.paymentStatus === "confirmed").length;
+  const monthlyRevenue = +(confirmed * (group.pricePerSlot || 0) * (1 - feePercent / 100)).toFixed(2);
+  const subscriptionCost = group.subscriptionCost || 0;
+  const profit = +(monthlyRevenue - subscriptionCost).toFixed(2);
+  return { monthlyRevenue, profit };
+}
+
+function sanitizeGroupFinancials(group, viewerRole, viewerId) {
+  const canSeeFinancials = viewerRole === "superadmin" || (viewerRole === "moderator" && viewerId === group.organizerId);
+  if (canSeeFinancials) {
+    const { monthlyRevenue, profit } = computeGroupFinancials(group);
+    return { ...group, monthlyRevenue, profit };
+  }
+  return { ...group, renewDate: null, subscriptionCost: null, monthlyRevenue: null, profit: null };
+}
+
 function urlSlugify(text) {
   return String(text || "")
     .toLowerCase()
@@ -526,7 +546,7 @@ app.get("/api/groups", async (req, res) => {
       new Date(b.joinedAt || 0) - new Date(a.joinedAt || 0)
     );
     const confirmedMaskedEmails = sortedConfirmed.map(m => maskEmail(m.email)).filter(Boolean);
-    return {
+    const base = {
       ...g,
       memberCount: confirmed.length,
       pendingCount: g.members.filter(m => m.role !== "organizer" && m.paymentStatus === "pending").length,
@@ -538,6 +558,7 @@ app.get("/api/groups", async (req, res) => {
         : null,
       members: g.members.map(({ email, ...m }) => m),
     };
+    return sanitizeGroupFinancials(base, viewerRole, viewerId);
   }));
 });
 
@@ -555,11 +576,11 @@ app.get("/api/groups/:id", async (req, res) => {
   if (!isApproved && !isSuperAdmin && !isOwner)
     return res.status(404).json({ error: "Group not found" });
 
-  res.json(group);
+  res.json(sanitizeGroupFinancials(group, viewerRole, viewerId));
 });
 
 app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res) => {
-  const { renewDate, serviceId, planName, totalPrice, maxSlots, description, billingCycle = "monthly" } = req.body;
+  const { renewDate, serviceId, planName, totalPrice, maxSlots, description, billingCycle = "monthly", subscriptionCost } = req.body;
   if (!serviceId || !planName || !totalPrice || !maxSlots)
     return res.status(400).json({ error: "serviceId, planName, totalPrice, maxSlots required" });
 
@@ -591,6 +612,7 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res)
       organizerId: req.user.id, organizerName: creatorName, organizerEmail: creatorEmail,
       description: description || "", billingCycle,
       renewDate:     renewDate ? new Date(renewDate) : null,
+      subscriptionCost: subscriptionCost ? +subscriptionCost : 0,
       status:       isSuperAdmin ? "open"     : "pending_review",
       reviewStatus: isSuperAdmin ? "approved" : "pending",
     },
@@ -711,6 +733,8 @@ app.patch("/api/groups/:id/renew-date", requireRole("moderator", "superadmin"), 
   const { renewDate } = req.body;
   const group = await prisma.group.findUnique({ where: { id: req.params.id } });
   if (!group) return res.status(404).json({ error: "Group not found" });
+  if (req.user.role !== "superadmin" && group.organizerId !== req.user.id)
+    return res.status(403).json({ error: "Only this group's organizer or an admin can update its renew date" });
   const updated = await prisma.group.update({
     where: { id: req.params.id },
     data: {
@@ -719,6 +743,22 @@ app.patch("/api/groups/:id/renew-date", requireRole("moderator", "superadmin"), 
     },
   });
   console.log("[GROUP] Renew date set for", group.serviceName, group.planName, "->", renewDate);
+  res.json({ ok: true, group: updated });
+});
+
+app.patch("/api/groups/:id/subscription-cost", requireRole("moderator", "superadmin"), async (req, res) => {
+  const { subscriptionCost } = req.body;
+  if (subscriptionCost === undefined || subscriptionCost === null || isNaN(+subscriptionCost) || +subscriptionCost < 0)
+    return res.status(400).json({ error: "subscriptionCost must be a non-negative number" });
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+  if (req.user.role !== "superadmin" && group.organizerId !== req.user.id)
+    return res.status(403).json({ error: "Only this group's organizer or an admin can update its subscription cost" });
+  const updated = await prisma.group.update({
+    where: { id: req.params.id },
+    data: { subscriptionCost: +subscriptionCost },
+  });
+  console.log("[GROUP] Subscription cost set for", group.serviceName, group.planName, "->", subscriptionCost);
   res.json({ ok: true, group: updated });
 });
 
@@ -1290,7 +1330,8 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), async (req, res) =
     const modOwed        = g.payments.reduce((a, p) => a + p.moderatorOwed, 0);
     const modPaid        = g.payments.filter(p => p.payoutStatus === "paid").reduce((a, p) => a + p.moderatorOwed, 0);
     const modPending     = g.payments.filter(p => p.payoutStatus === "pending").reduce((a, p) => a + p.moderatorOwed, 0);
-    return { id: g.id, serviceName: g.serviceName, serviceIcon: g.serviceIcon, planName: g.planName, status: g.status, reviewStatus: g.reviewStatus, billingCycle: g.billingCycle, maxSlots: g.maxSlots, confirmedMembers: confirmed, totalSlots: g.maxSlots, totalCollected: +totalCollected.toFixed(2), platformFees: +platformFees.toFixed(2), modOwed: +modOwed.toFixed(2), modPaid: +modPaid.toFixed(2), modPending: +modPending.toFixed(2), createdAt: g.createdAt };
+    const { monthlyRevenue, profit } = computeGroupFinancials(g);
+    return { id: g.id, serviceName: g.serviceName, serviceIcon: g.serviceIcon, planName: g.planName, status: g.status, reviewStatus: g.reviewStatus, billingCycle: g.billingCycle, maxSlots: g.maxSlots, confirmedMembers: confirmed, totalSlots: g.maxSlots, totalCollected: +totalCollected.toFixed(2), platformFees: +platformFees.toFixed(2), modOwed: +modOwed.toFixed(2), modPaid: +modPaid.toFixed(2), modPending: +modPending.toFixed(2), subscriptionCost: g.subscriptionCost || 0, monthlyRevenue, profit, createdAt: g.createdAt };
   });
 
   res.json({
@@ -1305,6 +1346,7 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), async (req, res) =
       totalOwed:      +groupStats.reduce((a, g) => a + g.modOwed, 0).toFixed(2),
       totalPaid:      +groupStats.reduce((a, g) => a + g.modPaid, 0).toFixed(2),
       totalPending:   +groupStats.reduce((a, g) => a + g.modPending, 0).toFixed(2),
+      totalProfit:    +groupStats.reduce((a, g) => a + g.profit, 0).toFixed(2),
       feePercent, pesapalEmail: settings?.pesapalEmail || "", configured: !!settings,
     },
   });

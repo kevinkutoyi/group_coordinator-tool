@@ -65,6 +65,7 @@ model Group {
   otpSubject     String?                 // email subject for context
   renewDate      DateTime?               // when organizer needs to renew the actual subscription
   renewReminderSent Boolean  @default(false) // track if 3-day reminder was sent
+  subscriptionCost Float    @default(0)  // what the organizer actually pays for the real subscription — used for profit calc
   reviewedAt     DateTime?
   reviewedBy     String?
   createdAt      DateTime @default(now())
