@@ -10,23 +10,40 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$*"; }
 
 cd "$PROJ"
 
-yellow "► Pulling latest from GitHub..."
-git fetch origin main
-CHANGED=$(git diff --name-only HEAD origin/main)
+if [ -z "${DEPLOY_REEXEC:-}" ]; then
+  yellow "► Pulling latest from GitHub..."
+  git fetch origin main
+  CHANGED=$(git diff --name-only HEAD origin/main)
 
-if [ -z "$CHANGED" ]; then
-  green "✓ Already up to date."
-  exit 0
+  if [ -z "$CHANGED" ]; then
+    green "✓ Already up to date."
+    exit 0
+  fi
+
+  echo "$CHANGED"
+
+  # Preserve .env then reset to latest
+  git checkout -- backend/.env 2>/dev/null || true
+  git reset --hard origin/main
+  git checkout -- backend/.env 2>/dev/null || true
+
+  green "✓ Pull complete."
+
+  # This script may have just overwritten itself (git reset --hard rewrites
+  # deploy.sh along with everything else) while bash is still mid-execution.
+  # Bash keeps interpreting the OLD buffered bytes in that case, which can
+  # silently skip or corrupt every command after this point — that's what
+  # happened on 2026-08-04, when a deploy.sh update landed in the same pull
+  # as other changes and the new lint step + install command never ran.
+  # Re-exec from the fresh file on disk, carrying the change list forward
+  # via env var (recomputing it here would show "no diff" since HEAD now
+  # equals origin/main), so everything below always runs the current script.
+  export DEPLOY_REEXEC=1
+  export DEPLOY_CHANGED="$CHANGED"
+  exec bash "$PROJ/deploy.sh"
 fi
 
-echo "$CHANGED"
-
-# Preserve .env then reset to latest
-git checkout -- backend/.env 2>/dev/null || true
-git reset --hard origin/main
-git checkout -- backend/.env 2>/dev/null || true
-
-green "✓ Pull complete."
+CHANGED="$DEPLOY_CHANGED"
 
 if echo "$CHANGED" | grep -q "^backend/package"; then
   yellow "► Installing backend deps..."
