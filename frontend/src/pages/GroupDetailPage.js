@@ -225,7 +225,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
 
   const feePercent    = group.feePercent || 8;
   const memberPays    = group.pricePerSlot; // fee is deducted from this, not added on top
-  const platformFee   = +(memberPays * feePercent / 100).toFixed(2);
   const totalForPeriod = +(memberPays * groupMonths).toFixed(2);
 
   return (
@@ -381,24 +380,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
               )}
 
         {group.description && <p className="gd-desc">{group.description}</p>}
-
-        {/* Fee banner — corrected: fee is deducted from price, not added on top */}
-        <div className="fee-banner">
-          <div className="fee-item">
-            <span className="fee-label">Monthly share per member</span>
-            <span className="fee-val">${group.pricePerSlot}</span>
-          </div>
-          <div className="fee-plus" style={{ color: "var(--muted)", fontSize: "0.8rem" }}>of which</div>
-          <div className="fee-item">
-            <span className="fee-label">Platform fee ({feePercent}%)</span>
-            <span className="fee-val fee-small" style={{ color: "var(--muted)" }}>${platformFee}</span>
-          </div>
-          <div className="fee-equals">=</div>
-          <div className="fee-item fee-total">
-            <span className="fee-label">Members pay/month</span>
-            <span className="fee-val fee-highlight">${group.pricePerSlot}</span>
-          </div>
-        </div>
 
         {/* ── CREDENTIAL VAULT — rendered inline with lifted state ── */}
         <div className="gd-vault-spotlight">
