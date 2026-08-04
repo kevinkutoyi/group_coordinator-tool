@@ -866,7 +866,7 @@ async function confirmOrder(reference) {
 
     await prisma.groupMember.update({ where: { id: order.memberId }, data: { paymentStatus: "confirmed", expiresAt: exp } });
 
-    const alreadyRecorded = await prisma.payment.findFirst({ where: { pesapalOrderId: orderId } });
+    const alreadyRecorded = await prisma.payment.findFirst({ where: { pesapalOrderId: reference } });
     if (!alreadyRecorded) {
       await prisma.payment.create({
         data: {
@@ -874,12 +874,12 @@ async function confirmOrder(reference) {
           memberName: order.memberName, months: order.months, amount: order.memberPays,
           platformFee: order.platformFee, moderatorOwed: order.moderatorOwed,
           organizerGets: order.moderatorOwed, moderatorId: order.moderatorId,
-          method: "pesapal", pesapalOrderId: orderId, currency: order.currency,
+          method: "paystack", pesapalOrderId: reference, currency: order.currency,
           confirmedAt, payoutStatus: "pending",
         },
       });
       await prisma.platformEarning.create({
-        data: { orderId, groupId: order.groupId, fee: order.platformFee, currency: order.currency, earnedAt: confirmedAt },
+        data: { orderId: reference, groupId: order.groupId, fee: order.platformFee, currency: order.currency, earnedAt: confirmedAt },
       });
 
       // Emails
