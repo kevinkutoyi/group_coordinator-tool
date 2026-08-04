@@ -226,7 +226,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const feePercent    = group.feePercent || 8;
   const memberPays    = group.pricePerSlot; // fee is deducted from this, not added on top
   const platformFee   = +(memberPays * feePercent / 100).toFixed(2);
-  const moderatorGets = +(memberPays - platformFee).toFixed(2);
   const totalForPeriod = +(memberPays * groupMonths).toFixed(2);
 
   return (
@@ -588,15 +587,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div className="card">
-            <h2 className="section-h2">Organizer / Coordinator</h2>
-            <p style={{ fontWeight: 600, fontSize: "0.9rem" }}>{group.organizerName}</p>
-            {isSuperAdmin && <p style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{group.organizerEmail}</p>}
-            <p style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 6, lineHeight: 1.5 }}>
-              The organizer coordinates the group and purchases the subscription. They do <strong>not</strong> occupy a paying slot.
-            </p>
-          </div>
-
           {isSuperAdmin && (
             <div className="admin-group-panel">
               <div className="agp-title">🛡️ Admin Overview</div>
@@ -611,14 +601,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
               </div>
             </div>
           )}
-
-          <div className="pesapal-info-card">
-            <div className="pesapal-logo">🔒 Secure Payment</div>
-            <p>Accepted: 📱 Visa · Mastercard · M-Pesa · Bank Transfer</p>
-            <p className="fee-note">
-              A {feePercent}% platform fee is included in the price. The organizer receives ${moderatorGets}/mo per member.
-            </p>
-          </div>
 
           <div className="card">
             <h2 className="section-h2">Payment Log</h2>
