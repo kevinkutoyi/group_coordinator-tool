@@ -429,17 +429,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
           <span className="gdb-note">Set by the organizer — all members pay on this schedule</span>
         </div>
 
-        {/* Stats */}
-        <div className="gd-stats">
-          <div className="gd-stat"><div className="gd-stat-val">${group.pricePerSlot}<span>/mo</span></div><div className="gd-stat-lbl">Share per Slot</div></div>
-          <div className="gd-stat"><div className="gd-stat-val">${group.pricePerSlot}<span>/mo</span></div><div className="gd-stat-lbl">Members Pay</div></div>
-          <div className="gd-stat"><div className="gd-stat-val">${(group.totalPrice - group.pricePerSlot).toFixed(2)}<span>/mo</span></div><div className="gd-stat-lbl">Savings/member</div></div>
-          <div className="gd-stat">
-            <div className="gd-stat-val">{filled}<span>/{group.maxSlots}</span></div>
-            <div className="gd-stat-lbl">Paying Slots Filled</div>
-          </div>
-        </div>
-
         <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", marginTop: 4 }}>
           <span>{filled}/{group.maxSlots} paying slots filled · {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1 ? "s" : ""} left` : "Full"}</span>
