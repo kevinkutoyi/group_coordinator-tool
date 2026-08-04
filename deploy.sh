@@ -30,13 +30,17 @@ green "✓ Pull complete."
 
 if echo "$CHANGED" | grep -q "^backend/package"; then
   yellow "► Installing backend deps..."
-  cd "$BE" && npm install --omit=dev
+  cd "$BE" && npm install
 fi
 
 if echo "$CHANGED" | grep -q "^backend/prisma/schema.prisma"; then
   yellow "► Running migrations..."
   cd "$BE" && npx prisma migrate deploy
 fi
+
+yellow "► Linting backend..."
+cd "$BE" && npm run lint
+green "✓ Lint passed."
 
 if echo "$CHANGED" | grep -q "^frontend/package"; then
   yellow "► Installing frontend deps..."
