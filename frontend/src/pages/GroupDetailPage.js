@@ -6,7 +6,6 @@ import "./GroupDetailPage.css";
 export default function GroupDetailPage({ id, navigate, user }) {
   const [group, setGroup]         = useState(null);
   const [loading, setLoading]     = useState(true);
-  const [showJoin, setShowJoin]   = useState(false);
   const [busy, setBusy]           = useState(false);
   const [payingId, setPayingId]   = useState(null);
   const [msg, setMsg]             = useState(null);
@@ -94,13 +93,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
     };
   }, [group, id]);
 
-  const CYCLE_MONTHS = { monthly: 1, quarterly: 3, biannually: 6, annually: 12 };
-
   function daysLeft(expiresAt) {
     if (!expiresAt) return null;
     return Math.ceil((new Date(expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
   }
-  const groupMonths = group ? (CYCLE_MONTHS[group.billingCycle] || 1) : 1;
 
   // New fee model: memberPays = base (fee comes OUT of it, not added on top)
   function calcMemberPays(pricePerSlot, months) {
@@ -108,22 +104,22 @@ export default function GroupDetailPage({ id, navigate, user }) {
     return base; // member pays base; platform takes its cut internally
   }
 
-  async function handleJoin(e) {
-    e.preventDefault();
+  // Joining and paying used to be two separate steps (a "Join Group" button
+  // that opened a confirmation modal, then a second "Pay Now" click). The
+  // modal never actually offered any real choice — billing cycle is fixed
+  // by the organizer — so it was just an extra click. This combines both
+  // into one action: create the membership, then go straight to payment.
+  async function handleJoinAndPay() {
     if (!session.isLoggedIn()) { navigate("login"); return; }
-    if (!session.isLoggedIn()) {
-      navigate("login"); return;
-    }
     if (session.isSuperAdmin()) {
       setMsg({ type: "err", text: "Superadmin cannot join groups as a paying member." });
       return;
     }
     setBusy(true);
     try {
-      await api.joinGroup(id, {});
-      setMsg({ type: "ok", text: `Joined! Pay your ${groupMonths}-month share via PesaPal — the 🔑 Credential Vault unlocks the moment your payment clears.` });
-      setShowJoin(false);
-      reload();
+      const member = await api.joinGroup(id, {});
+      await reload();
+      if (member?.id) handlePay(member);
     } catch (err) { setMsg({ type: "err", text: err.message }); }
     finally { setBusy(false); }
   }
@@ -223,10 +219,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const spotsLeft     = group.maxSlots - filled;
   const myMember      = payingMembers.find(m => m.userId === currentUserId);
 
-  const feePercent    = group.feePercent || 8;
-  const memberPays    = group.pricePerSlot; // fee is deducted from this, not added on top
-  const totalForPeriod = +(memberPays * groupMonths).toFixed(2);
-
   return (
     <div className="gd fade-in">
       <button className="btn btn-outline btn-sm" onClick={() => navigate("groups")} style={{ marginBottom: 20 }}>
@@ -266,9 +258,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {group.status === "open" && !myMember && !isOrganizer && (session.isCustomer() || session.isModerator()) && (
-              <button className="btn btn-primary" onClick={() => setShowJoin(true)}>Join Group</button>
-            )}
             {group.status === "open" && !session.isLoggedIn() && (
               <button className="btn btn-primary" onClick={() => navigate("login")}>Sign In to Join</button>
             )}
@@ -277,7 +266,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 🛡️ You are the organizer
               </span>
             )}
-            {myMember && <span className="tag tag-open">✓ You're a member</span>}
+            {myMember?.paymentStatus === "confirmed" && <span className="tag tag-open">✓ You're a member</span>}
             {canManage && (
               <button className="btn btn-sm btn-outline" onClick={() => navigate("group-emails", id)}
                 style={{ borderColor: "rgba(124,106,255,0.3)", color: "var(--accent)" }}>
@@ -389,7 +378,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
             serviceName={group.serviceName}
             serviceIcon={group.serviceIcon}
             maxSlots={group.maxSlots}
-            onJoin={() => setShowJoin(true)}
+            onJoin={handleJoinAndPay}
             onLogin={() => navigate("login")}
             groupStatus={group.status}
             isLoggedIn={session.isLoggedIn()}
@@ -538,6 +527,20 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     </button>
                   )}
                 </div>
+              ) : !session.isLoggedIn() ? (
+                <div style={{ textAlign: "center", padding: "16px 0" }}>
+                  <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>👥</div>
+                  <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: 10 }}>{filled} of {group.maxSlots} slots filled</p>
+                  <button className="btn btn-sm btn-primary" onClick={() => navigate("login")}>Sign In to Join</button>
+                </div>
+              ) : group.status === "open" && !isOrganizer && (session.isCustomer() || session.isModerator()) ? (
+                <div style={{ textAlign: "center", padding: "16px 0" }}>
+                  <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>👥</div>
+                  <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: 10 }}>{filled} of {group.maxSlots} slots filled · {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} left</p>
+                  <button className="btn pesapal-btn pay-pulse" disabled={busy} onClick={handleJoinAndPay}>
+                    {busy ? <><span className="spinner" /> Joining…</> : "🔒 Join & Pay Now"}
+                  </button>
+                </div>
               ) : (
                 <div style={{ textAlign: "center", padding: "16px 0", color: "var(--muted)", fontSize: "0.85rem" }}>
                   <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>👥</div>
@@ -590,56 +593,6 @@ export default function GroupDetailPage({ id, navigate, user }) {
           </div>
         )}
       </div>
-
-      {/* ── Join Modal ── */}
-      {showJoin && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowJoin(false)}>
-          <div className="modal">
-            <h3>Join {group.serviceName} Group</h3>
-            <p style={{ fontSize: "0.83rem", color: "var(--muted)", marginBottom: 16 }}>
-              {spotsLeft} slot{spotsLeft !== 1 ? "s" : ""} remaining · {group.maxSlots} total paying slots.
-            </p>
-            <div className="locked-cycle-box">
-              <div className="lcb-header">
-                <span className="lcb-lock">🔒</span>
-                <span className="lcb-title">Subscription Billing — Set by Organizer</span>
-              </div>
-              <div className="lcb-body">
-                <div className="lcb-row">
-                  <span className="lcb-label">Billing cycle</span>
-                  <span className="lcb-val lcb-cycle">{group.billingCycle?.charAt(0).toUpperCase() + group.billingCycle?.slice(1)}</span>
-                </div>
-                <div className="lcb-row">
-                  <span className="lcb-label">Covers</span>
-                  <span className="lcb-val">{groupMonths} month{groupMonths > 1 ? "s" : ""} per payment</span>
-                </div>
-                <div className="lcb-row">
-                  <span className="lcb-label">Your share per period</span>
-                  <span className="lcb-val">${group.pricePerSlot} × {groupMonths}mo = ${totalForPeriod}</span>
-                </div>
-              </div>
-              <p className="lcb-note">The billing cycle is fixed by the group organizer and cannot be changed.</p>
-            </div>
-            <div className="dur-summary">
-              <div className="dur-sum-row"><span>Total charged via PesaPal</span><span style={{ fontWeight: 700, color: "var(--accent)" }}>${totalForPeriod}</span></div>
-              <div className="dur-sum-row" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                <span>Incl. {feePercent}% platform fee (${+(totalForPeriod * feePercent / 100).toFixed(2)})</span>
-              </div>
-            </div>
-            <div className="info-box" style={{ marginTop: 12, marginBottom: 0, fontSize: "0.8rem" }}>
-              You'll be redirected to PesaPal to pay <strong>${totalForPeriod}</strong>. Your slot is held pending payment.
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => setShowJoin(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleJoin} disabled={busy}>
-                {busy ? <><span className="spinner" /> Joining…</> : "Confirm & Pay →"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      
     </div>
   );
 }
@@ -756,7 +709,7 @@ function CredentialVaultInline({
             <><p className="cvt-cta-hint">Join now — credentials unlock instantly after payment.</p>
             <button className="cvt-cta-btn" onClick={onJoin}>🔓 Join & Unlock Credentials</button></>
           ) : isMyMember ? (
-            <p className="cvt-cta-hint cvt-pending-hint">⏳ Complete your payment above — the vault unlocks automatically once confirmed.</p>
+            <p className="cvt-cta-hint cvt-pending-hint">⏳ Complete your payment below — the vault unlocks automatically once confirmed.</p>
           ) : (
             <p className="cvt-cta-hint">{groupStatus === "full" ? "This group is full — check back for openings." : "Credentials locked."}</p>
           )}

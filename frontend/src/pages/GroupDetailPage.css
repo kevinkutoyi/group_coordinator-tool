@@ -170,13 +170,6 @@
 }
 .duration-card.selected .dur-price { color: var(--accent); }
 
-.dur-summary {
-  background: var(--bg3); border-radius: 10px; padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 6px; margin-top: 12px;
-}
-.dur-sum-row { display: flex; justify-content: space-between; font-size: 0.83rem; color: var(--muted); }
-.dur-sum-total { color: var(--text) !important; font-weight: 700; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
-
 /* ── Management controls (organizer + superadmin) ── */
 .manage-controls {
   display: flex;
@@ -238,46 +231,6 @@
   color: var(--muted);
   margin-left: auto;
   font-style: italic;
-}
-
-/* ── Locked billing cycle box in join modal ── */
-.locked-cycle-box {
-  background: var(--bg3);
-  border: 1px solid rgba(124,106,255,0.25);
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 14px;
-}
-.lcb-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: rgba(124,106,255,0.1);
-  border-bottom: 1px solid rgba(124,106,255,0.15);
-}
-.lcb-lock { font-size: 0.85rem; }
-.lcb-title { font-size: 0.75rem; font-weight: 600; color: var(--accent); letter-spacing: 0.03em; text-transform: uppercase; }
-
-.lcb-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-.lcb-row  { display: flex; justify-content: space-between; align-items: center; font-size: 0.83rem; }
-.lcb-label { color: var(--muted); }
-.lcb-val   { font-weight: 600; }
-.lcb-cycle {
-  background: rgba(124,106,255,0.15);
-  color: var(--accent);
-  padding: 2px 10px;
-  border-radius: 99px;
-  font-size: 0.78rem;
-  border: 1px solid rgba(124,106,255,0.25);
-}
-.lcb-note {
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-style: italic;
-  padding: 8px 14px;
-  border-top: 1px solid var(--border);
-  margin: 0;
 }
 
 /* ── Billing cycle bar on group detail page ── */
