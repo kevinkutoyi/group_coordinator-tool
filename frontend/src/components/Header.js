@@ -40,10 +40,7 @@ export default function Header({ page, navigate, user }) {
             <button className={`nav-link ${page==="create"?"active":""}`} onClick={() => navigate("create")}>+ Create Group</button>
           )}
           {role === "superadmin" && (
-            <>
-              <button className={`nav-link admin-link ${page==="admin"?"active":""}`} onClick={() => navigate("admin")}>🛡️ Admin</button>
-              <button className={`nav-link admin-link ${page==="earnings"?"active":""}`} onClick={() => navigate("earnings")}>💰 Earnings</button>
-            </>
+            <button className={`nav-link admin-link ${["admin","earnings"].includes(page)?"active":""}`} onClick={() => navigate("admin")}>🛡️ Admin</button>
           )}
 
           {/* Auth state */}

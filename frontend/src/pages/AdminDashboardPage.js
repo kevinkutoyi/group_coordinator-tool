@@ -1,9 +1,13 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
 import "./AdminDashboardPage.css";
+import "./EarningsPage.css";
 
 const SIDEBAR_SECTIONS = [
-  { items: [{ key: "dashboard", icon: "🏠", label: "Dashboard" }] },
+  { items: [
+      { key: "dashboard", icon: "🏠", label: "Dashboard" },
+      { key: "earnings",  icon: "💰", label: "Platform Earnings" },
+    ] },
   { items: [
       { key: "marketplace",   icon: "🛍️", label: "Marketplace" },
       { key: "subscriptions", icon: "📑", label: "Subscriptions" },
@@ -307,7 +311,7 @@ export default function AdminDashboardPage({ navigate }) {
                 return (
                   <button key={it.key} className={`admin-sb-item ${view === it.key ? "active" : ""}`}
                     onClick={() => {
-                      if (it.key === "analytics") { navigate("earnings"); return; }
+                      if (it.key === "analytics") return goto("earnings");
                       if (it.key === "marketplace") return goto("marketplace", "groups");
                       if (it.key === "payments")    return goto("payments", "pending-payments");
                       if (it.key === "moderators")  return goto("moderators", "moderators");
@@ -352,6 +356,8 @@ export default function AdminDashboardPage({ navigate }) {
             navigate={navigate}
           />
         )}
+
+        {view === "earnings" && <EarningsView />}
 
         {view === "roles" && (
           <RolesView allUsers={allUsers} busy={busy} promote={promote} demote={demote} onProfile={loadProfile} />
@@ -1558,6 +1564,126 @@ function timeAgo(ts) {
   if (m < 60) return m + "m ago";
   if (m < 1440) return Math.floor(m / 60) + "h ago";
   return Math.floor(m / 1440) + "d ago";
+}
+
+// ── Platform Earnings view — ported from the old standalone /earnings page ──
+function EarningsView() {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [schedMsg, setSchedMsg] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.getEarnings().then(setData).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading && !data) return <div style={{textAlign:"center",padding:80}}><span className="spinner"/></div>;
+  if (!data) return null;
+
+  const maxMonthly = Math.max(...data.monthlyEarnings.map(m => m.total), 0.01);
+
+  return (
+    <div className="earnings-page">
+      <div className="earnings-header">
+        <div>
+          <h1 className="page-title" style={{fontSize:"1.5rem",marginBottom:4}}>💰 Platform Earnings</h1>
+          <p className="page-sub" style={{marginBottom:0}}>Your {data.feePercent}% cut from every PesaPal payment</p>
+        </div>
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <button className="btn btn-outline btn-sm" title="Run expiry email scheduler now"
+            onClick={async () => {
+              try { await api.runExpiryScheduler(); setSchedMsg({type:"ok",text:"✅ Expiry scheduler ran successfully."}); }
+              catch (e) { setSchedMsg({type:"err",text:"Error: " + e.message}); }
+            }}>
+            ⏰ Run Scheduler
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={load}>↻ Refresh</button>
+        </div>
+      </div>
+
+      {schedMsg && (
+        <div className={`msg-box ${schedMsg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:16}} onClick={()=>setSchedMsg(null)}>
+          {schedMsg.text} <span style={{opacity:.4}}>✕</span>
+        </div>
+      )}
+
+      <div className="stats-row" style={{ marginBottom:24 }}>
+        <div className="stat-card earn-kpi">
+          <div className="stat-value" style={{ color:"var(--accent3)" }}>${data.totalEarned}</div>
+          <div className="stat-label">Total Earned</div>
+        </div>
+        <div className="stat-card earn-kpi">
+          <div className="stat-value">{data.completedOrders}</div>
+          <div className="stat-label">Completed Payments</div>
+        </div>
+        <div className="stat-card earn-kpi">
+          <div className="stat-value" style={{ color:"var(--warning)" }}>{data.pendingOrders}</div>
+          <div className="stat-label">Pending Orders</div>
+        </div>
+        <div className="stat-card earn-kpi">
+          <div className="stat-value">{data.totalGroups}</div>
+          <div className="stat-label">Total Groups</div>
+        </div>
+        <div className="stat-card earn-kpi">
+          <div className="stat-value">{data.totalUsers}</div>
+          <div className="stat-label">Registered Users</div>
+        </div>
+        <div className="stat-card earn-kpi">
+          <div className="stat-value" style={{ color:"var(--warning)" }}>{data.pendingModerators}</div>
+          <div className="stat-label">Pending Moderators</div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom:20 }}>
+        <h2 className="section-h2" style={{ marginBottom:20 }}>Monthly Earnings (Last 12 Months)</h2>
+        <div className="bar-chart">
+          {data.monthlyEarnings.map(m => (
+            <div key={m.label} className="bar-col">
+              <div className="bar-amount">{m.total > 0 ? `$${m.total}` : ""}</div>
+              <div className="bar-fill" style={{ height:`${Math.max((m.total / maxMonthly) * 120, m.total > 0 ? 4 : 0)}px` }} />
+              <div className="bar-label">{m.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="earnings-grid">
+        <div className="card">
+          <h2 className="section-h2" style={{ marginBottom:16 }}>Earnings by Group</h2>
+          {data.byGroup.length === 0 ? (
+            <p style={{ color:"var(--muted)", fontSize:"0.85rem" }}>No earnings yet. They appear once members pay via PesaPal.</p>
+          ) : data.byGroup.slice().sort((a,b) => b.fees - a.fees).map(g => (
+            <div key={g.groupId} className="earning-row">
+              <div>
+                <div style={{ fontWeight:600, fontSize:"0.9rem" }}>{g.serviceName}</div>
+                <div style={{ fontSize:"0.75rem", color:"var(--muted)" }}>{g.planName}</div>
+              </div>
+              <div className="earn-amount">${g.fees}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card">
+          <h2 className="section-h2" style={{ marginBottom:16 }}>Recent Transactions</h2>
+          {data.recentEarnings.length === 0 ? (
+            <p style={{ color:"var(--muted)", fontSize:"0.85rem" }}>No transactions yet.</p>
+          ) : data.recentEarnings.map(e => (
+            <div key={e.id} className="earning-row">
+              <div>
+                <div style={{ fontSize:"0.82rem", fontWeight:500, fontFamily:"monospace" }}>{e.orderId?.slice(0,18)}…</div>
+                <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>
+                  {e.earnedAt ? new Date(e.earnedAt).toLocaleString() : "—"} · {e.currency}
+                </div>
+              </div>
+              <div className="earn-amount earn-green">+${e.fee}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Subscriptions view — flattened members across all groups, filterable ──
