@@ -1200,6 +1200,103 @@ app.post("/api/admin/expired-members/:memberId/remind", requireSuperAdmin, async
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SUPER ADMIN — DASHBOARD OVERVIEW (KPIs, needs-attention, products, activity)
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
+  const now = new Date();
+
+  // Date range for the period-over-period counters (defaults to last 7 days).
+  const to   = req.query.to   ? new Date(req.query.to)   : now;
+  const from = req.query.from ? new Date(req.query.from) : new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfToday   = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+
+  // The Logs sidebar view reuses this same feed but asks for more rows.
+  const activityLimit = Math.min(parseInt(req.query.limit, 10) || 8, 100);
+  const perSourceTake  = Math.ceil(activityLimit / 2);
+
+  const [
+    revenuePayments,
+    activeMemberRows,
+    newCustomers,
+    newConfirmedPayments,
+    pendingPaymentsCount,
+    expiringTodayCount,
+    groupsAtCapacity,
+    supportThreads,
+    productGroups,
+    recentGroups,
+    recentPayments,
+    recentApprovals,
+  ] = await Promise.all([
+    prisma.payment.findMany({ where: { confirmedAt: { gte: from, lte: to } }, select: { amount: true } }),
+    prisma.groupMember.findMany({
+      where: { paymentStatus: "confirmed", role: { not: "organizer" }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { userId: true },
+    }),
+    prisma.user.count({ where: { role: "customer", createdAt: { gte: from, lte: to } } }),
+    prisma.payment.count({ where: { confirmedAt: { gte: from, lte: to } } }),
+    prisma.groupMember.count({ where: { paymentStatus: "pending", role: { not: "organizer" } } }),
+    prisma.groupMember.count({ where: { paymentStatus: "confirmed", expiresAt: { gte: startOfToday, lt: endOfToday } } }),
+    prisma.group.count({ where: { status: "full" } }),
+    prisma.supportThread.findMany({ where: { unreadByAdmin: { gt: 0 } }, select: { id: true } }),
+    prisma.group.findMany({ where: { status: { in: ["open", "full"] } }, include: { members: true }, orderBy: { createdAt: "desc" }, take: 30 }),
+    prisma.group.findMany({ orderBy: { createdAt: "desc" }, take: perSourceTake, select: { id: true, serviceName: true, planName: true, organizerName: true, createdAt: true } }),
+    prisma.payment.findMany({ orderBy: { confirmedAt: "desc" }, take: perSourceTake, select: { id: true, memberName: true, groupId: true, confirmedAt: true, amount: true } }),
+    prisma.user.findMany({ where: { approvedAt: { not: null } }, orderBy: { approvedAt: "desc" }, take: perSourceTake, select: { id: true, name: true, approvedAt: true } }),
+  ]);
+
+  const totalRevenueUSD  = revenuePayments.reduce((a, p) => a + (p.amount || 0), 0);
+  const activeCustomers  = new Set(activeMemberRows.map(m => m.userId)).size;
+
+  // "Your Products" — each group is one product row, ranked by how full it is.
+  const yourProducts = productGroups.map(g => {
+    const filled = g.members.filter(m => m.role !== "organizer" && m.paymentStatus === "confirmed").length;
+    const pct    = g.maxSlots > 0 ? Math.round((filled / g.maxSlots) * 100) : 0;
+    const health = pct >= 100 ? "Full" : pct >= 85 ? "Healthy" : "Moderate";
+    return { id: g.id, serviceName: g.serviceName, planName: g.planName, serviceIcon: g.serviceIcon, filled, maxSlots: g.maxSlots, pct, health };
+  }).sort((a, b) => b.pct - a.pct).slice(0, 6);
+
+  // Recent activity — merged from real events only (no fabricated log entries).
+  const groupNameById = Object.fromEntries(productGroups.map(g => [g.id, g.serviceName + " " + g.planName]));
+  const activity = [
+    ...recentGroups.map(g => ({
+      id: "g_" + g.id, type: "group_created", timestamp: g.createdAt,
+      text: `${g.organizerName} created a new ${g.serviceName} ${g.planName} subscription`,
+    })),
+    ...recentPayments.map(p => ({
+      id: "p_" + p.id, type: "payment_confirmed", timestamp: p.confirmedAt,
+      text: `${p.memberName} confirmed a payment${groupNameById[p.groupId] ? " for " + groupNameById[p.groupId] : ""}`,
+    })),
+    ...recentApprovals.map(u => ({
+      id: "u_" + u.id, type: "moderator_approved", timestamp: u.approvedAt,
+      text: `${u.name} was approved as a moderator`,
+    })),
+  ].filter(e => e.timestamp).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, activityLimit);
+
+  res.json({
+    range: { from, to },
+    kpis: {
+      totalRevenueUSD: +totalRevenueUSD.toFixed(2),
+      totalRevenueKES: Math.round(totalRevenueUSD * 130),
+      activeCustomers, newCustomers,
+      activeSubscriptions: activeMemberRows.length, newConfirmedPayments,
+      pendingPaymentsCount,
+    },
+    needsAttention: {
+      paymentsPending: pendingPaymentsCount,
+      subscriptionsExpiringToday: expiringTodayCount,
+      groupsAtCapacity,
+      openSupportThreads: supportThreads.length,
+    },
+    yourProducts,
+    recentActivity: activity,
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  SUPER ADMIN — EARNINGS
 // ═══════════════════════════════════════════════════════════════════════════
 

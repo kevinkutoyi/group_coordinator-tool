@@ -128,6 +128,7 @@ export const api = {
   getOrganizerEmailHistory: ()   => req("/admin/organizer-email-history"),
 
   // Admin — platform settings & payouts
+  getAdminDashboard: (params="")  => req(`/admin/dashboard${params}`),
   getAdminSettings:  ()           => req("/admin/settings"),
   updateFeePercent:  (feePercent) => req("/admin/settings/fee", { method: "PUT", body: { feePercent } }),
   getPayoutQueue:    ()           => req("/admin/payout-queue"),

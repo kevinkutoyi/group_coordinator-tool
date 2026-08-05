@@ -2,7 +2,38 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
 import "./AdminDashboardPage.css";
 
+const SIDEBAR_SECTIONS = [
+  { items: [{ key: "dashboard", icon: "🏠", label: "Dashboard" }] },
+  { items: [
+      { key: "marketplace",   icon: "🛍️", label: "Marketplace" },
+      { key: "subscriptions", icon: "📑", label: "Subscriptions" },
+      { key: "payments",      icon: "💳", label: "Payments", countKey: "pendingPaymentsCount" },
+    ] },
+  { items: [
+      { key: "moderators", icon: "🛡️", label: "Moderators", countKey: "pendingModCount" },
+      { key: "customers",  icon: "👥", label: "Customers" },
+      { key: "users",      icon: "👤", label: "Users" },
+      { key: "roles",      icon: "🔑", label: "Roles" },
+      { key: "logs",       icon: "📜", label: "Logs" },
+    ] },
+  { items: [
+      { key: "support",    icon: "🎧", label: "Support", countKey: "openSupportThreads" },
+      { key: "automation", icon: "⚙️", label: "Automation" },
+    ] },
+  { items: [
+      { key: "marketing", icon: "📣", label: "Marketing" },
+      { key: "analytics", icon: "📊", label: "Analytics" },
+      { key: "reports",   icon: "📈", label: "Reports" },
+    ] },
+  { items: [{ key: "settings", icon: "⚙️", label: "Settings" }] },
+];
+
 export default function AdminDashboardPage({ navigate }) {
+  const [view, setView]         = useState("dashboard");
+  const [dashData, setDashData]     = useState(null);
+  const [dashLoading, setDashLoading] = useState(true);
+  const [dateRangeKey, setDateRangeKey] = useState("7d");
+  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [tab, setTab]           = useState("pending");
   const [pending, setPending]   = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -65,6 +96,40 @@ export default function AdminDashboardPage({ navigate }) {
     if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
     loadAll();
   }, []);
+
+  const RANGE_DAYS = { "7d": 7, "30d": 30, "90d": 90 };
+  const RANGE_LABELS = { "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days" };
+
+  const loadDashboard = useCallback(async () => {
+    setDashLoading(true);
+    try {
+      const days = RANGE_DAYS[dateRangeKey] || 7;
+      const to = new Date();
+      const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+      const data = await api.getAdminDashboard(`?from=${from.toISOString()}&to=${to.toISOString()}`);
+      setDashData(data);
+    } catch (err) { console.error(err); }
+    finally { setDashLoading(false); }
+  }, [dateRangeKey]);
+
+  useEffect(() => {
+    if (!session.isSuperAdmin()) return;
+    loadDashboard();
+  }, [loadDashboard]);
+
+  async function promote(uid) {
+    setBusy(b => ({ ...b, [uid]: true }));
+    try { await api.promoteToModerator(uid); await loadAll(); }
+    catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setBusy(b => ({ ...b, [uid]: false })); }
+  }
+
+  async function unsuspend(uid) {
+    setBusy(b => ({ ...b, [uid]: true }));
+    try { await api.unsuspendUser(uid); await loadAll(); }
+    catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setBusy(b => ({ ...b, [uid]: false })); }
+  }
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -216,60 +281,135 @@ export default function AdminDashboardPage({ navigate }) {
 
   if (loading) return <div style={{textAlign:"center",padding:80}}><span className="spinner"/></div>;
 
+  const sidebarCounts = {
+    pendingPaymentsCount: dashData?.needsAttention?.paymentsPending ?? pendingPayments.length,
+    pendingModCount: pending.length,
+    openSupportThreads: dashData?.needsAttention?.openSupportThreads ?? 0,
+  };
+
+  function goto(viewKey, tabKey) {
+    setView(viewKey);
+    if (tabKey) setTab(tabKey);
+  }
+
+  const adminUser = session.getUser();
+
   return (
-    <div className="admin-page fade-in">
-      <div className="admin-header">
-        <div>
-          <h1 className="page-title">🛡️ Admin Dashboard</h1>
-          <p className="page-sub" style={{marginBottom:0}}>Manage users, approve moderators, oversee platform</p>
-        </div>
-        <div style={{display:"flex",gap:10}}>
-          <button className="btn btn-outline btn-sm" onClick={loadAll}>↻ Refresh</button>
-          <button className="btn btn-primary btn-sm" onClick={() => navigate("earnings")}>💰 Earnings</button>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="stats-row" style={{marginBottom:28}}>
-        <div className="stat-card">
-          <div className="stat-value" style={{color:"var(--warning)"}}>{pending.length}</div>
-          <div className="stat-label">Pending Approvals</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{allUsers.filter(u=>u.role==="moderator").length}</div>
-          <div className="stat-label">Moderators</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{allUsers.filter(u=>u.role==="customer").length}</div>
-          <div className="stat-label">Customers</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value" style={{color:"var(--error)"}}>{allUsers.filter(u=>u.status==="suspended").length}</div>
-          <div className="stat-label">Suspended</div>
-        </div>
-      </div>
-
-      {msg && <div className={`msg-box ${msg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:16}} onClick={()=>setMsg(null)}>{msg.text} <span style={{opacity:.4}}>✕</span></div>}
-
-      {/* Tabs */}
-      <div className="admin-tabs">
-        {[
-          {key:"pending",    label:`Pending (${pending.length})`},
-          {key:"moderators", label:"Moderators"},
-          {key:"customers",  label:"Customers"},
-          {key:"all",        label:"All Users"},
-          {key:"groups",     label:`Groups (${groups.length})`},
-          {key:"newsletter",  label:`📧 Newsletter${subscribers ? ` (${subscribers.total})` : ""}`},
-          {key:"group-review", label:`🔍 Group Review (${pendingGroups.length})`},
-          {key:"org-email",    label:"✉️ Email Organizers"},
-          {key:"pending-payments", label:`💳 Pending Payments${pendingPayments.length > 0 ? ` (${pendingPayments.length})` : ""}`},
-          {key:"payouts",       label:`💸 Payouts${payoutQueue.length > 0 ? ` (${payoutQueue.length})` : ""}`},
-          {key:"expired", label:"🔴 Expired" + (expiredMembers.length > 0 ? " (" + expiredMembers.length + ")" : "")},
-        ].map(t => (
-          <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={() => setTab(t.key)}>{t.label}</button>
+    <div className="admin-shell fade-in">
+      <aside className="admin-sidebar">
+        <div className="admin-sb-logo">⚡ Split<span style={{color:"var(--accent)"}}>Subs</span></div>
+        {SIDEBAR_SECTIONS.map((section, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <div className="admin-sb-divider" />}
+            <div className="admin-sb-section">
+              {section.items.map(it => {
+                const count = it.countKey ? sidebarCounts[it.countKey] : null;
+                return (
+                  <button key={it.key} className={`admin-sb-item ${view === it.key ? "active" : ""}`}
+                    onClick={() => {
+                      if (it.key === "analytics") { navigate("earnings"); return; }
+                      if (it.key === "marketplace") return goto("marketplace", "groups");
+                      if (it.key === "payments")    return goto("payments", "pending-payments");
+                      if (it.key === "moderators")  return goto("moderators", "moderators");
+                      if (it.key === "customers")   return goto("customers", "customers");
+                      if (it.key === "users")       return goto("users", "all");
+                      if (it.key === "marketing")   return goto("marketing", "newsletter");
+                      if (it.key === "reports")     return goto("reports", "reports");
+                      if (it.key === "settings")    return goto("settings", "settings");
+                      if (it.key === "subscriptions") return goto("subscriptions", "sub-all");
+                      setView(it.key);
+                    }}>
+                    <span className="icon">{it.icon}</span>
+                    <span className="lbl">{it.label}</span>
+                    {!!count && <span className="count">{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </React.Fragment>
         ))}
-      </div>
+        <div className="admin-sb-footer">
+          <div className="user-av" style={{width:34,height:34,fontSize:"0.85rem"}}>{(adminUser?.name || "A")[0].toUpperCase()}</div>
+          <div style={{minWidth:0}}>
+            <div className="name">{adminUser?.name || "Admin"}</div>
+            <div className="role">Superadmin</div>
+          </div>
+        </div>
+      </aside>
 
+      <main className="admin-main">
+        {msg && <div className={`msg-box ${msg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:16}} onClick={()=>setMsg(null)}>{msg.text} <span style={{opacity:.4}}>✕</span></div>}
+
+        {view === "dashboard" && (
+          <AdminDashboardHome
+            data={dashData} loading={dashLoading}
+            adminName={adminUser?.name || "Admin"}
+            dateRangeKey={dateRangeKey} setDateRangeKey={setDateRangeKey}
+            rangeMenuOpen={rangeMenuOpen} setRangeMenuOpen={setRangeMenuOpen}
+            rangeLabels={RANGE_LABELS}
+            onRefresh={loadDashboard}
+            goto={goto}
+            navigate={navigate}
+          />
+        )}
+
+        {view === "roles" && (
+          <RolesView allUsers={allUsers} busy={busy} promote={promote} demote={demote} onProfile={loadProfile} />
+        )}
+
+        {view === "logs" && (
+          <LogsView activity={dashData?.recentActivity} loading={dashLoading} onRefresh={loadDashboard} />
+        )}
+
+        {view === "automation" && <AutomationView />}
+
+        {view === "support" && <SupportView />}
+
+        {view === "marketplace" && (
+          <div>
+            <div className="admin-tabs" style={{marginBottom:16}}>
+              <button className={`tab-btn ${tab==="groups"?"active":""}`} onClick={()=>setTab("groups")}>All Groups ({groups.length})</button>
+              <button className={`tab-btn ${tab==="group-review"?"active":""}`} onClick={()=>setTab("group-review")}>Pending Review ({pendingGroups.length})</button>
+            </div>
+          </div>
+        )}
+
+        {view === "marketing" && (
+          <div className="admin-tabs" style={{marginBottom:16}}>
+            <button className={`tab-btn ${tab==="newsletter"?"active":""}`} onClick={()=>setTab("newsletter")}>📧 Newsletter</button>
+            <button className={`tab-btn ${tab==="org-email"?"active":""}`} onClick={()=>setTab("org-email")}>✉️ Email Organizers</button>
+          </div>
+        )}
+
+        {view === "moderators" && (
+          <h2 className="section-h2" style={{margin:"0 0 16px"}}>🛡️ Moderators</h2>
+        )}
+        {view === "customers" && (
+          <h2 className="section-h2" style={{margin:"0 0 16px"}}>👥 Customers</h2>
+        )}
+        {view === "users" && (
+          <h2 className="section-h2" style={{margin:"0 0 16px"}}>👤 All Users</h2>
+        )}
+
+        {view === "reports" && (
+          <div style={{marginBottom:4}}>
+            <h2 className="section-h2" style={{margin:"0 0 4px"}}>📈 Reports</h2>
+            <p style={{color:"var(--muted)",fontSize:"0.85rem",marginBottom:16}}>Moderator payout queue and history.</p>
+          </div>
+        )}
+
+        {view === "settings" && (
+          <div style={{marginBottom:4}}>
+            <h2 className="section-h2" style={{margin:"0 0 4px"}}>⚙️ Settings</h2>
+            <p style={{color:"var(--muted)",fontSize:"0.85rem",marginBottom:16}}>Platform-wide configuration.</p>
+          </div>
+        )}
+
+        {["marketplace","payments","moderators","customers","users","marketing","reports","settings","subscriptions"].includes(view) && (
+      <>
+      {view === "subscriptions" && (
+        <SubscriptionsView groups={groups} tab={tab} setTab={setTab} loadExpiredMembers={loadExpiredMembers} />
+      )}
       {/* Search bar (visible on user-list and pending-payments tabs) */}
       {["pending","moderators","customers","all","pending-payments"].includes(tab) && (
         <div style={{ marginBottom:16 }}>
@@ -333,7 +473,7 @@ export default function AdminDashboardPage({ navigate }) {
       )}
 
       {/* User list */}
-      {!["pending-payments","groups","newsletter","group-review","org-email","payouts","expired"].includes(tab) && (filtered.length === 0 ? (
+      {["pending","moderators","customers","all"].includes(tab) && (filtered.length === 0 ? (
         <div className="empty-state"><div className="emoji">✅</div><h3>Nothing here</h3><p>No users in this category.</p></div>
       ) : (
         <div className="admin-user-list">
@@ -765,27 +905,9 @@ export default function AdminDashboardPage({ navigate }) {
         </div>
       )}
 
-{/* ── Payouts tab ── */}
-      {tab === "payouts" && (
-        <div>
-          {/* Sunday reminder banner */}
-          {new Date().getDay() === 0 && (
-            <div style={{
-              background:"rgba(124,106,255,0.12)", border:"1px solid rgba(124,106,255,0.3)",
-              borderRadius:12, padding:"14px 20px", marginBottom:20,
-              display:"flex", alignItems:"center", gap:12, fontSize:"0.88rem"
-            }}>
-              <span style={{fontSize:"1.4rem"}}>🎉</span>
-              <div>
-                <strong>It's Sunday — Payout Day!</strong>
-                <div style={{color:"var(--muted)",fontSize:"0.78rem",marginTop:2}}>
-                  Review the queue below and send each moderator their earnings via PesaPal.
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20,marginBottom:20,alignItems:"start"}}>
+{/* ── Settings tab: platform fee ── */}
+      {tab === "settings" && (
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20,marginBottom:20,alignItems:"start"}}>
             {/* Platform fee editor */}
             <div className="card">
               <h2 className="section-h2" style={{marginBottom:14}}>⚙️ Platform Fee</h2>
@@ -850,6 +972,27 @@ export default function AdminDashboardPage({ navigate }) {
               </div>
             </div>
           </div>
+      )}
+
+      {/* ── Reports tab: payout queue + history ── */}
+      {tab === "reports" && (
+        <div>
+          {/* Sunday reminder banner */}
+          {new Date().getDay() === 0 && (
+            <div style={{
+              background:"rgba(124,106,255,0.12)", border:"1px solid rgba(124,106,255,0.3)",
+              borderRadius:12, padding:"14px 20px", marginBottom:20,
+              display:"flex", alignItems:"center", gap:12, fontSize:"0.88rem"
+            }}>
+              <span style={{fontSize:"1.4rem"}}>🎉</span>
+              <div>
+                <strong>It's Sunday — Payout Day!</strong>
+                <div style={{color:"var(--muted)",fontSize:"0.78rem",marginTop:2}}>
+                  Review the queue below and send each moderator their earnings via PesaPal.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Payout queue */}
           <div className="card" style={{marginBottom:20}}>
@@ -1047,6 +1190,8 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
           ))}
         </div>
       )}
+      </>
+        )}
 
       {/* ── Email User Modal ── */}
       {emailTarget && (
@@ -1200,9 +1345,479 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }
 
-// ── Groups tab sub-component embedded at bottom of the file ──
-// (imported inline by adding a "groups" tab to the existing component above)
+// ═══════════════════════════════════════════════════════════════════════════
+//  Dashboard overview — matches the reference mockup: greeting + date range,
+//  KPI row, Needs Attention / Your Products, Recent Activity / Quick Actions.
+//  Every number comes from GET /api/admin/dashboard — nothing is fabricated.
+// ═══════════════════════════════════════════════════════════════════════════
+function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRangeKey, rangeMenuOpen, setRangeMenuOpen, rangeLabels, onRefresh, goto, navigate }) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  if (loading && !data) return <div style={{textAlign:"center",padding:80}}><span className="spinner"/></div>;
+  const k  = data?.kpis || {};
+  const na = data?.needsAttention || {};
+  const products = data?.yourProducts || [];
+  const activity = data?.recentActivity || [];
+
+  const healthColor = { Healthy: "var(--success)", Moderate: "var(--warning)", Full: "var(--error)" };
+  const healthBg    = { Healthy: "rgba(22,163,74,0.12)", Moderate: "rgba(217,119,6,0.12)", Full: "rgba(220,38,38,0.12)" };
+
+  const activityIcon = { group_created: "🛒", payment_confirmed: "👤", moderator_approved: "🛡️" };
+
+  const fromLabel = data?.range?.from ? new Date(data.range.from).toLocaleDateString("en-GB", { day:"numeric", month:"short" }) : "";
+  const toLabel   = data?.range?.to   ? new Date(data.range.to).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "";
+
+  return (
+    <div>
+      <div className="admin-topbar">
+        <div>
+          <div className="admin-greeting">{greeting}, {adminName.split(" ")[0]} 👋</div>
+          <div className="admin-greeting-sub">Here's what's happening with your business.</div>
+        </div>
+        <div style={{ display:"flex", gap:10, alignItems:"center", position:"relative" }}>
+          <button className="admin-daterange" onClick={() => setRangeMenuOpen(o => !o)}>
+            📅 {fromLabel} – {toLabel} ⌄
+          </button>
+          {rangeMenuOpen && (
+            <div style={{ position:"absolute", top:"110%", right:70, background:"var(--card)", border:"1px solid var(--border)", borderRadius:10, boxShadow:"var(--shadow)", zIndex:10, minWidth:160 }}>
+              {Object.keys(rangeLabels).map(key => (
+                <button key={key}
+                  onClick={() => { setDateRangeKey(key); setRangeMenuOpen(false); }}
+                  style={{ display:"block", width:"100%", textAlign:"left", padding:"9px 14px", background: key===dateRangeKey ? "var(--bg3)" : "transparent", border:"none", cursor:"pointer", fontSize:"0.85rem", color:"var(--text)" }}>
+                  {rangeLabels[key]}
+                </button>
+              ))}
+            </div>
+          )}
+          <button className="btn btn-outline btn-sm" onClick={onRefresh}>↻</button>
+        </div>
+      </div>
+
+      <div className="admin-kpi-grid">
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>💰</div>
+          <div className="admin-kpi-label">Total Revenue</div>
+          <div className="admin-kpi-value">KSh {(k.totalRevenueKES || 0).toLocaleString()}</div>
+          <div className="admin-kpi-delta">{fromLabel} – {toLabel}</div>
+        </div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>👥</div>
+          <div className="admin-kpi-label">Active Customers</div>
+          <div className="admin-kpi-value">{(k.activeCustomers || 0).toLocaleString()}</div>
+          <div className="admin-kpi-delta up">↑ {k.newCustomers || 0} new this period</div>
+        </div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(59,130,246,0.14)", color:"#3b82f6" }}>📑</div>
+          <div className="admin-kpi-label">Active Subscriptions</div>
+          <div className="admin-kpi-value">{(k.activeSubscriptions || 0).toLocaleString()}</div>
+          <div className="admin-kpi-delta up">↑ {k.newConfirmedPayments || 0} new this period</div>
+        </div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>💳</div>
+          <div className="admin-kpi-label">Pending Payments</div>
+          <div className="admin-kpi-value">{k.pendingPaymentsCount || 0}</div>
+          <div className="admin-kpi-delta" style={{color:"var(--warning)"}}>Needs attention</div>
+        </div>
+      </div>
+
+      <div className="admin-panels-row">
+        <div className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Needs Attention</span>
+          </div>
+          <div className="na-row" onClick={() => goto("payments", "pending-payments")}>
+            <div className="na-icon" style={{ background:"rgba(220,38,38,0.12)", color:"var(--error)" }}>⚠️</div>
+            <div style={{ flex:1 }}>
+              <div className="na-title">Payments pending</div>
+              <div className="na-sub">Verify and capture payments</div>
+            </div>
+            <div className="na-count" style={{ color:"var(--error)" }}>{na.paymentsPending || 0}</div>
+            <div className="na-chev">›</div>
+          </div>
+          <div className="na-row" onClick={() => goto("subscriptions", "sub-confirmed")}>
+            <div className="na-icon" style={{ background:"rgba(217,119,6,0.12)", color:"var(--warning)" }}>⏰</div>
+            <div style={{ flex:1 }}>
+              <div className="na-title">Subscriptions expiring today</div>
+              <div className="na-sub">Require renewal or will be canceled</div>
+            </div>
+            <div className="na-count" style={{ color:"var(--warning)" }}>{na.subscriptionsExpiringToday || 0}</div>
+            <div className="na-chev">›</div>
+          </div>
+          <div className="na-row" onClick={() => goto("marketplace", "groups")}>
+            <div className="na-icon" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)" }}>👥</div>
+            <div style={{ flex:1 }}>
+              <div className="na-title">Groups at capacity</div>
+              <div className="na-sub">No free slots left to sell</div>
+            </div>
+            <div className="na-count" style={{ color:"var(--accent)" }}>{na.groupsAtCapacity || 0}</div>
+            <div className="na-chev">›</div>
+          </div>
+          <div className="na-row" onClick={() => goto("support")}>
+            <div className="na-icon" style={{ background:"rgba(59,130,246,0.12)", color:"#3b82f6" }}>💬</div>
+            <div style={{ flex:1 }}>
+              <div className="na-title">Open support tickets</div>
+              <div className="na-sub">Require your response</div>
+            </div>
+            <div className="na-count" style={{ color:"#3b82f6" }}>{na.openSupportThreads || 0}</div>
+            <div className="na-chev">›</div>
+          </div>
+        </div>
+
+        <div className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Your Products</span>
+            <button className="admin-panel-viewall" onClick={() => goto("marketplace", "groups")}>View all</button>
+          </div>
+          {products.length === 0 ? (
+            <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>No active groups yet.</p>
+          ) : products.map(p => (
+            <div key={p.id} className="prod-row" onClick={() => navigate("group", { id: p.id, slug: `${p.serviceName} ${p.planName}` })} style={{cursor:"pointer"}}>
+              <div className="prod-icon" style={{ background:"var(--bg3)" }}>{p.serviceIcon}</div>
+              <div style={{ minWidth:0, flex:"0 0 34%" }}>
+                <div className="prod-name" style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.serviceName}</div>
+                <div className="prod-plan" style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.planName}</div>
+              </div>
+              <div className="prod-seats">{p.filled} / {p.maxSlots} seats</div>
+              <div className="prod-bar-track"><div className="prod-bar-fill" style={{ width:`${Math.min(p.pct,100)}%`, background: healthColor[p.health] }} /></div>
+              <div className="prod-pct">{p.pct}%</div>
+              <span className="prod-health" style={{ color: healthColor[p.health], background: healthBg[p.health] }}>{p.health}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="admin-panels-row">
+        <div className="admin-panel">
+          <div className="admin-panel-head">
+            <span className="admin-panel-title">Recent Activity</span>
+            <button className="admin-panel-viewall" onClick={() => goto("logs")}>View all</button>
+          </div>
+          {activity.length === 0 ? (
+            <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Nothing has happened yet.</p>
+          ) : activity.map(a => (
+            <div key={a.id} className="act-row">
+              <span className="act-icon">{activityIcon[a.type] || "•"}</span>
+              <span>{a.text}</span>
+              <span className="act-time">{timeAgo(a.timestamp)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="admin-panel">
+          <div className="admin-panel-head"><span className="admin-panel-title">Quick Actions</span></div>
+          <div className="qa-grid">
+            <button className="qa-btn" onClick={() => navigate("create")}>
+              <span className="qa-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>➕</span>
+              <span className="qa-label">Add Subscription</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("users", "all")}>
+              <span className="qa-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>👤</span>
+              <span className="qa-label">Add Customer</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("reports", "reports")}>
+              <span className="qa-icon" style={{ background:"rgba(59,130,246,0.14)", color:"#3b82f6" }}>📄</span>
+              <span className="qa-label">Create Payment</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("marketing", "newsletter")}>
+              <span className="qa-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>📣</span>
+              <span className="qa-label">Announcement</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("payments", "pending-payments")}>
+              <span className="qa-icon" style={{ background:"rgba(220,38,38,0.14)", color:"var(--error)" }}>💳</span>
+              <span className="qa-label">Capture Payment</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("support")}>
+              <span className="qa-icon" style={{ background:"rgba(59,130,246,0.14)", color:"#3b82f6" }}>🎧</span>
+              <span className="qa-label">New Ticket</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("marketing", "org-email")}>
+              <span className="qa-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>✉️</span>
+              <span className="qa-label">Send Email</span>
+            </button>
+            <button className="qa-btn" onClick={() => goto("automation")}>
+              <span className="qa-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>⚡</span>
+              <span className="qa-label">Run Automation</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function timeAgo(ts) {
+  if (!ts) return "";
+  const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + "m ago";
+  if (m < 1440) return Math.floor(m / 60) + "h ago";
+  return Math.floor(m / 1440) + "d ago";
+}
+
+// ── Subscriptions view — flattened members across all groups, filterable ──
+function SubscriptionsView({ groups, tab, setTab, loadExpiredMembers }) {
+  useEffect(() => {
+    if (tab === "expired") loadExpiredMembers();
+  }, [tab]);
+
+  const filter = tab === "expired" ? "expired" : tab === "sub-confirmed" ? "confirmed" : tab === "sub-pending" ? "pending" : "all";
+
+  const flattened = [];
+  (groups || []).forEach(g => {
+    (g.members || []).forEach(m => {
+      if (m.role === "organizer") return;
+      if (filter === "confirmed" && m.paymentStatus !== "confirmed") return;
+      if (filter === "pending" && m.paymentStatus !== "pending") return;
+      flattened.push({ ...m, groupName: `${g.serviceName} ${g.planName}`, serviceIcon: g.serviceIcon });
+    });
+  });
+
+  return (
+    <div>
+      <div className="admin-tabs" style={{marginBottom:16}}>
+        <button className={`tab-btn ${tab==="sub-all"?"active":""}`} onClick={()=>setTab("sub-all")}>All</button>
+        <button className={`tab-btn ${tab==="sub-confirmed"?"active":""}`} onClick={()=>setTab("sub-confirmed")}>Confirmed</button>
+        <button className={`tab-btn ${tab==="sub-pending"?"active":""}`} onClick={()=>setTab("sub-pending")}>Pending</button>
+        <button className={`tab-btn ${tab==="expired"?"active":""}`} onClick={()=>setTab("expired")}>Expired</button>
+      </div>
+      {filter !== "expired" && (
+        flattened.length === 0 ? (
+          <div className="empty-state"><div className="emoji">📑</div><h3>No subscriptions</h3><p>Nothing matches this filter yet.</p></div>
+        ) : (
+          <div className="admin-user-list">
+            {flattened.map(m => (
+              <div key={m.id} className="user-card card">
+                <div className="user-card-left">
+                  <div style={{fontSize:"1.6rem"}}>{m.serviceIcon}</div>
+                  <div>
+                    <div className="user-card-name">{m.name}</div>
+                    <div className="user-card-email">{m.email}</div>
+                    <div style={{fontSize:"0.72rem",color:"var(--muted)",marginTop:2}}>
+                      {m.groupName} · ${m.memberPays}/mo{m.durationLabel ? ` · ${m.durationLabel}` : ""}
+                    </div>
+                  </div>
+                </div>
+                <div className="user-card-right">
+                  <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
+                  {m.expiresAt && <span style={{fontSize:"0.75rem",color:"var(--muted)"}}>Expires {new Date(m.expiresAt).toLocaleDateString()}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+// ── Roles view — role distribution + promote/demote actions ──
+function RolesView({ allUsers, busy, promote, demote, onProfile }) {
+  const counts = {
+    superadmin: allUsers.filter(u => u.role === "superadmin").length || 1,
+    moderator:  allUsers.filter(u => u.role === "moderator").length,
+    customer:   allUsers.filter(u => u.role === "customer").length,
+  };
+  const changeable = allUsers.filter(u => u.role !== "superadmin" && u.status === "active");
+
+  return (
+    <div>
+      <div className="admin-kpi-grid" style={{ marginBottom:20 }}>
+        <div className="admin-kpi-card"><div className="admin-kpi-label">Superadmins</div><div className="admin-kpi-value">{counts.superadmin}</div></div>
+        <div className="admin-kpi-card"><div className="admin-kpi-label">Moderators</div><div className="admin-kpi-value">{counts.moderator}</div></div>
+        <div className="admin-kpi-card"><div className="admin-kpi-label">Customers</div><div className="admin-kpi-value">{counts.customer}</div></div>
+      </div>
+      <div className="admin-panel">
+        <div className="admin-panel-head"><span className="admin-panel-title">Change a user's role</span></div>
+        {changeable.length === 0 ? (
+          <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>No active users to manage.</p>
+        ) : changeable.map(u => (
+          <div key={u.id} className="user-card" style={{ padding:"12px 0", borderBottom:"1px solid var(--border)" }}>
+            <div className="user-card-left">
+              <div className="user-av">{u.name?.[0]?.toUpperCase()}</div>
+              <div>
+                <div className="user-card-name">{u.name}</div>
+                <div className="user-card-email">{u.email}</div>
+              </div>
+            </div>
+            <div className="user-card-right">
+              <span className="tag" style={{ background: u.role === "moderator" ? "rgba(124,106,255,0.12)" : "rgba(22,163,74,0.12)", color: u.role === "moderator" ? "var(--accent)" : "var(--success)", border:"none" }}>{u.role}</span>
+              {u.role === "customer" && (
+                <button className="btn btn-sm btn-outline" disabled={busy[u.id]} onClick={() => promote(u.id)} style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}>
+                  {busy[u.id] ? <span className="spinner"/> : "🛡️ Make Moderator"}
+                </button>
+              )}
+              {u.role === "moderator" && (
+                <button className="btn btn-sm btn-outline" disabled={busy[u.id]}
+                  onClick={() => { if (window.confirm(`Demote ${u.name} to customer?`)) demote(u.id); }}
+                  style={{ borderColor:"rgba(217,119,6,0.3)", color:"var(--warning)" }}>
+                  {busy[u.id] ? <span className="spinner"/> : "👤 Make Customer"}
+                </button>
+              )}
+              <button className="btn btn-sm btn-outline" onClick={() => onProfile(u)} style={{ borderColor:"rgba(124,106,255,0.3)", color:"var(--accent)" }}>👤 Profile</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Logs view — the same real activity feed shown on the dashboard ──
+function LogsView({ activity, loading, onRefresh }) {
+  const activityIcon = { group_created: "🛒", payment_confirmed: "👤", moderator_approved: "🛡️" };
+  return (
+    <div className="admin-panel">
+      <div className="admin-panel-head">
+        <span className="admin-panel-title">Activity Log</span>
+        <button className="btn btn-sm btn-outline" onClick={onRefresh}>{loading ? <span className="spinner"/> : "↻ Refresh"}</button>
+      </div>
+      {(!activity || activity.length === 0) ? (
+        <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Nothing has happened yet in this period.</p>
+      ) : activity.map(a => (
+        <div key={a.id} className="act-row">
+          <span className="act-icon">{activityIcon[a.type] || "•"}</span>
+          <span>{a.text}</span>
+          <span className="act-time">{timeAgo(a.timestamp)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Automation view — the one real scheduled job the platform has: the
+// expiry reminder scheduler. Wired to the existing admin endpoint. ──
+function AutomationView() {
+  const [busy, setBusy]   = useState(false);
+  const [msg, setMsg]     = useState(null);
+
+  async function run() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.runExpiryScheduler();
+      setMsg({ type:"ok", text: r.message || "Expiry scheduler ran successfully." });
+    } catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="admin-panel">
+      <div className="admin-panel-head"><span className="admin-panel-title">Automations</span></div>
+      {msg && (
+        <div className={`msg-box ${msg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:14}} onClick={()=>setMsg(null)}>
+          {msg.text} <span style={{opacity:.4}}>✕</span>
+        </div>
+      )}
+      <div className="user-card" style={{ padding:"14px 0" }}>
+        <div className="user-card-left">
+          <div className="user-av" style={{background:"linear-gradient(135deg,var(--accent),var(--accent2))"}}>⏰</div>
+          <div>
+            <div className="user-card-name">Expiry Reminder Scheduler</div>
+            <div className="user-card-email">Scans for members whose subscription expired and sends renewal reminder emails.</div>
+          </div>
+        </div>
+        <div className="user-card-right">
+          <button className="btn btn-sm btn-primary" disabled={busy} onClick={run}>
+            {busy ? <span className="spinner"/> : "▶ Run Now"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Support view — full-page version of the floating support inbox ──
+function SupportView() {
+  const [threads, setThreads]   = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [draft, setDraft]       = useState("");
+  const [sending, setSending]   = useState(false);
+  const [loading, setLoading]   = useState(true);
+
+  const load = useCallback(async () => {
+    try { setThreads(await api.adminGetSupportThreads() || []); }
+    catch {} finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); const i = setInterval(load, 8000); return () => clearInterval(i); }, [load]);
+
+  async function openThread(t) {
+    try { setSelected(await api.adminGetSupportThread(t.id)); } catch {}
+  }
+
+  async function reply(e) {
+    e.preventDefault();
+    const body = draft.trim();
+    if (!body || !selected) return;
+    setSending(true);
+    try {
+      await api.adminReplySupport(selected.id, body);
+      setDraft("");
+      setSelected(await api.adminGetSupportThread(selected.id));
+      load();
+    } catch {} finally { setSending(false); }
+  }
+
+  if (loading) return <div style={{textAlign:"center",padding:60}}><span className="spinner"/></div>;
+
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"320px 1fr", gap:16, alignItems:"start" }}>
+      <div className="admin-panel" style={{ padding:0, maxHeight:600, overflowY:"auto" }}>
+        {threads.length === 0 ? (
+          <p style={{color:"var(--muted)",fontSize:"0.85rem",padding:20}}>No conversations yet.</p>
+        ) : threads.map(t => (
+          <div key={t.id} onClick={() => openThread(t)} style={{
+            padding:"14px 16px", borderBottom:"1px solid var(--border)", cursor:"pointer",
+            background: selected?.id === t.id ? "var(--bg3)" : (t.unreadByAdmin > 0 ? "rgba(220,38,38,0.05)" : "transparent"),
+          }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <strong style={{fontSize:"0.88rem"}}>{t.userName}</strong>
+              <span style={{fontSize:"0.7rem",color:"var(--muted)"}}>{timeAgo(t.updatedAt)}</span>
+            </div>
+            <div style={{fontSize:"0.76rem",color:"var(--muted)",marginBottom:3}}>{t.userEmail}</div>
+            <div style={{fontSize:"0.8rem", display:"flex", justifyContent:"space-between", gap:8}}>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap", fontWeight: t.unreadByAdmin>0?700:400}}>{t.lastMessage || "(no messages)"}</span>
+              {t.unreadByAdmin > 0 && <span style={{background:"var(--error)",color:"#fff",borderRadius:99,padding:"1px 7px",fontSize:"0.68rem",fontWeight:700}}>{t.unreadByAdmin}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="admin-panel" style={{ minHeight:400, display:"flex", flexDirection:"column" }}>
+        {!selected ? (
+          <div style={{ margin:"auto", color:"var(--muted)", fontSize:"0.88rem" }}>Select a conversation to view messages.</div>
+        ) : (
+          <>
+            <div style={{ borderBottom:"1px solid var(--border)", paddingBottom:10, marginBottom:12 }}>
+              <strong>{selected.userName}</strong>
+              <span style={{ color:"var(--muted)", fontSize:"0.8rem", marginLeft:8 }}>{selected.userEmail}</span>
+            </div>
+            <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:8, marginBottom:12, maxHeight:400 }}>
+              {(selected.messages || []).map(m => {
+                const fromAdmin = m.senderRole === "superadmin";
+                return (
+                  <div key={m.id} style={{ alignSelf: fromAdmin ? "flex-end" : "flex-start", maxWidth:"75%" }}>
+                    <div style={{
+                      background: fromAdmin ? "linear-gradient(135deg,var(--accent),var(--accent2))" : "var(--bg3)",
+                      color: fromAdmin ? "#fff" : "var(--text)",
+                      padding:"9px 13px", borderRadius:12, fontSize:"0.86rem", whiteSpace:"pre-wrap",
+                    }}>{m.body}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <form onSubmit={reply} style={{ display:"flex", gap:8 }}>
+              <input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Type a reply…" style={{ flex:1 }} />
+              <button className="btn btn-primary btn-sm" disabled={sending || !draft.trim()}>{sending ? <span className="spinner"/> : "Send"}</button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
