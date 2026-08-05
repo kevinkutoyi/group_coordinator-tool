@@ -702,7 +702,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   <div key={p.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>{p.memberName}</span>
-                      <span style={{ color: "var(--success)", fontWeight: 600 }}>${p.amount} · {p.months}mo</span>
+                      <span style={{ color: "var(--success)", fontWeight: 600 }}>KES {Math.round(p.amount * 130)} · ${p.amount} · {p.months}mo</span>
                     </div>
                     {p.platformFee && (
                       <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
