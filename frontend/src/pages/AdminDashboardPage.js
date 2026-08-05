@@ -1609,31 +1609,37 @@ function EarningsView() {
         </div>
       )}
 
-      <div className="stats-row" style={{ marginBottom:24 }}>
-        <div className="stat-card earn-kpi">
-          <div className="stat-value" style={{ color:"var(--accent3)", fontSize:"1.5rem", whiteSpace:"nowrap" }}>KES {Math.round(data.totalEarned * 130).toLocaleString()}</div>
-          <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:2, marginBottom:4 }}>${data.totalEarned}</div>
-          <div className="stat-label">Total Earned</div>
+      <div className="admin-kpi-grid" style={{ marginBottom:24 }}>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(23,166,115,0.14)", color:"var(--accent3)" }}>💰</div>
+          <div className="admin-kpi-label">Total Earned</div>
+          <div className="admin-kpi-value" style={{ whiteSpace:"nowrap" }}>KES {Math.round(data.totalEarned * 130).toLocaleString()}</div>
+          <div className="admin-kpi-delta">${data.totalEarned}</div>
         </div>
-        <div className="stat-card earn-kpi">
-          <div className="stat-value">{data.completedOrders}</div>
-          <div className="stat-label">Completed Payments</div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>✅</div>
+          <div className="admin-kpi-label">Completed Payments</div>
+          <div className="admin-kpi-value">{data.completedOrders}</div>
         </div>
-        <div className="stat-card earn-kpi">
-          <div className="stat-value" style={{ color:"var(--warning)" }}>{data.pendingOrders}</div>
-          <div className="stat-label">Pending Orders</div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>⏳</div>
+          <div className="admin-kpi-label">Pending Orders</div>
+          <div className="admin-kpi-value">{data.pendingOrders}</div>
         </div>
-        <div className="stat-card earn-kpi">
-          <div className="stat-value">{data.totalGroups}</div>
-          <div className="stat-label">Total Groups</div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>📁</div>
+          <div className="admin-kpi-label">Total Groups</div>
+          <div className="admin-kpi-value">{data.totalGroups}</div>
         </div>
-        <div className="stat-card earn-kpi">
-          <div className="stat-value">{data.totalUsers}</div>
-          <div className="stat-label">Registered Users</div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(59,130,246,0.14)", color:"#3b82f6" }}>👥</div>
+          <div className="admin-kpi-label">Registered Users</div>
+          <div className="admin-kpi-value">{data.totalUsers}</div>
         </div>
-        <div className="stat-card earn-kpi">
-          <div className="stat-value" style={{ color:"var(--warning)" }}>{data.pendingModerators}</div>
-          <div className="stat-label">Pending Moderators</div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🛡️</div>
+          <div className="admin-kpi-label">Pending Moderators</div>
+          <div className="admin-kpi-value">{data.pendingModerators}</div>
         </div>
       </div>
 
