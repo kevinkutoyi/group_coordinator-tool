@@ -1611,7 +1611,8 @@ function EarningsView() {
 
       <div className="stats-row" style={{ marginBottom:24 }}>
         <div className="stat-card earn-kpi">
-          <div className="stat-value" style={{ color:"var(--accent3)" }}>${data.totalEarned}</div>
+          <div className="stat-value" style={{ color:"var(--accent3)" }}>KES {Math.round(data.totalEarned * 130).toLocaleString()}</div>
+          <div style={{ fontSize:"0.8rem", color:"var(--muted)", marginTop:-2, marginBottom:2 }}>${data.totalEarned}</div>
           <div className="stat-label">Total Earned</div>
         </div>
         <div className="stat-card earn-kpi">
@@ -1641,7 +1642,7 @@ function EarningsView() {
         <div className="bar-chart">
           {data.monthlyEarnings.map(m => (
             <div key={m.label} className="bar-col">
-              <div className="bar-amount">{m.total > 0 ? `$${m.total}` : ""}</div>
+              <div className="bar-amount">{m.total > 0 ? `KES ${Math.round(m.total * 130)} · $${m.total}` : ""}</div>
               <div className="bar-fill" style={{ height:`${Math.max((m.total / maxMonthly) * 120, m.total > 0 ? 4 : 0)}px` }} />
               <div className="bar-label">{m.label}</div>
             </div>
@@ -1660,7 +1661,7 @@ function EarningsView() {
                 <div style={{ fontWeight:600, fontSize:"0.9rem" }}>{g.serviceName}</div>
                 <div style={{ fontSize:"0.75rem", color:"var(--muted)" }}>{g.planName}</div>
               </div>
-              <div className="earn-amount">${g.fees}</div>
+              <div className="earn-amount">KES {Math.round(g.fees * 130)} · ${g.fees}</div>
             </div>
           ))}
         </div>
@@ -1677,7 +1678,7 @@ function EarningsView() {
                   {e.earnedAt ? new Date(e.earnedAt).toLocaleString() : "—"} · {e.currency}
                 </div>
               </div>
-              <div className="earn-amount earn-green">+${e.fee}</div>
+              <div className="earn-amount earn-green">+KES {Math.round(e.fee * 130)} · +${e.fee}</div>
             </div>
           ))}
         </div>
