@@ -103,8 +103,10 @@ const SUBSCRIPTION_DURATIONS = [
   { months: 1,  label: "1 Month",   discount: 0 },
   { months: 3,  label: "3 Months",  discount: 5 },
   { months: 6,  label: "6 Months",  discount: 10 },
+  { months: 9,  label: "9 Months",  discount: 12 },
   { months: 12, label: "12 Months", discount: 15 },
 ];
+const ALLOWED_DURATION_MONTHS = SUBSCRIPTION_DURATIONS.map(d => d.months);
 
 const CYCLE_MONTHS = { monthly: 1, quarterly: 3, biannually: 6, annually: 12 };
 
@@ -783,7 +785,10 @@ app.post("/api/groups/:id/join", requireRole("customer", "moderator", "superadmi
   if (!group) return res.status(404).json({ error: "Group not found" });
   if (group.status !== "open") return res.status(400).json({ error: "Group is not accepting new members" });
 
-  const fixedMonths   = CYCLE_MONTHS[group.billingCycle] || 1;
+  // Customer picks how many months to pay upfront (1/3/6/9/12); falls back
+  // to the group's billing cycle if not provided or not a recognized option.
+  const requestedMonths = parseInt(req.body?.months, 10);
+  const fixedMonths = ALLOWED_DURATION_MONTHS.includes(requestedMonths) ? requestedMonths : (CYCLE_MONTHS[group.billingCycle] || 1);
   const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === fixedMonths) || SUBSCRIPTION_DURATIONS[0];
   const payingMembers   = group.members.filter(m => m.role !== "organizer");
   const confirmedMembers = payingMembers.filter(m => m.paymentStatus === "confirmed");
@@ -825,8 +830,13 @@ app.post("/api/groups/:id/renew", requireRole("customer", "moderator", "superadm
     where: { groupId: group.id, userId: req.user.id, role: { not: "organizer" } },
   });
   if (!member) return res.status(404).json({ error: "You are not a member of this group" });
-  if (member.paymentStatus === "pending") return res.status(400).json({ error: "You have a pending payment — complete that first." });
-  const fixedMonths = CYCLE_MONTHS[group.billingCycle] || 1;
+  // Also used to change the chosen duration on a still-pending payment before
+  // the customer actually pays (e.g. switching from 1 month to 6 months via
+  // the duration dropdown) — recalculating fees here is harmless either way
+  // since no payment has been captured yet.
+  const requestedMonths = parseInt(req.body?.months, 10);
+  const fixedMonths = ALLOWED_DURATION_MONTHS.includes(requestedMonths) ? requestedMonths : (CYCLE_MONTHS[group.billingCycle] || 1);
+  const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === fixedMonths) || SUBSCRIPTION_DURATIONS[0];
   const fees = await calcFee(group.pricePerSlot, fixedMonths);
   const updated = await prisma.groupMember.update({
     where: { id: member.id },
@@ -837,6 +847,8 @@ app.post("/api/groups/:id/renew", requireRole("customer", "moderator", "superadm
       organizerGets: fees.organizerGets,
       moderatorOwed: fees.moderatorOwed,
       months:        fixedMonths,
+      durationLabel: validDuration.label,
+      discount:      validDuration.discount,
     },
   });
   res.json(updated);

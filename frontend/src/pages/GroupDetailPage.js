@@ -3,6 +3,14 @@ import CredentialVault from "../components/CredentialVault";
 import { api, session } from "../api";
 import "./GroupDetailPage.css";
 
+const DURATIONS = [
+  { months: 1,  label: "1 Month" },
+  { months: 3,  label: "3 Months" },
+  { months: 6,  label: "6 Months" },
+  { months: 9,  label: "9 Months" },
+  { months: 12, label: "12 Months" },
+];
+
 export default function GroupDetailPage({ id, navigate, user }) {
   const [group, setGroup]         = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -16,6 +24,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [subCostBusy, setSubCostBusy] = useState(false);
   const [subCostMsg, setSubCostMsg]   = useState(null);
   const [manageOpen, setManageOpen]   = useState(false);
+  const [selectedMonths, setSelectedMonths] = useState(1);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
   const [creds, setCreds]         = useState(null);
@@ -118,7 +127,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
     }
     setBusy(true);
     try {
-      const member = await api.joinGroup(id, {});
+      const member = await api.joinGroup(id, { months: selectedMonths });
       await reload();
       if (member?.id) handlePay(member);
     } catch (err) { setMsg({ type: "err", text: err.message }); }
@@ -139,7 +148,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   async function handleRenewAndPay(member) {
     setPayingId(member.id);
     try {
-      await api.renewSlot(id);
+      await api.renewSlot(id, selectedMonths);
       await reload();
       handlePay(member);
     } catch (err) {
@@ -497,16 +506,24 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 )}
               </div>
               <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+                {m.userId === currentUserId && ["pending", "confirmed", "expired"].includes(m.paymentStatus) && (
+                  <select
+                    value={selectedMonths}
+                    onChange={(e) => setSelectedMonths(parseInt(e.target.value, 10))}
+                    style={{ padding:"3px 6px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg3)", color:"var(--text)", fontSize:"0.72rem" }}>
+                    {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
+                  </select>
+                )}
                 {m.userId === currentUserId && ["pending", "confirmed", "expired"].includes(m.paymentStatus) ? (
                   <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                    KES {Math.round((m.memberPays || group.pricePerSlot) * 130)} · ${(m.memberPays || group.pricePerSlot).toFixed(2)}
+                    KES {Math.round(group.pricePerSlot * selectedMonths * 130)} · ${(group.pricePerSlot * selectedMonths).toFixed(2)}
                   </span>
                 ) : (
                   <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
                 )}
                 {m.userId === currentUserId && m.paymentStatus === "pending" && (
-                  <button className="btn btn-sm pay-btn pay-pulse" onClick={() => handlePay(m)} disabled={payingId === m.id}>
-                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
+                  <button className="btn btn-sm pay-btn pay-pulse" onClick={() => handleRenewAndPay(m)} disabled={payingId === m.id}>
+                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round(group.pricePerSlot * selectedMonths * 130)}`}
                   </button>
                 )}
                 {m.userId === currentUserId && (m.paymentStatus === "expired" || m.paymentStatus === "confirmed") && (
@@ -538,15 +555,23 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     {myMember.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {myMember.durationLabel}</div>}
                     {myMember.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(myMember.expiresAt).toLocaleDateString()}</div>}
                   </div>
+                  {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) && (
+                    <select
+                      value={selectedMonths}
+                      onChange={(e) => setSelectedMonths(parseInt(e.target.value, 10))}
+                      style={{ padding:"3px 6px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg3)", color:"var(--text)", fontSize:"0.72rem" }}>
+                      {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
+                    </select>
+                  )}
                   {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) ? (
                     <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                      KES {Math.round((myMember.memberPays || group.pricePerSlot) * 130)} · ${(myMember.memberPays || group.pricePerSlot).toFixed(2)}
+                      KES {Math.round(group.pricePerSlot * selectedMonths * 130)} · ${(group.pricePerSlot * selectedMonths).toFixed(2)}
                     </span>
                   ) : (
                     <span className={`tag tag-${myMember.paymentStatus}`}>{myMember.paymentStatus}</span>
                   )}
                   {myMember.paymentStatus === "pending" && (
-                    <button className="btn btn-sm pesapal-btn pay-pulse" onClick={() => handlePay(myMember)} disabled={payingId === myMember.id}>
+                    <button className="btn btn-sm pesapal-btn pay-pulse" onClick={() => handleRenewAndPay(myMember)} disabled={payingId === myMember.id}>
                       {payingId === myMember.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay Now"}
                     </button>
                   )}
@@ -566,6 +591,17 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 <div style={{ textAlign: "center", padding: "16px 0" }}>
                   <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>👥</div>
                   <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: 10 }}>{filled} of {group.maxSlots} slots filled · {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} left</p>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                    <select
+                      value={selectedMonths}
+                      onChange={(e) => setSelectedMonths(parseInt(e.target.value, 10))}
+                      style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg3)", color: "var(--text)", fontSize: "0.78rem" }}>
+                      {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
+                    </select>
+                    <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
+                      KES {Math.round(group.pricePerSlot * selectedMonths * 130)} · ${(group.pricePerSlot * selectedMonths).toFixed(2)}
+                    </span>
+                  </div>
                   <button className="btn pesapal-btn pay-pulse" disabled={busy} onClick={handleJoinAndPay}>
                     {busy ? <><span className="spinner" /> Joining…</> : "🔒 Join & Pay Now"}
                   </button>
