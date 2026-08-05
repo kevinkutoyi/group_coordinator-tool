@@ -2527,7 +2527,9 @@ app.get("/api/admin/users/:id/profile", requireSuperAdmin, async (req, res) => {
     approvedAt:  user.approvedAt,
     lastSeen:    presence?.lastSeen || null,
     online:      presence ? (Date.now() - new Date(presence.lastSeen).getTime()) < 5 * 60 * 1000 : false,
-    subscriptions: user.memberships.map(m => ({
+    // Only confirmed (active) subscriptions — pending/unpaid attempts shouldn't
+    // count toward the subscriptions total or show up as if they're active.
+    subscriptions: user.memberships.filter(m => m.paymentStatus === "confirmed").map(m => ({
       id:            m.id,
       groupId:       m.groupId,
       groupName:     m.group.serviceName + " " + m.group.planName,

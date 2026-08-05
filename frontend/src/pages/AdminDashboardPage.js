@@ -1163,7 +1163,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                       <div key={p.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid var(--border)", fontSize:"0.82rem" }}>
                         <span style={{ color:"var(--muted)" }}>{p.confirmedAt ? new Date(p.confirmedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}</span>
                         <span>{p.months} month{p.months !== 1 ? "s" : ""}</span>
-                        <span style={{ color:"var(--success)", fontWeight:600 }}>{"$" + (p.amount || 0).toFixed(2)}</span>
+                        <span style={{ color:"var(--success)", fontWeight:600 }}>{"KES " + Math.round((p.amount || 0) * 130) + " · $" + (p.amount || 0).toFixed(2)}</span>
                       </div>
                     ))}
                   </>
