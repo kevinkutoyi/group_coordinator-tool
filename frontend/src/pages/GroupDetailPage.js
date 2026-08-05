@@ -262,7 +262,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
               </span>
               {group.billingCycle && (
                 <span className="tag" style={{ background: "var(--bg3)", color: "var(--muted)", border: "1px solid var(--border)" }}>
-                  🔄 {group.billingCycle}
+                  🔄 {group.billingCycle.charAt(0).toUpperCase() + group.billingCycle.slice(1)} billing
                 </span>
               )}
               {isSuperAdmin && (
@@ -444,19 +444,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
           />
         </div>
 
-        {/* Billing cycle bar */}
-        <div className="gd-billing-cycle-bar">
-          <span className="gdb-icon">🔄</span>
-          <div>
-            <span className="gdb-label">Billing Cycle</span>
-            <span className="gdb-value">{group.billingCycle?.charAt(0).toUpperCase() + group.billingCycle?.slice(1) || "Monthly"}</span>
-          </div>
-          <span className="gdb-note">Set by the organizer — all members pay on this schedule</span>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", marginBottom: 6 }}>
-          <span>{filled}/{group.maxSlots} slots filled</span>
-          <span>{spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1 ? "s" : ""} left` : "Full"}</span>
+        <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: 6 }}>
+          {filled}/{group.maxSlots} slots filled — {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1 ? "s" : ""} left` : "Full"}
         </div>
         <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
 

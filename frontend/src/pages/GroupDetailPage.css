@@ -233,43 +233,6 @@
   font-style: italic;
 }
 
-/* ── Billing cycle bar on group detail page ── */
-.gd-billing-cycle-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(255,106,142,0.05));
-  border: 1px solid rgba(124,106,255,0.2);
-  border-radius: 12px;
-  flex-wrap: wrap;
-  animation: fadeIn 0.4s ease;
-}
-.gdb-icon { font-size: 1.2rem; }
-.gdb-label {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  display: block;
-  margin-bottom: 1px;
-}
-.gdb-value {
-  font-family: var(--font-head);
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--accent);
-}
-.gdb-note {
-  font-size: 0.75rem;
-  color: var(--muted);
-  margin-left: auto;
-  font-style: italic;
-}
-@media (max-width: 600px) {
-  .gdb-note { display: none; }
-}
-
 /* ── Currency picker modal ── */
 .currency-grid {
   display: grid;
