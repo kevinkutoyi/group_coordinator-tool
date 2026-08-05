@@ -33,6 +33,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [subCostMsg, setSubCostMsg]   = useState(null);
   const [manageOpen, setManageOpen]   = useState(false);
   const [payingMembersOpen, setPayingMembersOpen] = useState(false);
+  const [adminOverviewOpen, setAdminOverviewOpen] = useState(false);
+  const [paymentLogOpen, setPaymentLogOpen]       = useState(false);
   const [selectedMonths, setSelectedMonths] = useState(1);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
@@ -651,37 +653,66 @@ export default function GroupDetailPage({ id, navigate, user }) {
 
         {isSuperAdmin && (
           <div className="admin-group-panel">
-            <div className="agp-title">🛡️ Admin Overview</div>
-            <div className="agp-row"><span>Paying slots filled</span><span style={{ color: "var(--success)" }}>{filled}/{group.maxSlots}</span></div>
-            <div className="agp-row"><span>Confirmed payments</span><span style={{ color: "var(--success)" }}>{payingMembers.filter(m => m.paymentStatus === "confirmed").length}</span></div>
-            <div className="agp-row"><span>Pending payments</span><span style={{ color: "var(--warning)" }}>{payingMembers.filter(m => m.paymentStatus === "pending").length}</span></div>
-            <div className="agp-row"><span>Platform revenue</span><span style={{ color: "var(--accent3)" }}>${group.payments?.reduce((acc, p) => acc + (p.platformFee || 0), 0).toFixed(2) || "0.00"}</span></div>
-            <div className="agp-row"><span>Moderator owed</span><span>${group.payments?.reduce((acc, p) => acc + (p.moderatorOwed || p.organizerGets || 0), 0).toFixed(2) || "0.00"}</span></div>
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn btn-sm btn-outline" onClick={() => navigate("earnings")}>💰 Earnings</button>
-              <button className="btn btn-sm btn-outline" onClick={() => navigate("admin")}>🛡️ Admin</button>
-            </div>
+            <button
+              onClick={() => setAdminOverviewOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                background: "transparent", border: "none", padding: 0,
+                color: "var(--accent2)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
+                textTransform: "uppercase", letterSpacing: "0.05em",
+              }}
+            >
+              <span>🛡️ Admin Overview</span>
+              <span style={{ color: "var(--muted)", fontWeight: 400, textTransform: "none", letterSpacing: "normal" }}>{adminOverviewOpen ? "▲ Hide" : "▼ Show"}</span>
+            </button>
+            {adminOverviewOpen && (
+              <div style={{ marginTop: 12 }}>
+                <div className="agp-row"><span>Paying slots filled</span><span style={{ color: "var(--success)" }}>{filled}/{group.maxSlots}</span></div>
+                <div className="agp-row"><span>Confirmed payments</span><span style={{ color: "var(--success)" }}>{payingMembers.filter(m => m.paymentStatus === "confirmed").length}</span></div>
+                <div className="agp-row"><span>Pending payments</span><span style={{ color: "var(--warning)" }}>{payingMembers.filter(m => m.paymentStatus === "pending").length}</span></div>
+                <div className="agp-row"><span>Platform revenue</span><span style={{ color: "var(--accent3)" }}>${group.payments?.reduce((acc, p) => acc + (p.platformFee || 0), 0).toFixed(2) || "0.00"}</span></div>
+                <div className="agp-row"><span>Moderator owed</span><span>${group.payments?.reduce((acc, p) => acc + (p.moderatorOwed || p.organizerGets || 0), 0).toFixed(2) || "0.00"}</span></div>
+                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn btn-sm btn-outline" onClick={() => navigate("earnings")}>💰 Earnings</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => navigate("admin")}>🛡️ Admin</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {canManageFinancials && (
           <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-            <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📜 Payment Log</div>
-            {!group.payments?.length ? (
-              <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>No confirmed payments yet.</p>
-            ) : group.payments.map(p => (
-              <div key={p.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>{p.memberName}</span>
-                  <span style={{ color: "var(--success)", fontWeight: 600 }}>${p.amount} · {p.months}mo</span>
-                </div>
-                {p.platformFee && (
-                  <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
-                    Platform: ${p.platformFee} · Moderator: ${p.moderatorOwed || p.organizerGets}
+            <button
+              onClick={() => setPaymentLogOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                background: "transparent", border: "none", padding: 0,
+                color: "var(--accent)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              <span>📜 Payment Log{group.payments?.length ? ` (${group.payments.length})` : ""}</span>
+              <span style={{ color: "var(--muted)", fontWeight: 400 }}>{paymentLogOpen ? "▲ Hide" : "▼ Show"}</span>
+            </button>
+            {paymentLogOpen && (
+              <div style={{ marginTop: 10 }}>
+                {!group.payments?.length ? (
+                  <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>No confirmed payments yet.</p>
+                ) : group.payments.map(p => (
+                  <div key={p.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>{p.memberName}</span>
+                      <span style={{ color: "var(--success)", fontWeight: 600 }}>${p.amount} · {p.months}mo</span>
+                    </div>
+                    {p.platformFee && (
+                      <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
+                        Platform: ${p.platformFee} · Moderator: ${p.moderatorOwed || p.organizerGets}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
