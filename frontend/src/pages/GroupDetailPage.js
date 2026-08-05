@@ -69,6 +69,33 @@ export default function GroupDetailPage({ id, navigate, user }) {
     loadCreds();
   }, [id]);
 
+  // "Customers who joined this group also joined" — other open groups with
+  // free slots, excluding this same product (e.g. viewing/joining a Spotify
+  // group won't recommend other Spotify groups) and deduped so each
+  // recommended service only appears once.
+  const [recommendations, setRecommendations] = useState([]);
+  useEffect(() => {
+    if (!group?.serviceId) return;
+    let cancelled = false;
+    api.getGroups().then(all => {
+      if (cancelled) return;
+      const seenServices = new Set();
+      const recs = [];
+      for (const g of all) {
+        if (g.id === group.id) continue;
+        if (g.serviceId === group.serviceId) continue;
+        if (g.status !== "open") continue;
+        if ((g.memberCount || 0) >= g.maxSlots) continue;
+        if (seenServices.has(g.serviceId)) continue;
+        seenServices.add(g.serviceId);
+        recs.push(g);
+        if (recs.length >= 4) break;
+      }
+      setRecommendations(recs);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [group?.id, group?.serviceId]);
+
   useEffect(() => {
     if (!group) return;
     const title = `${group.serviceName} ${group.planName} — Split the Cost | SplitSubs`;
@@ -716,6 +743,42 @@ export default function GroupDetailPage({ id, navigate, user }) {
           </div>
         )}
       </div>
+
+      {recommendations.length > 0 && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="section-h2">Customers who joined this group also joined:</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+            {recommendations.map(g => {
+              const recFilled    = g.memberCount || 0;
+              const recSpotsLeft = g.maxSlots - recFilled;
+              return (
+                <div key={g.id}
+                  onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}
+                  style={{
+                    cursor: "pointer", padding: "14px 16px", borderRadius: 12,
+                    background: "var(--bg3)", border: "1px solid var(--border)",
+                    display: "flex", flexDirection: "column", gap: 8, transition: "border-color 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: "1.6rem" }}>{g.serviceIcon}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: "0.88rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.serviceName}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.planName}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--accent)" }}>
+                      KES {Math.round(g.pricePerSlot * 130)} · ${g.pricePerSlot}
+                    </span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{recSpotsLeft} spot{recSpotsLeft !== 1 ? "s" : ""} left</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
