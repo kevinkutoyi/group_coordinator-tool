@@ -3,13 +3,21 @@ import CredentialVault from "../components/CredentialVault";
 import { api, session } from "../api";
 import "./GroupDetailPage.css";
 
+// Discount is taken off the total for the chosen duration (e.g. 6 months
+// at 4% off = pricePerSlot * 6 * 0.96) — mirrors calcFee() in server.js.
 const DURATIONS = [
-  { months: 1,  label: "1 Month" },
-  { months: 3,  label: "3 Months" },
-  { months: 6,  label: "6 Months" },
-  { months: 9,  label: "9 Months" },
-  { months: 12, label: "12 Months" },
+  { months: 1,  label: "1 Month",           discount: 0 },
+  { months: 3,  label: "3 Months (2% off)",  discount: 2 },
+  { months: 6,  label: "6 Months (4% off)",  discount: 4 },
+  { months: 9,  label: "9 Months (6% off)",  discount: 6 },
+  { months: 12, label: "12 Months (8% off)", discount: 8 },
 ];
+
+function durationPrice(pricePerSlot, months) {
+  const d = DURATIONS.find(x => x.months === months) || DURATIONS[0];
+  const gross = pricePerSlot * months;
+  return +(gross * (1 - d.discount / 100)).toFixed(2);
+}
 
 export default function GroupDetailPage({ id, navigate, user }) {
   const [group, setGroup]         = useState(null);
@@ -516,14 +524,14 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 )}
                 {m.userId === currentUserId && ["pending", "confirmed", "expired"].includes(m.paymentStatus) ? (
                   <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                    KES {Math.round(group.pricePerSlot * selectedMonths * 130)} · ${(group.pricePerSlot * selectedMonths).toFixed(2)}
+                    KES {Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                   </span>
                 ) : (
                   <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
                 )}
                 {m.userId === currentUserId && m.paymentStatus === "pending" && (
                   <button className="btn btn-sm pay-btn pay-pulse" onClick={() => handleRenewAndPay(m)} disabled={payingId === m.id}>
-                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round(group.pricePerSlot * selectedMonths * 130)}`}
+                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)}`}
                   </button>
                 )}
                 {m.userId === currentUserId && (m.paymentStatus === "expired" || m.paymentStatus === "confirmed") && (
@@ -565,7 +573,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   )}
                   {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) ? (
                     <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                      KES {Math.round(group.pricePerSlot * selectedMonths * 130)} · ${(group.pricePerSlot * selectedMonths).toFixed(2)}
+                      KES {Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                     </span>
                   ) : (
                     <span className={`tag tag-${myMember.paymentStatus}`}>{myMember.paymentStatus}</span>
@@ -599,7 +607,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                       {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
                     </select>
                     <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                      KES {Math.round(group.pricePerSlot * selectedMonths * 130)} · ${(group.pricePerSlot * selectedMonths).toFixed(2)}
+                      KES {Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                     </span>
                   </div>
                   <button className="btn pesapal-btn pay-pulse" disabled={busy} onClick={handleJoinAndPay}>

@@ -34,13 +34,16 @@ async function getPlatformFeePercent() {
   } catch { return DEFAULT_FEE_PERCENT; }
 }
 
-async function calcFee(amount, months = 1) {
+// discountPercent is taken off the total for the chosen duration (e.g. 6
+// months at 4% off = pricePerSlot * 6 * 0.96), not off the per-month rate.
+async function calcFee(amount, months = 1, discountPercent = 0) {
   const feePercent    = await getPlatformFeePercent();
-  const memberPays    = +(amount * months).toFixed(2);
+  const grossTotal     = +(amount * months).toFixed(2);
+  const memberPays    = +(grossTotal * (1 - discountPercent / 100)).toFixed(2);
   const platformFee   = +(memberPays * feePercent / 100).toFixed(2);
   const moderatorOwed = +(memberPays - platformFee).toFixed(2);
-  return { base: memberPays, memberPays, platformFee, moderatorOwed,
-           feePercent, organizerGets: moderatorOwed };
+  return { base: grossTotal, memberPays, platformFee, moderatorOwed,
+           feePercent, organizerGets: moderatorOwed, discountPercent };
 }
 
 function signToken(payload, expiresIn = process.env.JWT_EXPIRES_IN || "8h") {
@@ -101,10 +104,10 @@ const SERVICES = [
 
 const SUBSCRIPTION_DURATIONS = [
   { months: 1,  label: "1 Month",   discount: 0 },
-  { months: 3,  label: "3 Months",  discount: 5 },
-  { months: 6,  label: "6 Months",  discount: 10 },
-  { months: 9,  label: "9 Months",  discount: 12 },
-  { months: 12, label: "12 Months", discount: 15 },
+  { months: 3,  label: "3 Months",  discount: 2 },
+  { months: 6,  label: "6 Months",  discount: 4 },
+  { months: 9,  label: "9 Months",  discount: 6 },
+  { months: 12, label: "12 Months", discount: 8 },
 ];
 const ALLOWED_DURATION_MONTHS = SUBSCRIPTION_DURATIONS.map(d => d.months);
 
@@ -801,7 +804,7 @@ app.post("/api/groups/:id/join", requireRole("customer", "moderator", "superadmi
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  const fees   = await calcFee(group.pricePerSlot, fixedMonths);
+  const fees   = await calcFee(group.pricePerSlot, fixedMonths, validDuration.discount);
   const member = await prisma.groupMember.create({
     data: {
       groupId: group.id, userId: req.user.id, name: user.name, email: user.email,
@@ -837,7 +840,7 @@ app.post("/api/groups/:id/renew", requireRole("customer", "moderator", "superadm
   const requestedMonths = parseInt(req.body?.months, 10);
   const fixedMonths = ALLOWED_DURATION_MONTHS.includes(requestedMonths) ? requestedMonths : (CYCLE_MONTHS[group.billingCycle] || 1);
   const validDuration = SUBSCRIPTION_DURATIONS.find(d => d.months === fixedMonths) || SUBSCRIPTION_DURATIONS[0];
-  const fees = await calcFee(group.pricePerSlot, fixedMonths);
+  const fees = await calcFee(group.pricePerSlot, fixedMonths, validDuration.discount);
   const updated = await prisma.groupMember.update({
     where: { id: member.id },
     data: {
