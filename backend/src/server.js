@@ -905,7 +905,16 @@ async function confirmOrder(reference) {
 
   if (code === "success") {
     const confirmedAt = new Date();
-    const exp = new Date(); exp.setMonth(exp.getMonth() + (order.months || 1));
+    // Renewing while still active extends from the CURRENT expiry, not from
+    // today — otherwise renewing a few days early would forfeit whatever
+    // time was left. A first-time join or a renewal after expiry has
+    // nothing to extend from, so it starts counting from now instead.
+    const existingMember = await prisma.groupMember.findUnique({ where: { id: order.memberId } });
+    const base = existingMember?.expiresAt && new Date(existingMember.expiresAt) > confirmedAt
+      ? new Date(existingMember.expiresAt)
+      : confirmedAt;
+    const exp = new Date(base);
+    exp.setDate(exp.getDate() + (order.months || 1) * 31);
 
     await prisma.groupMember.update({ where: { id: order.memberId }, data: { paymentStatus: "confirmed", expiresAt: exp } });
 

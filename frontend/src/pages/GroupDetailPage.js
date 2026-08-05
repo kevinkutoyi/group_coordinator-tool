@@ -132,6 +132,21 @@ export default function GroupDetailPage({ id, navigate, user }) {
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
   }
 
+  // Renewing an already-active subscription: flip back to pending (recalcs
+  // fees) then go straight to payment. The expiry itself gets extended from
+  // whatever time is left, not reset — handled server-side in confirmOrder.
+  async function handleRenewAndPay(member) {
+    setPayingId(member.id);
+    try {
+      await api.renewSlot(id);
+      await reload();
+      handlePay(member);
+    } catch (err) {
+      setMsg({ type: "err", text: err.message });
+      setPayingId(null);
+    }
+  }
+
   async function saveRenewDate() {
     setRenewDateBusy(true); setRenewDateMsg(null);
     try {
@@ -478,25 +493,12 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
                   </button>
                 )}
-                {m.userId === currentUserId && (
-                  m.paymentStatus === "expired" ||
-                  (m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && daysLeft(m.expiresAt) <= 7)
-                ) && (
+                {m.userId === currentUserId && (m.paymentStatus === "expired" || m.paymentStatus === "confirmed") && (
                   <button className="btn btn-sm btn-primary"
                     style={{ background: "linear-gradient(90deg, #f59e0b, #ef4444)", border: "none" }}
                     disabled={payingId === m.id}
-                    onClick={async () => {
-                      setPayingId(m.id);
-                      try {
-                        await api.renewSlot(id);
-                        await reload();
-                        handlePay(m);
-                      } catch (err) {
-                        setMsg({ type: "err", text: err.message });
-                        setPayingId(null);
-                      }
-                    }}>
-                    {payingId === m.id ? <><span className="spinner" /> …</> : "🔄 Renew"}
+                    onClick={() => handleRenewAndPay(m)}>
+                    {payingId === m.id ? <><span className="spinner" /> …</> : "🔄 Renew Now"}
                   </button>
                 )}
                 {m.userId === currentUserId && m.paymentStatus === "confirmed" && daysLeft(m.expiresAt) !== null && (
@@ -524,6 +526,11 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   {myMember.paymentStatus === "pending" && (
                     <button className="btn btn-sm pesapal-btn pay-pulse" onClick={() => handlePay(myMember)} disabled={payingId === myMember.id}>
                       {payingId === myMember.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay Now"}
+                    </button>
+                  )}
+                  {(myMember.paymentStatus === "confirmed" || myMember.paymentStatus === "expired") && (
+                    <button className="btn btn-sm pesapal-btn pay-pulse" onClick={() => handleRenewAndPay(myMember)} disabled={payingId === myMember.id}>
+                      {payingId === myMember.id ? <><span className="spinner" /> …</> : "🔄 Renew Now"}
                     </button>
                   )}
                 </div>

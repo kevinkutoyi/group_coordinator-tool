@@ -52,8 +52,13 @@ async function confirmOrder(reference) {
   if (DRY_RUN) return { wouldConfirm: true, healed };
 
   const confirmedAt = new Date();
-  const exp = new Date();
-  exp.setMonth(exp.getMonth() + (order.months || 1));
+  // Same additive-renewal rule as confirmOrder() in server.js: extend from
+  // the existing expiry if still active, otherwise start counting from now.
+  const base = memberBefore?.expiresAt && new Date(memberBefore.expiresAt) > confirmedAt
+    ? new Date(memberBefore.expiresAt)
+    : confirmedAt;
+  const exp = new Date(base);
+  exp.setDate(exp.getDate() + (order.months || 1) * 31);
 
   await prisma.groupMember.update({ where: { id: order.memberId }, data: { paymentStatus: "confirmed", expiresAt: exp } });
 
