@@ -518,7 +518,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   <select
                     value={selectedMonths}
                     onChange={(e) => setSelectedMonths(parseInt(e.target.value, 10))}
-                    style={{ padding:"3px 6px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg3)", color:"var(--text)", fontSize:"0.72rem" }}>
+                    style={{ width:"auto", flexShrink:0, padding:"3px 6px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg3)", color:"var(--text)", fontSize:"0.72rem" }}>
                     {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
                   </select>
                 )}
@@ -567,7 +567,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     <select
                       value={selectedMonths}
                       onChange={(e) => setSelectedMonths(parseInt(e.target.value, 10))}
-                      style={{ padding:"3px 6px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg3)", color:"var(--text)", fontSize:"0.72rem" }}>
+                      style={{ width:"auto", flexShrink:0, padding:"3px 6px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg3)", color:"var(--text)", fontSize:"0.72rem" }}>
                       {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
                     </select>
                   )}
@@ -603,7 +603,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     <select
                       value={selectedMonths}
                       onChange={(e) => setSelectedMonths(parseInt(e.target.value, 10))}
-                      style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg3)", color: "var(--text)", fontSize: "0.78rem" }}>
+                      style={{ width: "auto", flexShrink: 0, padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg3)", color: "var(--text)", fontSize: "0.78rem" }}>
                       {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
                     </select>
                     <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
