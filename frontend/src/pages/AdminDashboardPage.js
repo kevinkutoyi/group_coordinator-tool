@@ -1611,8 +1611,8 @@ function EarningsView() {
 
       <div className="stats-row" style={{ marginBottom:24 }}>
         <div className="stat-card earn-kpi">
-          <div className="stat-value" style={{ color:"var(--accent3)" }}>KES {Math.round(data.totalEarned * 130).toLocaleString()}</div>
-          <div style={{ fontSize:"0.8rem", color:"var(--muted)", marginTop:-2, marginBottom:2 }}>${data.totalEarned}</div>
+          <div className="stat-value" style={{ color:"var(--accent3)", fontSize:"1.5rem", whiteSpace:"nowrap" }}>KES {Math.round(data.totalEarned * 130).toLocaleString()}</div>
+          <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:2, marginBottom:4 }}>${data.totalEarned}</div>
           <div className="stat-label">Total Earned</div>
         </div>
         <div className="stat-card earn-kpi">
