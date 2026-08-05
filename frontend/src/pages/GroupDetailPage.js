@@ -497,7 +497,13 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 )}
               </div>
               <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-                <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
+                {m.userId === currentUserId && ["pending", "confirmed", "expired"].includes(m.paymentStatus) ? (
+                  <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
+                    KES {Math.round((m.memberPays || group.pricePerSlot) * 130)} · ${(m.memberPays || group.pricePerSlot).toFixed(2)}
+                  </span>
+                ) : (
+                  <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
+                )}
                 {m.userId === currentUserId && m.paymentStatus === "pending" && (
                   <button className="btn btn-sm pay-btn pay-pulse" onClick={() => handlePay(m)} disabled={payingId === m.id}>
                     {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round((m.memberPays || group.pricePerSlot) * 130)}`}
@@ -532,7 +538,13 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     {myMember.durationLabel && <div style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 1 }}>📅 {myMember.durationLabel}</div>}
                     {myMember.expiresAt && <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Expires {new Date(myMember.expiresAt).toLocaleDateString()}</div>}
                   </div>
-                  <span className={`tag tag-${myMember.paymentStatus}`}>{myMember.paymentStatus}</span>
+                  {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) ? (
+                    <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
+                      KES {Math.round((myMember.memberPays || group.pricePerSlot) * 130)} · ${(myMember.memberPays || group.pricePerSlot).toFixed(2)}
+                    </span>
+                  ) : (
+                    <span className={`tag tag-${myMember.paymentStatus}`}>{myMember.paymentStatus}</span>
+                  )}
                   {myMember.paymentStatus === "pending" && (
                     <button className="btn btn-sm pesapal-btn pay-pulse" onClick={() => handlePay(myMember)} disabled={payingId === myMember.id}>
                       {payingId === myMember.id ? <><span className="spinner" /> Redirecting…</> : "🔒 Pay Now"}
