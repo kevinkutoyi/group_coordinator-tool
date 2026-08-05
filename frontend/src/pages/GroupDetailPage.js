@@ -15,6 +15,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [subCost, setSubCost]         = useState("");
   const [subCostBusy, setSubCostBusy] = useState(false);
   const [subCostMsg, setSubCostMsg]   = useState(null);
+  const [manageOpen, setManageOpen]   = useState(false);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
   const [creds, setCreds]         = useState(null);
@@ -297,89 +298,109 @@ export default function GroupDetailPage({ id, navigate, user }) {
             )}
           </div>
         </div>
-              {canManage && (
-                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📬 Inbound Email <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(for OTP capture)</span></div>
-                  <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>OTPs sent here appear automatically for confirmed members.</div>
-                  {group.inboundEmail && <div style={{ fontSize:"0.72rem", color:"var(--success)", marginBottom:8, fontWeight:600 }}>✓ Current: {group.inboundEmail}</div>}
-                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <input type="email" defaultValue={group.inboundEmail || ""} id="inboundEmailInput"
-                      placeholder="e.g. netflix-group1@inbound.splitsubs.com"
-                      style={{ flex:1, padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem", minWidth:200 }}
-                    />
-                    <button className="btn btn-sm btn-primary" onClick={async () => {
-                      const val = document.getElementById("inboundEmailInput").value;
-                      try { await api.setGroupInboundEmail(id, val || null); setMsg({ type:"ok", text:"Inbound email saved." }); reload(); }
-                      catch (err) { setMsg({ type:"err", text: err.message }); }
-                    }}>💾 Save</button>
-                  </div>
-                </div>
-              )}
-              {canManageFinancials && (
-                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin & organizer only)</span></div>
-                  {group.renewDate && (() => {
-                    const days = Math.ceil((new Date(group.renewDate) - new Date()) / (1000*60*60*24));
-                    const color = days <= 0 ? "var(--error)" : days <= 3 ? "var(--error)" : days <= 7 ? "var(--warning)" : "var(--success)";
-                    return <div style={{ fontSize:"0.78rem", color, fontWeight:600, marginBottom:8 }}>
-                      {days <= 0 ? "⛔ OVERDUE by " + Math.abs(days) + "d" : days <= 3 ? "⚠️ Due in " + days + "d" : days <= 7 ? "⚠️ Due in " + days + "d" : "✓ Due in " + days + "d"}
-                      {" — "}{new Date(group.renewDate).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
-                    </div>;
-                  })()}
-                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <div style={{ position:"relative", display:"inline-block" }}>
-                      <input type="date" value={renewDate}
-                        onChange={e => setRenewDate(e.target.value)}
-                        style={{
-                          padding:"8px 12px", borderRadius:8,
-                          border:"1px solid var(--border)",
-                          background:"var(--bg2)", color:"var(--text)",
-                          fontSize:"0.85rem", cursor:"pointer",
-                          colorScheme:"dark", minWidth:160,
-                        }}
-                      />
+              {(canManage || canManageFinancials) && (
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    onClick={() => setManageOpen(o => !o)}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                      padding: "10px 14px", background: "rgba(124,106,255,0.06)", border: "1px solid rgba(124,106,255,0.15)",
+                      borderRadius: 10, color: "var(--accent)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    <span>⚙️ Manage Group</span>
+                    <span style={{ color: "var(--muted)", fontWeight: 400 }}>{manageOpen ? "▲ Hide" : "▼ Show"}</span>
+                  </button>
+
+                  {manageOpen && (
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 12 }}>
+                      {canManage && (
+                        <div style={{ padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
+                          <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📬 Inbound Email <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(for OTP capture)</span></div>
+                          <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>OTPs sent here appear automatically for confirmed members.</div>
+                          {group.inboundEmail && <div style={{ fontSize:"0.72rem", color:"var(--success)", marginBottom:8, fontWeight:600 }}>✓ Current: {group.inboundEmail}</div>}
+                          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                            <input type="email" defaultValue={group.inboundEmail || ""} id="inboundEmailInput"
+                              placeholder="e.g. netflix-group1@inbound.splitsubs.com"
+                              style={{ flex:1, padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", fontSize:"0.82rem", minWidth:200 }}
+                            />
+                            <button className="btn btn-sm btn-primary" onClick={async () => {
+                              const val = document.getElementById("inboundEmailInput").value;
+                              try { await api.setGroupInboundEmail(id, val || null); setMsg({ type:"ok", text:"Inbound email saved." }); reload(); }
+                              catch (err) { setMsg({ type:"err", text: err.message }); }
+                            }}>💾 Save</button>
+                          </div>
+                        </div>
+                      )}
+                      {canManageFinancials && (
+                        <div style={{ padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
+                          <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>📅 Subscription Renew Date <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin & organizer only)</span></div>
+                          {group.renewDate && (() => {
+                            const days = Math.ceil((new Date(group.renewDate) - new Date()) / (1000*60*60*24));
+                            const color = days <= 0 ? "var(--error)" : days <= 3 ? "var(--error)" : days <= 7 ? "var(--warning)" : "var(--success)";
+                            return <div style={{ fontSize:"0.78rem", color, fontWeight:600, marginBottom:8 }}>
+                              {days <= 0 ? "⛔ OVERDUE by " + Math.abs(days) + "d" : days <= 3 ? "⚠️ Due in " + days + "d" : days <= 7 ? "⚠️ Due in " + days + "d" : "✓ Due in " + days + "d"}
+                              {" — "}{new Date(group.renewDate).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
+                            </div>;
+                          })()}
+                          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                            <div style={{ position:"relative", display:"inline-block" }}>
+                              <input type="date" value={renewDate}
+                                onChange={e => setRenewDate(e.target.value)}
+                                style={{
+                                  padding:"8px 12px", borderRadius:8,
+                                  border:"1px solid var(--border)",
+                                  background:"var(--bg2)", color:"var(--text)",
+                                  fontSize:"0.85rem", cursor:"pointer",
+                                  colorScheme:"dark", minWidth:160,
+                                }}
+                              />
+                            </div>
+                            <button className="btn btn-sm btn-primary" disabled={renewDateBusy} onClick={saveRenewDate}>
+                              {renewDateBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
+                            </button>
+                            {renewDate && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setRenewDate(""); }}>✕ Clear</button>}
+                          </div>
+                          {renewDateMsg && <div className={"msg-box " + (renewDateMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setRenewDateMsg(null)}>{renewDateMsg.text}</div>}
+                        </div>
+                      )}
+                      {canManageFinancials && (
+                        <div style={{ padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
+                          <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>💵 Subscription Cost <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin & organizer only)</span></div>
+                          <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>What you actually pay for the real subscription each billing cycle — used to calculate profit.</div>
+                          <div style={{ fontSize:"0.78rem", color:"var(--text)", fontWeight:600, marginBottom:8 }}>
+                            Current: ${(group.subscriptionCost || 0).toFixed(2)}
+                            {group.monthlyRevenue != null && (
+                              <span style={{ marginLeft:12, color:"var(--muted)", fontWeight:400 }}>
+                                Revenue: ${group.monthlyRevenue.toFixed(2)}/mo
+                              </span>
+                            )}
+                            {group.profit != null && (
+                              <span style={{ marginLeft:12, fontWeight:700, color: group.profit >= 0 ? "var(--success)" : "var(--error)" }}>
+                                Profit: {group.profit >= 0 ? "+" : ""}{group.profit.toFixed(2)}/mo
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                            <input type="number" min="0" step="0.01" value={subCost}
+                              onChange={e => setSubCost(e.target.value)}
+                              placeholder="e.g. 19.99"
+                              style={{
+                                padding:"8px 12px", borderRadius:8,
+                                border:"1px solid var(--border)",
+                                background:"var(--bg2)", color:"var(--text)",
+                                fontSize:"0.85rem", minWidth:140,
+                              }}
+                            />
+                            <button className="btn btn-sm btn-primary" disabled={subCostBusy} onClick={saveSubCost}>
+                              {subCostBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
+                            </button>
+                          </div>
+                          {subCostMsg && <div className={"msg-box " + (subCostMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setSubCostMsg(null)}>{subCostMsg.text}</div>}
+                        </div>
+                      )}
                     </div>
-                    <button className="btn btn-sm btn-primary" disabled={renewDateBusy} onClick={saveRenewDate}>
-                      {renewDateBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
-                    </button>
-                    {renewDate && <button className="btn btn-sm btn-outline" style={{ color:"var(--error)", borderColor:"var(--error)" }} onClick={() => { setRenewDate(""); }}>✕ Clear</button>}
-                  </div>
-                  {renewDateMsg && <div className={"msg-box " + (renewDateMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setRenewDateMsg(null)}>{renewDateMsg.text}</div>}
-                </div>
-              )}
-              {canManageFinancials && (
-                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>💵 Subscription Cost <span style={{ fontSize:"0.7rem", color:"var(--muted)", fontWeight:400 }}>(admin & organizer only)</span></div>
-                  <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginBottom:8 }}>What you actually pay for the real subscription each billing cycle — used to calculate profit.</div>
-                  <div style={{ fontSize:"0.78rem", color:"var(--text)", fontWeight:600, marginBottom:8 }}>
-                    Current: ${(group.subscriptionCost || 0).toFixed(2)}
-                    {group.monthlyRevenue != null && (
-                      <span style={{ marginLeft:12, color:"var(--muted)", fontWeight:400 }}>
-                        Revenue: ${group.monthlyRevenue.toFixed(2)}/mo
-                      </span>
-                    )}
-                    {group.profit != null && (
-                      <span style={{ marginLeft:12, fontWeight:700, color: group.profit >= 0 ? "var(--success)" : "var(--error)" }}>
-                        Profit: {group.profit >= 0 ? "+" : ""}{group.profit.toFixed(2)}/mo
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <input type="number" min="0" step="0.01" value={subCost}
-                      onChange={e => setSubCost(e.target.value)}
-                      placeholder="e.g. 19.99"
-                      style={{
-                        padding:"8px 12px", borderRadius:8,
-                        border:"1px solid var(--border)",
-                        background:"var(--bg2)", color:"var(--text)",
-                        fontSize:"0.85rem", minWidth:140,
-                      }}
-                    />
-                    <button className="btn btn-sm btn-primary" disabled={subCostBusy} onClick={saveSubCost}>
-                      {subCostBusy ? <><span className="spinner"/> Saving…</> : "💾 Save"}
-                    </button>
-                  </div>
-                  {subCostMsg && <div className={"msg-box " + (subCostMsg.type==="ok"?"msg-ok":"msg-err")} style={{ marginTop:8, fontSize:"0.78rem" }} onClick={() => setSubCostMsg(null)}>{subCostMsg.text}</div>}
+                  )}
                 </div>
               )}
 
@@ -433,11 +454,11 @@ export default function GroupDetailPage({ id, navigate, user }) {
           <span className="gdb-note">Set by the organizer — all members pay on this schedule</span>
         </div>
 
-        <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", marginTop: 4 }}>
-          <span>{filled}/{group.maxSlots} paying slots filled · {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1 ? "s" : ""} left` : "Full"}</span>
-          <span>{pct}%</span>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--muted)", marginBottom: 6 }}>
+          <span>{filled}/{group.maxSlots} slots filled</span>
+          <span>{spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft > 1 ? "s" : ""} left` : "Full"}</span>
         </div>
+        <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
 
         {/* ── Paying Members — part of the join/unlock flow, so it lives in the same card ── */}
         <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
