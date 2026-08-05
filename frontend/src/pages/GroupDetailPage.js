@@ -32,6 +32,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [subCostBusy, setSubCostBusy] = useState(false);
   const [subCostMsg, setSubCostMsg]   = useState(null);
   const [manageOpen, setManageOpen]   = useState(false);
+  const [payingMembersOpen, setPayingMembersOpen] = useState(false);
   const [selectedMonths, setSelectedMonths] = useState(1);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
@@ -468,7 +469,23 @@ export default function GroupDetailPage({ id, navigate, user }) {
 
         {/* ── Paying Members — part of the join/unlock flow, so it lives in the same card ── */}
         <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(124,106,255,0.06)", borderRadius: 10, border: "1px solid rgba(124,106,255,0.15)" }}>
-          <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>👥 Paying Members</div>
+          {canManage ? (
+            <button
+              onClick={() => setPayingMembersOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                background: "transparent", border: "none", padding: 0,
+                color: "var(--accent)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              <span>👥 Paying Members ({payingMembers.length})</span>
+              <span style={{ color: "var(--muted)", fontWeight: 400 }}>{payingMembersOpen ? "▲ Hide" : "▼ Show"}</span>
+            </button>
+          ) : (
+            <div style={{ fontSize: "0.78rem", fontWeight: 600, marginBottom: 8, color: "var(--accent)" }}>👥 Paying Members</div>
+          )}
+          {(!canManage || payingMembersOpen) && (
+          <div style={{ marginTop: canManage ? 10 : 0 }}>
           {payingMembers.length === 0 ? (
             <div style={{ textAlign: "center", padding: "24px 0", color: "var(--muted)", fontSize: "0.85rem" }}>
               <div style={{ fontSize: "2rem", marginBottom: 8 }}>👥</div>
@@ -621,6 +638,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 </div>
               )}
             </div>
+          )}
+          </div>
           )}
         </div>
 
