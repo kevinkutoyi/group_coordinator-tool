@@ -109,6 +109,7 @@ export const api = {
   sendExpiryReminder:   (gid, b) => req(`/groups/${gid}/emails/expiry-reminder`,{ method: "POST", body: b }),
   getGroupMembersAdmin: (gid)    => req(`/groups/${gid}/members`),
   runExpiryScheduler:   ()       => req("/admin/expiry-scheduler",              { method: "POST" }),
+  getEmailLogs:         (params="") => req(`/admin/email-logs${params}`),
 
   // Currency
   getCurrencyRate:   () => req("/currency/rate"),

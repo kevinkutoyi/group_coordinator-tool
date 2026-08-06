@@ -9,6 +9,7 @@ const { PrismaClient } = require("@prisma/client");
 const paystack   = require("./paystack");
 const { validateEmail } = require("./emailValidator");
 const emailService = require("./emailService");
+const crypto      = require("crypto");
 
 const app    = express();
 app.set("trust proxy", 1);
@@ -1147,6 +1148,47 @@ app.post("/api/paystack/webhook", express.raw({ type: "application/json" }), asy
   } catch (err) { console.error("Webhook error:", err.message); }
 });
 
+// ── Resend delivery-status webhook ───────────────────────────────────────────
+// Configure this URL (https://<your-domain>/api/webhooks/resend) in the Resend
+// dashboard → Webhooks, subscribed to email.delivered / email.bounced /
+// email.complained, then set RESEND_WEBHOOK_SECRET in .env to the "Signing
+// Secret" it gives you. Until that's set up, email log rows just show
+// "sent" (handed off ok) or "failed" (Resend rejected it) — the true
+// delivered/bounced state only arrives via this webhook.
+function verifyResendWebhook(rawBody, headers) {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  const svixId = headers["svix-id"], svixTimestamp = headers["svix-timestamp"], svixSignature = headers["svix-signature"];
+  if (!secret || !svixId || !svixTimestamp || !svixSignature) return false;
+  try {
+    const secretBytes    = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+    const signedContent  = `${svixId}.${svixTimestamp}.${rawBody}`;
+    const expected        = crypto.createHmac("sha256", secretBytes).update(signedContent).digest("base64");
+    const candidates      = svixSignature.split(" ").map(s => s.split(",")[1]).filter(Boolean);
+    return candidates.some(sig => {
+      try { return crypto.timingSafeEqual(Buffer.from(sig, "base64"), Buffer.from(expected, "base64")); }
+      catch { return false; }
+    });
+  } catch { return false; }
+}
+
+app.post("/api/webhooks/resend", express.raw({ type: "application/json" }), async (req, res) => {
+  const rawBody = req.body.toString("utf8");
+  if (!verifyResendWebhook(rawBody, req.headers)) return res.status(400).json({ error: "Invalid signature" });
+  res.sendStatus(200);
+  try {
+    const event   = JSON.parse(rawBody);
+    const emailId = event?.data?.email_id;
+    const statusMap = {
+      "email.delivered": "delivered", "email.bounced": "bounced",
+      "email.complained": "complained", "email.delivery_delayed": "delayed",
+    };
+    const newStatus = statusMap[event.type];
+    if (!emailId || !newStatus) return;
+    await prisma.emailLog.updateMany({ where: { resendId: emailId }, data: { status: newStatus } });
+    console.log(`📬 Resend webhook: ${event.type} → ${emailId}`);
+  } catch (err) { console.error("Resend webhook error:", err.message); }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  ADMIN - EXPIRED SUBSCRIPTIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1528,7 +1570,7 @@ app.patch("/api/admin/groups/:id/review", requireSuperAdmin, async (req, res) =>
     const html    = decision === "approved"
       ? `<p>Hi ${group.organizer.name},<br/><br/>Your group has been approved and is now live on SplitSubs.<br/><br/>— SplitSubs Team</p>`
       : `<p>Hi ${group.organizer.name},<br/><br/>Your group was not approved.<br/><br/><b>Reason:</b> ${note || "Not specified"}<br/><br/>You may revise and resubmit.<br/><br/>— SplitSubs Team</p>`;
-    emailService.sendEmail({ to: group.organizer.email, subject, html }).catch(() => {});
+    emailService.sendEmail({ to: group.organizer.email, subject, html, type: "group_review" }).catch(() => {});
   }
   res.json(updated);
 });
@@ -1807,6 +1849,23 @@ app.get("/api/groups/:id/members", requireAuth, async (req, res) => {
 app.post("/api/admin/expiry-scheduler", requireSuperAdmin, async (req, res) => {
   try { await emailService.runExpiryScheduler(prisma); res.json({ message: "Expiry scheduler completed." }); }
   catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// System/automatic emails sent via Resend — feeds the Automation page's email log.
+app.get("/api/admin/email-logs", requireSuperAdmin, async (req, res) => {
+  const { type, status, search } = req.query;
+  const where = {};
+  if (type && type !== "all")     where.type = type;
+  if (status && status !== "all") where.status = status;
+  if (search && search.trim()) {
+    where.OR = [
+      { to:      { contains: search.trim(), mode: "insensitive" } },
+      { subject: { contains: search.trim(), mode: "insensitive" } },
+    ];
+  }
+  const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+  const logs = await prisma.emailLog.findMany({ where, orderBy: { createdAt: "desc" }, take: limit });
+  res.json(logs);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2609,7 +2668,7 @@ app.post("/api/admin/users/email", requireSuperAdmin, async (req, res) => {
       "<hr style='border:none;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0'/>" +
       "<p style='font-size:13px;color:#666688'>— SplitSubs Admin Team</p>" +
       "</div></div>";
-    await emailService.sendEmail({ to: user.email, subject, html });
+    await emailService.sendEmail({ to: user.email, subject, html, type: "admin_direct" });
     console.log("[ADMIN] Email sent to user:", user.email);
     res.json({ ok: true, message: "Email sent to " + user.name + "." });
   } catch (err) {

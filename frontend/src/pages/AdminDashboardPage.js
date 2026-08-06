@@ -1963,41 +1963,169 @@ function LogsView({ activity, loading, onRefresh }) {
 
 // ── Automation view — the one real scheduled job the platform has: the
 // expiry reminder scheduler. Wired to the existing admin endpoint. ──
+const EMAIL_TYPE_LABELS = {
+  signup_otp: "Signup OTP", password_reset_otp: "Password Reset OTP", welcome: "Welcome / Slot Confirmed",
+  credentials_updated: "Credentials Updated", expiry_warning: "Expiry Warning", expiry_today: "Expiry Today",
+  payment_reminder: "Payment Reminder", expired_renewal_reminder: "Expired Renewal Reminder",
+  group_message: "Coordinator Message", blog_notification: "Blog Notification", group_review: "Group Review Decision",
+  admin_direct: "Admin Direct Email", renewal_confirm: "Renewal Confirmed", group_approved: "Group Approved",
+  group_rejected: "Group Rejected", generic: "Other",
+};
+
+const EMAIL_STATUS_STYLE = {
+  sent:       { bg:"rgba(59,130,246,0.14)",  color:"#3b82f6",        label:"Sent" },
+  delivered:  { bg:"rgba(22,163,74,0.14)",   color:"var(--success)", label:"Delivered" },
+  failed:     { bg:"rgba(220,38,38,0.14)",   color:"var(--error)",   label:"Failed" },
+  bounced:    { bg:"rgba(220,38,38,0.14)",   color:"var(--error)",   label:"Bounced" },
+  complained: { bg:"rgba(217,119,6,0.14)",   color:"var(--warning)", label:"Complained" },
+  delayed:    { bg:"rgba(217,119,6,0.14)",   color:"var(--warning)", label:"Delayed" },
+  stubbed:    { bg:"rgba(148,163,184,0.16)", color:"var(--muted)",   label:"Stubbed" },
+};
+
 function AutomationView() {
   const [busy, setBusy]   = useState(false);
   const [msg, setMsg]     = useState(null);
+
+  const [logs, setLogs]         = useState([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [typeFilter, setTypeFilter]   = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch]     = useState("");
+  const [selected, setSelected] = useState(null);
+
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (typeFilter !== "all")   params.set("type", typeFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (search.trim())          params.set("search", search.trim());
+      const data = await api.getEmailLogs(`?${params.toString()}`);
+      setLogs(data || []);
+    } catch {} finally { setLogsLoading(false); }
+  }, [typeFilter, statusFilter, search]);
+
+  useEffect(() => { loadLogs(); }, [loadLogs]);
 
   async function run() {
     setBusy(true); setMsg(null);
     try {
       const r = await api.runExpiryScheduler();
       setMsg({ type:"ok", text: r.message || "Expiry scheduler ran successfully." });
+      loadLogs();
     } catch (err) { setMsg({ type:"err", text: err.message }); }
     finally { setBusy(false); }
   }
 
   return (
-    <div className="admin-panel">
-      <div className="admin-panel-head"><span className="admin-panel-title">Automations</span></div>
-      {msg && (
-        <div className={`msg-box ${msg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:14}} onClick={()=>setMsg(null)}>
-          {msg.text} <span style={{opacity:.4}}>✕</span>
-        </div>
-      )}
-      <div className="user-card" style={{ padding:"14px 0" }}>
-        <div className="user-card-left">
-          <div className="user-av" style={{background:"linear-gradient(135deg,var(--accent),var(--accent2))"}}>⏰</div>
-          <div>
-            <div className="user-card-name">Expiry Reminder Scheduler</div>
-            <div className="user-card-email">Scans for members whose subscription expired and sends renewal reminder emails.</div>
+    <div>
+      <div className="admin-panel" style={{ marginBottom:20 }}>
+        <div className="admin-panel-head"><span className="admin-panel-title">Automations</span></div>
+        {msg && (
+          <div className={`msg-box ${msg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:14}} onClick={()=>setMsg(null)}>
+            {msg.text} <span style={{opacity:.4}}>✕</span>
+          </div>
+        )}
+        <div className="user-card" style={{ padding:"14px 0" }}>
+          <div className="user-card-left">
+            <div className="user-av" style={{background:"linear-gradient(135deg,var(--accent),var(--accent2))"}}>⏰</div>
+            <div>
+              <div className="user-card-name">Expiry Reminder Scheduler</div>
+              <div className="user-card-email">Scans for members whose subscription expired and sends renewal reminder emails.</div>
+            </div>
+          </div>
+          <div className="user-card-right">
+            <button className="btn btn-sm btn-primary" disabled={busy} onClick={run}>
+              {busy ? <span className="spinner"/> : "▶ Run Now"}
+            </button>
           </div>
         </div>
-        <div className="user-card-right">
-          <button className="btn btn-sm btn-primary" disabled={busy} onClick={run}>
-            {busy ? <span className="spinner"/> : "▶ Run Now"}
-          </button>
-        </div>
       </div>
+
+      <div className="admin-panel">
+        <div className="admin-panel-head" style={{ flexWrap:"wrap", gap:10 }}>
+          <span className="admin-panel-title">📧 System Emails</span>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+            <input
+              type="search" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search recipient or subject…"
+              style={{ width:220, padding:"7px 10px", background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:"0.82rem" }}
+            />
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+              style={{ width:"auto", flexShrink:0, padding:"7px 10px", fontSize:"0.82rem" }}>
+              <option value="all">All types</option>
+              {Object.keys(EMAIL_TYPE_LABELS).map(k => <option key={k} value={k}>{EMAIL_TYPE_LABELS[k]}</option>)}
+            </select>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              style={{ width:"auto", flexShrink:0, padding:"7px 10px", fontSize:"0.82rem" }}>
+              <option value="all">All statuses</option>
+              {Object.keys(EMAIL_STATUS_STYLE).map(k => <option key={k} value={k}>{EMAIL_STATUS_STYLE[k].label}</option>)}
+            </select>
+            <button className="btn btn-sm btn-outline" onClick={loadLogs} disabled={logsLoading}>
+              {logsLoading ? <span className="spinner"/> : "↻"}
+            </button>
+          </div>
+        </div>
+
+        {logsLoading && logs.length === 0 ? (
+          <div style={{textAlign:"center",padding:50}}><span className="spinner"/></div>
+        ) : logs.length === 0 ? (
+          <div className="empty-state">
+            <div className="emoji">📭</div>
+            <h3>No emails logged yet</h3>
+            <p>System emails (OTPs, reminders, confirmations…) will show up here as they're sent.</p>
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column" }}>
+            {logs.map(log => {
+              const st = EMAIL_STATUS_STYLE[log.status] || EMAIL_STATUS_STYLE.sent;
+              return (
+                <div key={log.id} onClick={() => setSelected(log)}
+                  style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 6px", borderBottom:"1px solid var(--border)", cursor:"pointer" }}>
+                  <span className="tag" style={{ background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--muted)", flexShrink:0, fontSize:"0.7rem" }}>
+                    {EMAIL_TYPE_LABELS[log.type] || log.type}
+                  </span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:600, fontSize:"0.86rem", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{log.subject}</div>
+                    <div style={{ fontSize:"0.76rem", color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{log.to}</div>
+                  </div>
+                  <span style={{ fontSize:"0.72rem", color:"var(--muted)", flexShrink:0 }}>{timeAgo(log.createdAt)}</span>
+                  <span style={{ background:st.bg, color:st.color, borderRadius:99, padding:"3px 11px", fontSize:"0.72rem", fontWeight:700, flexShrink:0 }}>
+                    {st.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {selected && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}
+          onClick={() => setSelected(null)}>
+          <div className="card" style={{ maxWidth:640, width:"100%", maxHeight:"85vh", display:"flex", flexDirection:"column", padding:0 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontWeight:700, fontSize:"0.98rem" }}>{selected.subject}</div>
+                <div style={{ fontSize:"0.8rem", color:"var(--muted)", marginTop:3 }}>
+                  To {selected.to} · {EMAIL_TYPE_LABELS[selected.type] || selected.type} · {new Date(selected.createdAt).toLocaleString()}
+                </div>
+                {selected.error && (
+                  <div style={{ fontSize:"0.78rem", color:"var(--error)", marginTop:6 }}>⚠️ {selected.error}</div>
+                )}
+              </div>
+              <button className="btn btn-sm btn-outline" onClick={() => setSelected(null)}>✕</button>
+            </div>
+            <iframe
+              title="Email preview"
+              srcDoc={selected.body}
+              sandbox=""
+              style={{ flex:1, border:"none", width:"100%", minHeight:400, background:"#fff" }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

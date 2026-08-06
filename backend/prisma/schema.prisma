@@ -282,6 +282,26 @@ model NewsletterCampaign {
   @@map("newsletter_campaigns")
 }
 
+// ─── Email Log — every automatic/system email sent via Resend ─────────────
+model EmailLog {
+  id        String    @id @default(uuid())
+  type      String    // signup_otp | password_reset_otp | welcome | credentials_updated |
+                       // expiry_warning | expiry_today | payment_reminder | expired_renewal_reminder |
+                       // group_message | blog_notification | group_review | admin_direct | renewal_confirm |
+                       // group_approved | group_rejected | generic
+  to        String
+  subject   String
+  body      String
+  status    String    @default("sent")  // sent | delivered | failed | bounced | complained | stubbed
+  resendId  String?
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([resendId])
+  @@map("email_logs")
+}
+
 // ─── Footer Subscribers ───────────────────────────────────────────────────
 model FooterSubscriber {
   id           String   @id @default(uuid())

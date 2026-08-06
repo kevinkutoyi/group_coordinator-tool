@@ -6,11 +6,26 @@
  */
 
 const https = require("https");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
 
 const FROM    = `${process.env.EMAIL_FROM_NAME || "SplitSubs"} <${process.env.EMAIL_FROM_ADDRESS || "noreply@splitsubs.com"}>`;
 const ENABLED = process.env.EMAIL_ENABLED === "true";
 const API_KEY = process.env.RESEND_API_KEY || "";
 const APP_URL = process.env.FRONTEND_URL   || "http://localhost:3000";
+
+// ── Email log — every automatic email send is recorded here so the admin
+//    Automation page can show what went out, its status, and its content.
+async function logEmail({ type, to, subject, body, status, resendId, error }) {
+  try {
+    await prisma.emailLog.create({
+      data: { type: type || "generic", to, subject, body, status, resendId: resendId || null, error: error || null },
+    });
+  } catch (e) {
+    console.error("EmailLog write failed:", e.message);
+  }
+}
 
 // ── Resend API call ────────────────────────────────────────────────────────
 function resendSend(payload) {
@@ -30,18 +45,29 @@ function resendSend(payload) {
 }
 
 // ── Master send ────────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, html, replyTo }) {
-  const payload = { from: FROM, to: Array.isArray(to) ? to : [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) };
+async function sendEmail({ to, subject, html, replyTo, type }) {
+  const payload  = { from: FROM, to: Array.isArray(to) ? to : [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) };
+  const toString = Array.isArray(to) ? to.join(", ") : to;
+
   if (!ENABLED) {
     console.log(`\n📧 [EMAIL STUB]\n  To: ${payload.to}\n  Subject: ${subject}\n  (Set EMAIL_ENABLED=true + RESEND_API_KEY to deliver)\n`);
+    logEmail({ type, to: toString, subject, body: html, status: "stubbed" });
     return { id: "stub", stubbed: true };
   }
   try {
     const result = await resendSend(payload);
-    console.log(`✅ Email sent → ${payload.to} | ${result.id}`);
+    if (result && result.id && !result.error) {
+      console.log(`✅ Email sent → ${payload.to} | ${result.id}`);
+      logEmail({ type, to: toString, subject, body: html, status: "sent", resendId: result.id });
+    } else {
+      const errMsg = (result && result.message) || (result && result.error && result.error.message) || "Resend returned an unexpected response";
+      console.error(`❌ Email failed → ${payload.to} | ${errMsg}`);
+      logEmail({ type, to: toString, subject, body: html, status: "failed", error: errMsg });
+    }
     return result;
   } catch (err) {
     console.error(`❌ Email failed → ${payload.to} | ${err.message}`);
+    logEmail({ type, to: toString, subject, body: html, status: "failed", error: err.message });
     throw err;
   }
 }
@@ -109,7 +135,7 @@ async function sendWelcome({ to, memberName, groupName, serviceName, planName,
 <hr/>
 <p style="font-size:13px;color:#666688">You'll receive reminders 3 days and 2 days before your subscription expires.</p>
 `, `Your ${serviceName} slot is confirmed — expires ${expStr}`);
-  return sendEmail({ to, subject: `✅ Slot confirmed — ${serviceName} ${planName}`, html });
+  return sendEmail({ to, subject: `✅ Slot confirmed — ${serviceName} ${planName}`, html, type: "welcome" });
 }
 
 async function sendCredentialsUpdated({ to, memberName, groupName, serviceName }) {
@@ -122,7 +148,7 @@ async function sendCredentialsUpdated({ to, memberName, groupName, serviceName }
 <hr/>
 <p style="font-size:13px;color:#666688">Never share these credentials outside your group. If you suspect misuse, contact your coordinator.</p>
 `, `Credentials updated — ${serviceName}`);
-  return sendEmail({ to, subject: `🔑 Credentials updated — ${serviceName}`, html });
+  return sendEmail({ to, subject: `🔑 Credentials updated — ${serviceName}`, html, type: "credentials_updated" });
 }
 
 async function sendExpiryWarning({ to, memberName, groupName, serviceName,
@@ -145,7 +171,7 @@ async function sendExpiryWarning({ to, memberName, groupName, serviceName,
 <hr/>
 <p style="font-size:13px;color:#666688">If you do not renew, your slot will be released after the expiry date.</p>
 `, `${icon} ${serviceName} expires in ${daysLeft} day${daysLeft!==1?"s":""}`);
-  return sendEmail({ to, subject: `${icon} Renew now — ${serviceName} expires in ${daysLeft} day${daysLeft!==1?"s":""}`, html });
+  return sendEmail({ to, subject: `${icon} Renew now — ${serviceName} expires in ${daysLeft} day${daysLeft!==1?"s":""}`, html, type: "expiry_warning" });
 }
 
 async function sendExpiryToday({ to, memberName, groupName, serviceName, renewUrl, currency, memberPays }) {
@@ -162,7 +188,7 @@ async function sendExpiryToday({ to, memberName, groupName, serviceName, renewUr
 </table>
 <a href="${renewUrl||APP_URL}" class="btn">Renew Now →</a>
 `, `Your ${serviceName} slot expired today`);
-  return sendEmail({ to, subject: `🔴 Expired — ${serviceName} slot needs renewal`, html });
+  return sendEmail({ to, subject: `🔴 Expired — ${serviceName} slot needs renewal`, html, type: "expiry_today" });
 }
 
 async function sendGroupMessage({ to, memberName, groupName, serviceName,
@@ -179,7 +205,7 @@ async function sendGroupMessage({ to, memberName, groupName, serviceName,
 <p style="font-size:13px;color:#666688">Reply at <a href="mailto:${senderEmail}" style="color:#7c6aff">${senderEmail}</a></p>
 <a href="${APP_URL}" class="btn">View My Groups →</a>
 `, subject);
-  return sendEmail({ to, subject: `📣 [${groupName}] ${subject}`, html, replyTo: senderEmail });
+  return sendEmail({ to, subject: `📣 [${groupName}] ${subject}`, html, replyTo: senderEmail, type: "group_message" });
 }
 
 async function sendRenewalConfirm({ to, memberName, groupName, serviceName,
@@ -197,7 +223,7 @@ async function sendRenewalConfirm({ to, memberName, groupName, serviceName,
 </table>
 <a href="${APP_URL}" class="btn">View My Groups →</a>
 `, `${serviceName} renewed — next expiry ${expStr}`);
-  return sendEmail({ to, subject: `✅ Renewed — ${serviceName} active until ${expStr}`, html });
+  return sendEmail({ to, subject: `✅ Renewed — ${serviceName} active until ${expStr}`, html, type: "renewal_confirm" });
 }
 
 // ── Expiry scheduler: 3-day, 2-day, today ─────────────────────────────────
@@ -299,7 +325,7 @@ async function sendGroupApproved({ to, organizerName, groupName, serviceName }) 
 <p>Head to your Moderator Dashboard to manage your group, set credentials, and track earnings.</p>
 <a href="${APP_URL}" class="btn">Open Dashboard →</a>
 `, `Your ${serviceName} group is now live on SplitSubs`);
-  return sendEmail({ to, subject: `✅ Group approved — "${groupName}" is now live!`, html });
+  return sendEmail({ to, subject: `✅ Group approved — "${groupName}" is now live!`, html, type: "group_approved" });
 }
 
 // ── Template: Group rejected ──────────────────────────────────────────────
@@ -319,7 +345,7 @@ async function sendGroupRejected({ to, organizerName, groupName, serviceName, re
 <hr/>
 <p style="font-size:13px;color:#666688">If you believe this decision was made in error, reply to this email or contact support.</p>
 `, `Your ${serviceName} group listing was not approved`);
-  return sendEmail({ to, subject: `❌ Group not approved — "${groupName}"`, html });
+  return sendEmail({ to, subject: `❌ Group not approved — "${groupName}"`, html, type: "group_rejected" });
 }
 
 
@@ -339,7 +365,7 @@ async function sendPaymentReminder({ to, memberName, groupName, serviceName, mem
 <hr/>
 <p style="font-size:13px;color:#666688">Questions? Reply to this email — we're here to help.</p>
 `, `Complete your ${serviceName} signup`);
-  return sendEmail({ to, subject: `🔔 Reminder — Complete your ${serviceName} payment`, html });
+  return sendEmail({ to, subject: `🔔 Reminder — Complete your ${serviceName} payment`, html, type: "payment_reminder" });
 }
 
 
@@ -353,7 +379,7 @@ async function sendSignupOtp({ to, code, name }) {
 </div>
 <p>This code expires in <strong>10 minutes</strong>. If you didn&rsquo;t sign up, you can ignore this email.</p>
 `, `Your SplitSubs verification code: ${code}`);
-  return sendEmail({ to, subject: `🔐 Your SplitSubs verification code: ${code}`, html });
+  return sendEmail({ to, subject: `🔐 Your SplitSubs verification code: ${code}`, html, type: "signup_otp" });
 }
 
 async function sendPasswordResetOtp({ to, code, name }) {
@@ -366,7 +392,7 @@ async function sendPasswordResetOtp({ to, code, name }) {
 </div>
 <p>This code expires in <strong>15 minutes</strong>. If you didn&rsquo;t request a password reset, you can safely ignore this email — your account is secure.</p>
 `, `SplitSubs password reset code: ${code}`);
-  return sendEmail({ to, subject: `🔑 SplitSubs password reset code: ${code}`, html });
+  return sendEmail({ to, subject: `🔑 SplitSubs password reset code: ${code}`, html, type: "password_reset_otp" });
 }
 
 
@@ -386,7 +412,7 @@ ${heroImage ? `<a href="${url}"><img src="${heroImage}" alt="${title}" style="wi
 <hr/>
 <p style="font-size:13px;color:#666688">You're receiving this because you opted into SplitSubs updates. <a href="${APP_URL}/unsubscribe?email=${encodeURIComponent(to)}" style="color:#7c6aff">Unsubscribe</a> anytime.</p>
 `, `New on SplitSubs: ${title}`);
-  return sendEmail({ to, subject: `📝 ${title}`, html });
+  return sendEmail({ to, subject: `📝 ${title}`, html, type: "blog_notification" });
 }
 
 
@@ -411,7 +437,7 @@ async function sendExpiredRenewalReminder({ to, memberName, groupName, serviceNa
     "<p style='font-size:13px;color:#666688'>If you no longer wish to be part of this group, simply ignore this email.</p>",
     "Your " + serviceName + " expired " + daysExpired + " day" + (daysExpired !== 1 ? "s" : "") + " ago"
   );
-  return sendEmail({ to, subject: "Renew now - " + serviceName + " expired " + daysExpired + "d ago", html });
+  return sendEmail({ to, subject: "Renew now - " + serviceName + " expired " + daysExpired + "d ago", html, type: "expired_renewal_reminder" });
 }
 
 module.exports = {
