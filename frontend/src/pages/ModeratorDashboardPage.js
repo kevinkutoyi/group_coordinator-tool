@@ -59,8 +59,7 @@ export default function ModeratorDashboardPage({ navigate }) {
         <div className="mod-setup-banner">
           <span>⚠️</span>
           <div>
-            <strong>Register your PesaPal email to receive Sunday payouts.</strong>
-            <span> Add your payout email in Settings so the admin knows where to send your earnings.</span>
+            <strong>Provide the required account details to receive your payouts.</strong>
           </div>
           <button className="btn btn-primary btn-sm" onClick={() => navigate("mod-settings")}>
             Set Up Now →
