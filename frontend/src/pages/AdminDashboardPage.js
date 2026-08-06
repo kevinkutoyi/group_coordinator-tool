@@ -1414,23 +1414,39 @@ function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRan
       </div>
 
       <div className="admin-kpi-grid">
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>💵</div>
-          <div className="admin-kpi-label">Revenue</div>
-          <div className="admin-kpi-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.revenueKES)}</div>
-          <div className="admin-kpi-delta">${(k.revenueUSD || 0).toFixed(2)} · sales minus commissions</div>
-        </div>
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🏷️</div>
-          <div className="admin-kpi-label">Commissions</div>
-          <div className="admin-kpi-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.commissionsKES)}</div>
-          <div className="admin-kpi-delta">${(k.commissionsUSD || 0).toFixed(2)} · platform fees earned</div>
-        </div>
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>💰</div>
-          <div className="admin-kpi-label">Total Revenue</div>
-          <div className="admin-kpi-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.totalRevenueKES)}</div>
-          <div className="admin-kpi-delta">{fromLabel} – {toLabel}</div>
+        <div className="admin-kpi-card admin-kpi-combo">
+          <div className="admin-kpi-combo-row">
+            <div className="admin-kpi-combo-left">
+              <span className="admin-kpi-combo-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>💵</span>
+              <div>
+                <div className="admin-kpi-combo-label">Revenue</div>
+                <div className="admin-kpi-combo-sub">${(k.revenueUSD || 0).toFixed(2)} · sales minus commissions</div>
+              </div>
+            </div>
+            <div className="admin-kpi-combo-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.revenueKES)}</div>
+          </div>
+          <div className="admin-kpi-combo-divider" />
+          <div className="admin-kpi-combo-row">
+            <div className="admin-kpi-combo-left">
+              <span className="admin-kpi-combo-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🏷️</span>
+              <div>
+                <div className="admin-kpi-combo-label">Commissions</div>
+                <div className="admin-kpi-combo-sub">${(k.commissionsUSD || 0).toFixed(2)} · platform fees earned</div>
+              </div>
+            </div>
+            <div className="admin-kpi-combo-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.commissionsKES)}</div>
+          </div>
+          <div className="admin-kpi-combo-divider" />
+          <div className="admin-kpi-combo-row admin-kpi-combo-total">
+            <div className="admin-kpi-combo-left">
+              <span className="admin-kpi-combo-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>💰</span>
+              <div>
+                <div className="admin-kpi-combo-label">Total Revenue</div>
+                <div className="admin-kpi-combo-sub">{fromLabel} – {toLabel}</div>
+              </div>
+            </div>
+            <div className="admin-kpi-combo-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.totalRevenueKES)}</div>
+          </div>
         </div>
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>👥</div>
