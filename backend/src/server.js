@@ -1219,6 +1219,7 @@ app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
 
   const [
     revenuePayments,
+    commissionEarnings,
     activeMemberRows,
     newCustomers,
     newConfirmedPayments,
@@ -1232,6 +1233,7 @@ app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
     recentApprovals,
   ] = await Promise.all([
     prisma.payment.findMany({ where: { confirmedAt: { gte: from, lte: to } }, select: { amount: true } }),
+    prisma.platformEarning.findMany({ where: { earnedAt: { gte: from, lte: to } }, select: { fee: true } }),
     prisma.groupMember.findMany({
       where: { paymentStatus: "confirmed", role: { not: "organizer" }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       select: { userId: true },
@@ -1248,7 +1250,12 @@ app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
     prisma.user.findMany({ where: { approvedAt: { not: null } }, orderBy: { approvedAt: "desc" }, take: perSourceTake, select: { id: true, name: true, approvedAt: true } }),
   ]);
 
+  // Total Revenue = Revenue + Commissions. Commissions come from PlatformEarning
+  // (the same source the Platform Earnings page sums), and Revenue is what's left
+  // over for moderators/organizers once the platform's cut is taken out.
   const totalRevenueUSD  = revenuePayments.reduce((a, p) => a + (p.amount || 0), 0);
+  const commissionsUSD   = commissionEarnings.reduce((a, e) => a + (e.fee || 0), 0);
+  const revenueUSD       = totalRevenueUSD - commissionsUSD;
   const activeCustomers  = new Set(activeMemberRows.map(m => m.userId)).size;
 
   // "Your Products" — each group is one product row, ranked by how full it is.
@@ -1279,6 +1286,10 @@ app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
   res.json({
     range: { from, to },
     kpis: {
+      revenueUSD: +revenueUSD.toFixed(2),
+      revenueKES: Math.round(revenueUSD * 130),
+      commissionsUSD: +commissionsUSD.toFixed(2),
+      commissionsKES: Math.round(commissionsUSD * 130),
       totalRevenueUSD: +totalRevenueUSD.toFixed(2),
       totalRevenueKES: Math.round(totalRevenueUSD * 130),
       activeCustomers, newCustomers,

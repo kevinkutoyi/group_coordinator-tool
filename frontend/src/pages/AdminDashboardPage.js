@@ -1407,6 +1407,18 @@ function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRan
 
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>💵</div>
+          <div className="admin-kpi-label">Revenue</div>
+          <div className="admin-kpi-value">KSh {(k.revenueKES || 0).toLocaleString()}</div>
+          <div className="admin-kpi-delta">${k.revenueUSD || 0} · sales minus commissions</div>
+        </div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🏷️</div>
+          <div className="admin-kpi-label">Commissions</div>
+          <div className="admin-kpi-value">KSh {(k.commissionsKES || 0).toLocaleString()}</div>
+          <div className="admin-kpi-delta">${k.commissionsUSD || 0} · platform fees earned</div>
+        </div>
+        <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>💰</div>
           <div className="admin-kpi-label">Total Revenue</div>
           <div className="admin-kpi-value">KSh {(k.totalRevenueKES || 0).toLocaleString()}</div>
