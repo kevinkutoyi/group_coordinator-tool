@@ -3,6 +3,14 @@ import { api, session } from "../api";
 import "./AdminDashboardPage.css";
 import "./EarningsPage.css";
 
+// Money — always 2 decimal places, never rounded to a whole number.
+function kes(usdAmount) {
+  return ((usdAmount || 0) * 130).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function kesRaw(kesAmount) {
+  return (kesAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 const SIDEBAR_SECTIONS = [
   { items: [
       { key: "dashboard", icon: "🏠", label: "Dashboard" },
@@ -1262,7 +1270,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                     { label:"Joined", value: new Date(profileData.joinedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) },
                     { label:"Last Active", value: profileData.lastSeen ? new Date(profileData.lastSeen).toLocaleString("en-GB", { day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "Never" },
                     { label:"Online Now", value: profileData.online ? "🟢 Yes" : "⚫ No" },
-                    { label:"Total Spent", value: "KES " + Math.round((profileData.totalSpent || 0) * 130).toLocaleString() },
+                    { label:"Total Spent", value: "KES " + kes(profileData.totalSpent) },
                     { label:"Subscriptions", value: profileData.subscriptions.length },
                   ].map(item => (
                     <div key={item.label} style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 14px" }}>
@@ -1285,7 +1293,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                         <span style={{ fontSize:"1.4rem" }}>{s.serviceIcon}</span>
                         <div style={{ flex:1 }}>
                           <div style={{ fontWeight:600, fontSize:"0.88rem" }}>{s.groupName}</div>
-                          <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>{s.billingCycle} · {"KES " + Math.round(s.memberPays * 130) + "/mo"}</div>
+                          <div style={{ fontSize:"0.72rem", color:"var(--muted)" }}>{s.billingCycle} · {"KES " + kes(s.memberPays) + "/mo"}</div>
                           {s.expiresAt && (
                             <div style={{ fontSize:"0.72rem", marginTop:3 }}>
                               <span style={{ color: days !== null && days <= 0 ? "var(--error)" : days !== null && days <= 7 ? "var(--warning)" : "var(--muted)" }}>
@@ -1314,7 +1322,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                       <div key={p.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid var(--border)", fontSize:"0.82rem" }}>
                         <span style={{ color:"var(--muted)" }}>{p.confirmedAt ? new Date(p.confirmedAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}</span>
                         <span>{p.months} month{p.months !== 1 ? "s" : ""}</span>
-                        <span style={{ color:"var(--success)", fontWeight:600 }}>{"KES " + Math.round((p.amount || 0) * 130) + " · $" + (p.amount || 0).toFixed(2)}</span>
+                        <span style={{ color:"var(--success)", fontWeight:600 }}>{"KES " + kes(p.amount) + " · $" + (p.amount || 0).toFixed(2)}</span>
                       </div>
                     ))}
                   </>
@@ -1409,19 +1417,19 @@ function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRan
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>💵</div>
           <div className="admin-kpi-label">Revenue</div>
-          <div className="admin-kpi-value">KSh {(k.revenueKES || 0).toLocaleString()}</div>
-          <div className="admin-kpi-delta">${k.revenueUSD || 0} · sales minus commissions</div>
+          <div className="admin-kpi-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.revenueKES)}</div>
+          <div className="admin-kpi-delta">${(k.revenueUSD || 0).toFixed(2)} · sales minus commissions</div>
         </div>
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🏷️</div>
           <div className="admin-kpi-label">Commissions</div>
-          <div className="admin-kpi-value">KSh {(k.commissionsKES || 0).toLocaleString()}</div>
-          <div className="admin-kpi-delta">${k.commissionsUSD || 0} · platform fees earned</div>
+          <div className="admin-kpi-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.commissionsKES)}</div>
+          <div className="admin-kpi-delta">${(k.commissionsUSD || 0).toFixed(2)} · platform fees earned</div>
         </div>
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>💰</div>
           <div className="admin-kpi-label">Total Revenue</div>
-          <div className="admin-kpi-value">KSh {(k.totalRevenueKES || 0).toLocaleString()}</div>
+          <div className="admin-kpi-value" style={{whiteSpace:"nowrap"}}>KSh {kesRaw(k.totalRevenueKES)}</div>
           <div className="admin-kpi-delta">{fromLabel} – {toLabel}</div>
         </div>
         <div className="admin-kpi-card">
@@ -1625,8 +1633,8 @@ function EarningsView() {
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(23,166,115,0.14)", color:"var(--accent3)" }}>💰</div>
           <div className="admin-kpi-label">Total Earned</div>
-          <div className="admin-kpi-value" style={{ whiteSpace:"nowrap" }}>KES {Math.round(data.totalEarned * 130).toLocaleString()}</div>
-          <div className="admin-kpi-delta">${data.totalEarned}</div>
+          <div className="admin-kpi-value" style={{ whiteSpace:"nowrap" }}>KES {kes(data.totalEarned)}</div>
+          <div className="admin-kpi-delta">${(data.totalEarned || 0).toFixed(2)}</div>
         </div>
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>✅</div>
@@ -1660,7 +1668,7 @@ function EarningsView() {
         <div className="bar-chart">
           {data.monthlyEarnings.map(m => (
             <div key={m.label} className="bar-col">
-              <div className="bar-amount">{m.total > 0 ? `KES ${Math.round(m.total * 130)} · $${m.total}` : ""}</div>
+              <div className="bar-amount">{m.total > 0 ? `KES ${kes(m.total)} · $${m.total.toFixed(2)}` : ""}</div>
               <div className="bar-fill" style={{ height:`${Math.max((m.total / maxMonthly) * 120, m.total > 0 ? 4 : 0)}px` }} />
               <div className="bar-label">{m.label}</div>
             </div>
@@ -1679,7 +1687,7 @@ function EarningsView() {
                 <div style={{ fontWeight:600, fontSize:"0.9rem" }}>{g.serviceName}</div>
                 <div style={{ fontSize:"0.75rem", color:"var(--muted)" }}>{g.planName}</div>
               </div>
-              <div className="earn-amount">KES {Math.round(g.fees * 130)} · ${g.fees}</div>
+              <div className="earn-amount">KES {kes(g.fees)} · ${g.fees.toFixed(2)}</div>
             </div>
           ))}
         </div>
@@ -1696,7 +1704,7 @@ function EarningsView() {
                   {e.earnedAt ? new Date(e.earnedAt).toLocaleString() : "—"} · {e.currency}
                 </div>
               </div>
-              <div className="earn-amount earn-green">+KES {Math.round(e.fee * 130)} · +${e.fee}</div>
+              <div className="earn-amount earn-green">+KES {kes(e.fee)} · +${e.fee.toFixed(2)}</div>
             </div>
           ))}
         </div>

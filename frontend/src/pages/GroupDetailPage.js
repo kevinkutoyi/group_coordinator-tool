@@ -20,6 +20,11 @@ function durationPrice(pricePerSlot, months) {
   return +(gross * (1 - d.discount / 100)).toFixed(2);
 }
 
+// Money — always 2 decimal places, never rounded to a whole number.
+function kes(usdAmount) {
+  return ((usdAmount || 0) * 130).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function GroupDetailPage({ id, navigate, user }) {
   const [group, setGroup]         = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -571,14 +576,14 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 )}
                 {m.userId === currentUserId && ["pending", "confirmed", "expired"].includes(m.paymentStatus) ? (
                   <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                    KES {Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
+                    KES {kes(durationPrice(group.pricePerSlot, selectedMonths))} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                   </span>
                 ) : (
                   <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
                 )}
                 {m.userId === currentUserId && m.paymentStatus === "pending" && (
                   <button className="btn btn-sm pay-btn pay-pulse" onClick={() => handleRenewAndPay(m)} disabled={payingId === m.id}>
-                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)}`}
+                    {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${kes(durationPrice(group.pricePerSlot, selectedMonths))}`}
                   </button>
                 )}
                 {m.userId === currentUserId && (m.paymentStatus === "expired" || m.paymentStatus === "confirmed") && (
@@ -620,7 +625,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   )}
                   {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) ? (
                     <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                      KES {Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
+                      KES {kes(durationPrice(group.pricePerSlot, selectedMonths))} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                     </span>
                   ) : (
                     <span className={`tag tag-${myMember.paymentStatus}`}>{myMember.paymentStatus}</span>
@@ -654,7 +659,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                       {DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
                     </select>
                     <span className="tag" style={{ background:"rgba(124,106,255,0.12)", color:"var(--accent)", border:"1px solid rgba(124,106,255,0.25)", fontWeight:700 }}>
-                      KES {Math.round(durationPrice(group.pricePerSlot, selectedMonths) * 130)} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
+                      KES {kes(durationPrice(group.pricePerSlot, selectedMonths))} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                     </span>
                   </div>
                   <button className="btn pesapal-btn pay-pulse" disabled={busy} onClick={handleJoinAndPay}>
@@ -730,7 +735,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   <div key={p.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>{p.memberName}</span>
-                      <span style={{ color: "var(--success)", fontWeight: 600 }}>KES {Math.round(p.amount * 130)} · ${p.amount} · {p.months}mo</span>
+                      <span style={{ color: "var(--success)", fontWeight: 600 }}>KES {kes(p.amount)} · ${(p.amount || 0).toFixed(2)} · {p.months}mo</span>
                     </div>
                     {p.platformFee && (
                       <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
