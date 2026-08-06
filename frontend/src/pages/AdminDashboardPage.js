@@ -1052,7 +1052,7 @@ export default function AdminDashboardPage({ navigate }) {
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
                   <span style={{color:"var(--muted)"}}>Total owed this cycle</span>
                   <strong style={{color:"var(--accent)"}}>
-                    KES {payoutQueue.reduce((a,m) => a + m.amountOwed, 0).toFixed(2)}
+                    KES {kes(payoutQueue.reduce((a,m) => a + m.amountOwedUSD, 0))} · ${payoutQueue.reduce((a,m) => a + m.amountOwedUSD, 0).toFixed(2)}
                   </strong>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
@@ -1151,9 +1151,10 @@ export default function AdminDashboardPage({ navigate }) {
                           {mod.paymentCount}
                         </td>
                         <td style={{padding:"12px 12px",textAlign:"right"}}>
-                          <strong style={{color:"var(--accent)",fontSize:"1rem"}}>
-                            {mod.currency} {mod.amountOwed.toFixed(2)}
+                          <strong style={{color:"var(--accent)",fontSize:"1rem",whiteSpace:"nowrap"}}>
+                            KES {kes(mod.amountOwedUSD)}
                           </strong>
+                          <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>${mod.amountOwedUSD.toFixed(2)}</div>
                         </td>
                         <td style={{padding:"12px 12px",textAlign:"right"}}>
                           <button
@@ -1161,14 +1162,14 @@ export default function AdminDashboardPage({ navigate }) {
                             disabled={payoutBusy[mod.moderatorId]}
                             onClick={async () => {
                               if (!window.confirm(
-                                `Confirm payout of ${mod.currency} ${mod.amountOwed.toFixed(2)} to ${mod.moderatorName} at ${mod.pesapalEmail || mod.moderatorEmail}?
+                                `Confirm payout of KES ${kes(mod.amountOwedUSD)} ($${mod.amountOwedUSD.toFixed(2)}) to ${mod.moderatorName} at ${mod.pesapalEmail || mod.moderatorEmail}?
 
 Make sure you have already sent the funds via PesaPal before clicking OK.`
                               )) return;
                               setPayoutBusy(b => ({...b,[mod.moderatorId]:true}));
                               try {
                                 await api.markPaid({ moderatorId: mod.moderatorId });
-                                setPayoutMsg({type:"ok", text:`✅ Payout of ${mod.currency} ${mod.amountOwed.toFixed(2)} to ${mod.moderatorName} recorded.`});
+                                setPayoutMsg({type:"ok", text:`✅ Payout of KES ${kes(mod.amountOwedUSD)} ($${mod.amountOwedUSD.toFixed(2)}) to ${mod.moderatorName} recorded.`});
                                 loadAll();
                               } catch(err) { setPayoutMsg({type:"err", text:err.message}); }
                               finally { setPayoutBusy(b => ({...b,[mod.moderatorId]:false})); }
@@ -1201,7 +1202,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                   {p.notes && <div style={{fontSize:"0.72rem",color:"var(--muted)",fontStyle:"italic"}}>{p.notes}</div>}
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontWeight:700,color:"var(--success)",fontSize:"0.95rem"}}>{p.currency} {p.amountPaid?.toFixed(2)}</div>
+                  <div style={{fontWeight:700,color:"var(--success)",fontSize:"0.95rem",whiteSpace:"nowrap"}}>KES {kes(p.amountPaid)} · ${(p.amountPaid || 0).toFixed(2)}</div>
                   <span style={{
                     padding:"2px 8px",borderRadius:99,fontSize:"0.68rem",fontWeight:600,
                     background:"rgba(74,222,128,0.1)",color:"var(--success)",border:"1px solid rgba(74,222,128,0.2)"

@@ -1438,15 +1438,22 @@ app.get("/api/admin/payout-queue", requireSuperAdmin, async (req, res) => {
       byMod[p.moderatorId] = {
         moderatorId: p.moderatorId, moderatorName: modUser?.name || "Unknown",
         moderatorEmail: modUser?.email || "", pesapalEmail: modSettings?.pesapalEmail || modUser?.email || "",
-        currency: p.currency || "KES", amountOwed: 0, paymentCount: 0, payments: [],
+        amountOwedUSD: 0, paymentCount: 0, payments: [],
       };
     }
-    byMod[p.moderatorId].amountOwed   = +(byMod[p.moderatorId].amountOwed + p.moderatorOwed).toFixed(2);
+    // Payment.amount/moderatorOwed are always stored in USD — the per-row `currency`
+    // tag is unreliable (some rows say "KES" for the same USD-scale values, a legacy
+    // labeling bug), so it's ignored here rather than trusted for arithmetic.
+    byMod[p.moderatorId].amountOwedUSD = +(byMod[p.moderatorId].amountOwedUSD + p.moderatorOwed).toFixed(2);
     byMod[p.moderatorId].paymentCount += 1;
-    byMod[p.moderatorId].payments.push({ id: p.id, memberName: p.memberName, amount: p.amount, moderatorOwed: p.moderatorOwed, platformFee: p.platformFee, confirmedAt: p.confirmedAt, currency: p.currency });
+    byMod[p.moderatorId].payments.push({ id: p.id, memberName: p.memberName, amount: p.amount, moderatorOwed: p.moderatorOwed, platformFee: p.platformFee, confirmedAt: p.confirmedAt });
   }
+  const queue = Object.values(byMod)
+    .map(m => ({ ...m, amountOwedKES: +(m.amountOwedUSD * 130).toFixed(2) }))
+    .sort((a, b) => b.amountOwedUSD - a.amountOwedUSD);
+  const totalOwedUSD = +queue.reduce((a, m) => a + m.amountOwedUSD, 0).toFixed(2);
   const payoutHistory = await prisma.moderatorPayout.findMany({ orderBy: { paidAt: "desc" }, take: 50 });
-  res.json({ queue: Object.values(byMod).sort((a, b) => b.amountOwed - a.amountOwed), totalOwed: +Object.values(byMod).reduce((a, m) => a + m.amountOwed, 0).toFixed(2), payoutHistory });
+  res.json({ queue, totalOwedUSD, totalOwedKES: +(totalOwedUSD * 130).toFixed(2), payoutHistory });
 });
 
 app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, async (req, res) => {
@@ -1456,7 +1463,8 @@ app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, async (req, res) => 
   const pending = await prisma.payment.findMany({ where: { moderatorId, payoutStatus: "pending" } });
   if (!pending.length) return res.status(400).json({ error: "No pending payments for this moderator" });
 
-  const totalPaid = pending.reduce((a, p) => a + p.moderatorOwed, 0);
+  // Payment.moderatorOwed is always USD — see the note in /api/admin/payout-queue.
+  const totalPaidUSD = +pending.reduce((a, p) => a + p.moderatorOwed, 0).toFixed(2);
   const [modUser, modSettings] = await Promise.all([
     prisma.user.findUnique({ where: { id: moderatorId } }),
     prisma.moderatorSettings.findUnique({ where: { userId: moderatorId } }),
@@ -1469,7 +1477,7 @@ app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, async (req, res) => 
     data: {
       moderatorId, moderatorName: modUser?.name || "Unknown",
       moderatorEmail: modUser?.email || "", pesapalEmail: modSettings?.pesapalEmail || modUser?.email || "",
-      amountPaid: +totalPaid.toFixed(2), currency: pending[0]?.currency || "KES",
+      amountPaid: totalPaidUSD, currency: "USD",
       paymentIds: pending.map(p => p.id), paymentCount: pending.length,
       notes, paidAt: now, weekEnding: now,
     },
