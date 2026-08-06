@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
+import { kes, useKesRate } from "../currency";
 import "./ModeratorDashboardPage.css";
 
 const STATUS_COLORS = { open:"var(--success)", full:"var(--warning)", closed:"var(--muted)", pending_review:"var(--accent)" };
@@ -7,6 +8,7 @@ const REVIEW_LABELS = { approved:"✅ Live", pending:"⏳ Under Review", rejecte
 const REVIEW_COLORS = { approved:"var(--success)", pending:"var(--warning)", rejected:"var(--error)" };
 
 export default function ModeratorDashboardPage({ navigate }) {
+  useKesRate(); // loads the platform's live USD→KES rate once, re-renders when it arrives
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState("overview");
@@ -80,25 +82,25 @@ export default function ModeratorDashboardPage({ navigate }) {
         </div>
         <div className="mod-kpi-card mod-kpi-earn">
           <div className="mod-kpi-icon">💰</div>
-          <div className="mod-kpi-val" style={{ color:"var(--accent3)" }}>
-            KES {(summary.totalOwed ?? 0).toFixed(2)}
+          <div className="mod-kpi-val" style={{ color:"var(--accent3)", whiteSpace:"nowrap" }}>
+            KES {kes(summary.totalOwed)}
           </div>
-          <div className="mod-kpi-label">Total Owed to You</div>
+          <div className="mod-kpi-label">Total Owed to You · ${(summary.totalOwed ?? 0).toFixed(2)}</div>
         </div>
         <div className="mod-kpi-card">
           <div className="mod-kpi-icon">✅</div>
-          <div className="mod-kpi-val" style={{ color:"var(--success)" }}>
-            KES {(summary.totalPaid ?? 0).toFixed(2)}
+          <div className="mod-kpi-val" style={{ color:"var(--success)", whiteSpace:"nowrap" }}>
+            KES {kes(summary.totalPaid)}
           </div>
-          <div className="mod-kpi-label">Already Paid Out</div>
+          <div className="mod-kpi-label">Already Paid Out · ${(summary.totalPaid ?? 0).toFixed(2)}</div>
         </div>
         {summary.totalPending > 0 && (
           <div className="mod-kpi-card mod-kpi-warn">
             <div className="mod-kpi-icon">🕐</div>
-            <div className="mod-kpi-val" style={{ color:"var(--warning)" }}>
-              KES {(summary.totalPending ?? 0).toFixed(2)}
+            <div className="mod-kpi-val" style={{ color:"var(--warning)", whiteSpace:"nowrap" }}>
+              KES {kes(summary.totalPending)}
             </div>
-            <div className="mod-kpi-label">Pending Next Payout</div>
+            <div className="mod-kpi-label">Pending Next Payout · ${(summary.totalPending ?? 0).toFixed(2)}</div>
           </div>
         )}
         {summary.pendingReview > 0 && (
@@ -111,10 +113,10 @@ export default function ModeratorDashboardPage({ navigate }) {
         {summary.totalProfit != null && (
           <div className="mod-kpi-card">
             <div className="mod-kpi-icon">📈</div>
-            <div className="mod-kpi-val" style={{ color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)" }}>
-              KES {summary.totalProfit.toFixed(2)}
+            <div className="mod-kpi-val" style={{ color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)", whiteSpace:"nowrap" }}>
+              {summary.totalProfit < 0 ? "-" : ""}KES {kes(Math.abs(summary.totalProfit))}
             </div>
-            <div className="mod-kpi-label">Est. Monthly Profit</div>
+            <div className="mod-kpi-label">Est. Monthly Profit · ${summary.totalProfit.toFixed(2)}</div>
           </div>
         )}
       </div>
@@ -125,25 +127,25 @@ export default function ModeratorDashboardPage({ navigate }) {
           <h2 className="section-h2" style={{ marginBottom:16 }}>💰 Earnings Breakdown</h2>
           <div className="mod-earn-row">
             <span>Gross collected from members</span>
-            <span>KES {(summary.totalCollected ?? 0).toFixed(2)}</span>
+            <span>KES {kes(summary.totalCollected)} · ${(summary.totalCollected ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row mod-earn-split">
             <span>Platform fee ({feePercent}% — kept by SplitSubs)</span>
             <span style={{ color:"var(--muted)" }}>
-              − KES {((summary.totalCollected ?? 0) - (summary.totalOwed ?? 0)).toFixed(2)}
+              − KES {kes((summary.totalCollected ?? 0) - (summary.totalOwed ?? 0))} · ${((summary.totalCollected ?? 0) - (summary.totalOwed ?? 0)).toFixed(2)}
             </span>
           </div>
           <div className="mod-earn-row">
             <span>Your total owed ({modKeeps}% of gross)</span>
-            <span style={{ color:"var(--accent3)" }}>KES {(summary.totalOwed ?? 0).toFixed(2)}</span>
+            <span style={{ color:"var(--accent3)" }}>KES {kes(summary.totalOwed)} · ${(summary.totalOwed ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row">
             <span>Already paid to you</span>
-            <span style={{ color:"var(--success)" }}>KES {(summary.totalPaid ?? 0).toFixed(2)}</span>
+            <span style={{ color:"var(--success)" }}>KES {kes(summary.totalPaid)} · ${(summary.totalPaid ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row mod-earn-total">
             <span>Pending next Sunday payout</span>
-            <span style={{ color:"var(--warning)" }}>KES {(summary.totalPending ?? 0).toFixed(2)}</span>
+            <span style={{ color:"var(--warning)" }}>KES {kes(summary.totalPending)} · ${(summary.totalPending ?? 0).toFixed(2)}</span>
           </div>
           <p style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:12 }}>
             All payments land in the platform PesaPal account. Every Sunday the super admin pays out your {modKeeps}% share to your registered PesaPal email.
@@ -161,7 +163,7 @@ export default function ModeratorDashboardPage({ navigate }) {
               padding:"10px 0", borderBottom:"1px solid var(--border)", fontSize:"0.82rem",
             }}>
               <div>
-                <div style={{ fontWeight:600 }}>KES {p.amountPaid?.toFixed(2)}</div>
+                <div style={{ fontWeight:600 }}>KES {kes(p.amountPaid)} · ${(p.amountPaid || 0).toFixed(2)}</div>
                 <div style={{ color:"var(--muted)", fontSize:"0.72rem" }}>
                   {new Date(p.paidAt).toLocaleDateString("en-KE", { weekday:"short", day:"numeric", month:"short", year:"numeric" })}
                   {p.notes && ` · ${p.notes}`}
@@ -228,16 +230,16 @@ export default function ModeratorDashboardPage({ navigate }) {
                 <div className="mgc-right">
                   {g.reviewStatus === "approved" && g.modOwed > 0 && (
                     <div className="mgc-earnings">
-                      <div className="mgc-earn-val">KES {g.modOwed.toFixed(2)}</div>
-                      <div className="mgc-earn-sub">total owed</div>
+                      <div className="mgc-earn-val">KES {kes(g.modOwed)}</div>
+                      <div className="mgc-earn-sub">total owed · ${g.modOwed.toFixed(2)}</div>
                     </div>
                   )}
                   {g.reviewStatus === "approved" && g.subscriptionCost > 0 && (
                     <div className="mgc-earnings">
                       <div className="mgc-earn-val" style={{ color: g.profit >= 0 ? "var(--success)" : "var(--error)" }}>
-                        {g.profit >= 0 ? "+" : ""}{g.profit.toFixed(2)}
+                        {g.profit >= 0 ? "+" : "-"}KES {kes(Math.abs(g.profit))}
                       </div>
-                      <div className="mgc-earn-sub">est. profit/mo</div>
+                      <div className="mgc-earn-sub">est. profit/mo · ${g.profit.toFixed(2)}</div>
                     </div>
                   )}
                   <div style={{ display:"flex", gap:8 }}>

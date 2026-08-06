@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { api, session } from "../api";
+import { kes, useKesRate } from "../currency";
 import "./ModeratorSettingsPage.css";
 
 export default function ModeratorSettingsPage({ navigate }) {
+  useKesRate(); // loads the platform's live USD→KES rate once, re-renders when it arrives
   const [settings, setSettings] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -150,26 +152,26 @@ export default function ModeratorSettingsPage({ navigate }) {
               <div className="mss-split-preview" style={{ marginBottom: 0 }}>
                 <div className="mss-split-row">
                   <span>Total collected from members</span>
-                  <span>KES {sum.totalCollected?.toFixed(2) ?? "0.00"}</span>
+                  <span>KES {kes(sum.totalCollected)} · ${(sum.totalCollected ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="mss-split-row">
                   <span>Platform fees deducted</span>
                   <span style={{ color: "var(--error)" }}>
-                    − KES {(sum.totalCollected - sum.totalOwed)?.toFixed(2) ?? "0.00"}
+                    − KES {kes((sum.totalCollected ?? 0) - (sum.totalOwed ?? 0))} · ${((sum.totalCollected ?? 0) - (sum.totalOwed ?? 0)).toFixed(2)}
                   </span>
                 </div>
                 <div className="mss-split-row">
                   <span>Total owed to you</span>
-                  <span>KES {sum.totalOwed?.toFixed(2) ?? "0.00"}</span>
+                  <span>KES {kes(sum.totalOwed)} · ${(sum.totalOwed ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="mss-split-row">
                   <span>Already paid out</span>
-                  <span style={{ color: "var(--success)" }}>KES {sum.totalPaid?.toFixed(2) ?? "0.00"}</span>
+                  <span style={{ color: "var(--success)" }}>KES {kes(sum.totalPaid)} · ${(sum.totalPaid ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="mss-split-row mss-split-total">
                   <span>Pending next payout</span>
                   <span style={{ color: "var(--accent)" }}>
-                    KES {sum.totalPending?.toFixed(2) ?? "0.00"}
+                    KES {kes(sum.totalPending)} · ${(sum.totalPending ?? 0).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -187,7 +189,7 @@ export default function ModeratorSettingsPage({ navigate }) {
                       fontSize: "0.8rem",
                     }}>
                       <div>
-                        <div style={{ fontWeight: 600 }}>{p.currency} {p.amountPaid?.toFixed(2)}</div>
+                        <div style={{ fontWeight: 600 }}>KES {kes(p.amountPaid)} · ${(p.amountPaid || 0).toFixed(2)}</div>
                         <div style={{ color: "var(--muted)", fontSize: "0.72rem" }}>
                           {new Date(p.paidAt).toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                         </div>
