@@ -207,7 +207,10 @@ export default function MyGroupsPage({ navigate }) {
                   const filled        = payingMembers.filter(m => m.paymentStatus === "confirmed").length;
                   const pending       = payingMembers.filter(m => m.paymentStatus === "pending").length;
                   const expiredCount  = payingMembers.filter(m => m.paymentStatus === "expired").length;
-                  const monthlyRevenue = (g.pricePerSlot * filled * (1 - (g.feePercent || 8) / 100)).toFixed(2);
+                  // g.monthlyRevenue is computed server-side using the live platform fee
+                  // (see sanitizeGroupFinancials in server.js) — g.feePercent itself is a
+                  // stale snapshot frozen at group-creation time, so it's not used here.
+                  const monthlyRevenue = (g.monthlyRevenue ?? (g.pricePerSlot * filled)).toFixed(2);
 
                   return (
                     <div key={g.id} className="card" style={{ cursor: "pointer", padding: 20 }} onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>

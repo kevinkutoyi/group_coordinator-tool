@@ -69,7 +69,10 @@ export default function ModeratorSettingsPage({ navigate }) {
   if (loading) return <div style={{ textAlign: "center", padding: 80 }}><span className="spinner" /></div>;
 
   const sum = dashboard?.summary || {};
-  const feePercent = settings?.feePercent ?? sum.feePercent ?? 8;
+  // Always use the live platform fee from /moderator/dashboard (getPlatformFeePercent()),
+  // never settings.feePercent — that's a snapshot frozen on the moderator's row at their
+  // last Settings save, which drifts from the real rate whenever the admin changes it.
+  const feePercent = sum.feePercent ?? 8;
   const modKeeps   = +(100 - feePercent).toFixed(1);
 
   return (
