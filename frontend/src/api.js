@@ -119,6 +119,7 @@ export const api = {
   getModeratorDashboard: ()     => req("/moderator/dashboard"),
   getModeratorSettings:  ()     => req("/moderator/settings"),
   saveModeratorSettings: (body) => req("/moderator/settings", { method: "PUT", body }),
+  getPaystackBanks:      (type) => req(`/paystack/banks${type ? `?type=${type}` : ""}`),
 
   // Admin — group review
   getPendingGroups:  ()          => req("/admin/groups/pending"),
@@ -136,6 +137,7 @@ export const api = {
   updateKesRate:     (kesPerUsd)  => req("/admin/settings/rate", { method: "PUT", body: { kesPerUsd } }),
   getPayoutQueue:    ()           => req("/admin/payout-queue"),
   markPaid:          (body)       => req("/admin/payouts/mark-paid", { method: "POST", body }),
+  finalizePayoutOtp: (body)       => req("/admin/payouts/finalize-otp", { method: "POST", body }),
   getPayoutHistory:  ()           => req("/admin/payouts/history"),
 
   // Credential Vault

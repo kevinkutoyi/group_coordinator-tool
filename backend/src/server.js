@@ -898,6 +898,17 @@ app.get("/api/paystack/config", (req, res) => {
   res.json({ publicKey: PAYSTACK_PUBLIC_KEY });
 });
 
+// Bank/telco list for the moderator payout-details form — type=mobile_money
+// for Kenyan M-Pesa/telcos, omitted for the full KES bank list.
+app.get("/api/paystack/banks", requireAuth, async (req, res) => {
+  try {
+    const banks = await paystack.listBanks({ currency: "KES", type: req.query.type || undefined });
+    res.json(banks);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
   const { groupId, memberId } = req.body;
   if (!groupId || !memberId) return res.status(400).json({ error: "groupId and memberId required" });
@@ -917,9 +928,10 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
   const callbackUrl = (process.env.FRONTEND_URL || "http://localhost:3000") + "/payment-callback?reference=" + reference + "&groupId=" + groupId + "&memberId=" + memberId;
 
   try {
+    const kesRate = await getPlatformKesRate();
     const { authorizationUrl } = await paystack.initializeTransaction({
       email: user.email, amount: member.memberPays,
-      reference, callbackUrl,
+      reference, callbackUrl, kesRate,
       metadata: { groupId, memberId, groupName: group.serviceName + " " + group.planName, memberName: member.name, months: member.months },
     });
 
@@ -947,7 +959,7 @@ async function confirmOrder(reference) {
   const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
   if (!order || order.status === "COMPLETED") return order;
 
-  const txData = await paystack.verifyTransaction(reference);
+  const txData = await paystack.verifyTransaction(reference, await getPlatformKesRate());
   const code   = txData.status;
 
   await prisma.paystackOrder.update({ where: { id: reference }, data: { paystackStatus: code } });
@@ -1155,13 +1167,40 @@ app.post("/api/paystack/webhook", express.raw({ type: "application/json" }), asy
   res.sendStatus(200);
   try {
     const event = JSON.parse(req.body.toString());
-    if (event.event !== "charge.success") return;
-    const reference = event.data && event.data.reference;
-    if (!reference) return;
-    const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
-    if (!order || order.status === "COMPLETED") return;
-    await confirmOrder(reference);
-    console.log("Paystack webhook confirmed:", reference);
+
+    if (event.event === "charge.success") {
+      const reference = event.data && event.data.reference;
+      if (!reference) return;
+      const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
+      if (!order || order.status === "COMPLETED") return;
+      await confirmOrder(reference);
+      console.log("Paystack webhook confirmed:", reference);
+      return;
+    }
+
+    if (event.event === "transfer.success" || event.event === "transfer.failed" || event.event === "transfer.reversed") {
+      const transferCode = event.data && event.data.transfer_code;
+      if (!transferCode) return;
+      const payout = await prisma.moderatorPayout.findFirst({ where: { transferCode } });
+      if (!payout) return;
+
+      const newStatus = event.event === "transfer.success" ? "success" : event.event === "transfer.failed" ? "failed" : "reversed";
+      await prisma.moderatorPayout.update({
+        where: { id: payout.id },
+        data: { transferStatus: newStatus, transferError: newStatus === "success" ? null : (event.data.message || event.event) },
+      });
+
+      // A failed/reversed transfer means the moderator never actually got paid —
+      // put those payments back in the queue so the admin can retry.
+      if (newStatus !== "success" && payout.paymentIds && payout.paymentIds.length) {
+        await prisma.payment.updateMany({
+          where: { id: { in: payout.paymentIds }, payoutStatus: "paid" },
+          data: { payoutStatus: "pending", paidAt: null, paidBy: null },
+        });
+      }
+      console.log(`Paystack transfer webhook: ${transferCode} → ${newStatus}`);
+      return;
+    }
   } catch (err) { console.error("Webhook error:", err.message); }
 });
 
@@ -1465,6 +1504,11 @@ app.get("/api/admin/payout-queue", requireSuperAdmin, async (req, res) => {
       byMod[p.moderatorId] = {
         moderatorId: p.moderatorId, moderatorName: modUser?.name || "Unknown",
         moderatorEmail: modUser?.email || "", pesapalEmail: modSettings?.pesapalEmail || modUser?.email || "",
+        payoutMethod: modSettings?.payoutMethod || null,
+        payoutDestination: modSettings?.payoutMethod === "mobile_money" ? modSettings?.payoutPhone
+          : modSettings?.payoutMethod === "bank" ? `${modSettings?.payoutBankName || ""} • ${modSettings?.payoutAccountNumber || ""}`
+          : null,
+        paystackReady: !!modSettings?.paystackRecipientCode,
         amountOwedUSD: 0, paymentCount: 0, payments: [],
       };
     }
@@ -1496,20 +1540,75 @@ app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, async (req, res) => 
     prisma.user.findUnique({ where: { id: moderatorId } }),
     prisma.moderatorSettings.findUnique({ where: { userId: moderatorId } }),
   ]);
-  const now = new Date();
 
-  await prisma.payment.updateMany({ where: { moderatorId, payoutStatus: "pending" }, data: { payoutStatus: "paid", paidAt: now, paidBy: "superadmin" } });
+  if (!modSettings?.paystackRecipientCode) {
+    return res.status(400).json({
+      error: `${modUser?.name || "This moderator"} hasn't set up their Paystack payout details yet — ask them to complete Settings → Payout Account, then try again.`,
+    });
+  }
+
+  const now     = new Date();
+  const kesRate = await getPlatformKesRate();
+  // Paystack transfer references: lowercase letters, digits, _ and - only, 16–50 chars.
+  const transferRef = "payout-" + moderatorId.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 20) + "-" + now.getTime();
+
+  let transfer;
+  try {
+    transfer = await paystack.initiateTransfer({
+      amountUSD: totalPaidUSD, kesRate,
+      recipientCode: modSettings.paystackRecipientCode,
+      reference: transferRef,
+      reason: `SplitSubs payout — ${pending.length} payment(s)`,
+    });
+  } catch (err) {
+    console.error("Paystack transfer failed:", err.message);
+    return res.status(502).json({ error: "Paystack transfer failed: " + err.message });
+  }
 
   const payoutRecord = await prisma.moderatorPayout.create({
     data: {
       moderatorId, moderatorName: modUser?.name || "Unknown",
       moderatorEmail: modUser?.email || "", pesapalEmail: modSettings?.pesapalEmail || modUser?.email || "",
-      amountPaid: totalPaidUSD, currency: "USD",
+      amountPaid: totalPaidUSD, currency: "USD", method: "paystack",
+      transferCode: transfer.transferCode, transferRef, transferStatus: transfer.status,
       paymentIds: pending.map(p => p.id), paymentCount: pending.length,
       notes, paidAt: now, weekEnding: now,
     },
   });
-  res.json({ success: true, payout: payoutRecord });
+
+  // Paystack accepted the transfer and is moving the money (status "success"
+  // meaning "queued/processing" at this point, not final settlement — the
+  // webhook below flips it back to "pending" if it later fails or reverses).
+  // If OTP confirmation is required, nothing is marked paid until finalize-otp.
+  if (transfer.status !== "otp") {
+    await prisma.payment.updateMany({ where: { moderatorId, payoutStatus: "pending" }, data: { payoutStatus: "paid", paidAt: now, paidBy: "superadmin" } });
+  }
+
+  res.json({
+    success: true, payout: payoutRecord,
+    requiresOtp: transfer.status === "otp",
+    message: transfer.status === "otp"
+      ? "Paystack requires an OTP to confirm this transfer — check the phone/email on your Paystack account and enter the code."
+      : `Transfer of KES ${(totalPaidUSD * kesRate).toFixed(2)} initiated — Paystack is processing it now.`,
+  });
+});
+
+app.post("/api/admin/payouts/finalize-otp", requireSuperAdmin, async (req, res) => {
+  const { payoutId, otp } = req.body;
+  if (!payoutId || !otp) return res.status(400).json({ error: "payoutId and otp are required" });
+  const payout = await prisma.moderatorPayout.findUnique({ where: { id: payoutId } });
+  if (!payout || !payout.transferCode) return res.status(404).json({ error: "Payout not found" });
+
+  try {
+    const result = await paystack.finalizeTransfer({ transferCode: payout.transferCode, otp });
+    await prisma.moderatorPayout.update({ where: { id: payoutId }, data: { transferStatus: result.status } });
+    if (result.status !== "otp") {
+      await prisma.payment.updateMany({ where: { id: { in: payout.paymentIds } }, data: { payoutStatus: "paid", paidAt: new Date(), paidBy: "superadmin" } });
+    }
+    res.json({ success: true, status: result.status });
+  } catch (err) {
+    res.status(502).json({ error: "OTP verification failed: " + err.message });
+  }
 });
 
 app.get("/api/admin/payouts/history", requireSuperAdmin, async (req, res) => {
@@ -1527,13 +1626,51 @@ app.get("/api/moderator/settings", requireRole("moderator"), async (req, res) =>
 });
 
 app.put("/api/moderator/settings", requireRole("moderator"), async (req, res) => {
-  const { pesapalEmail, displayName } = req.body;
+  const {
+    pesapalEmail, displayName,
+    payoutMethod, payoutName, payoutPhone, payoutBankCode, payoutBankName, payoutAccountNumber,
+  } = req.body;
   if (!pesapalEmail) return res.status(400).json({ error: "pesapalEmail is required so we can send your weekly payout" });
-  const feePercent = await getPlatformFeePercent();
+
+  const data = { pesapalEmail: pesapalEmail.trim().toLowerCase(), displayName: displayName || "", feePercent: await getPlatformFeePercent() };
+
+  // Payout details are optional to save (a moderator might just be updating
+  // displayName), but if provided, validate + register a Paystack transfer
+  // recipient before persisting anything, so we never save half-set details
+  // that would silently fail at payout time.
+  if (payoutMethod) {
+    if (!["mobile_money", "bank"].includes(payoutMethod))
+      return res.status(400).json({ error: "payoutMethod must be 'mobile_money' or 'bank'" });
+    if (!payoutName || !payoutName.trim())
+      return res.status(400).json({ error: "Account holder name is required" });
+    if (!payoutBankCode)
+      return res.status(400).json({ error: payoutMethod === "mobile_money" ? "Select M-Pesa" : "Select your bank" });
+
+    const accountNumber = payoutMethod === "mobile_money" ? payoutPhone : payoutAccountNumber;
+    if (!accountNumber || !accountNumber.trim())
+      return res.status(400).json({ error: payoutMethod === "mobile_money" ? "M-Pesa phone number is required" : "Account number is required" });
+
+    try {
+      const { recipientCode } = await paystack.createTransferRecipient({
+        type: payoutMethod === "mobile_money" ? "mobile_money" : "kepss",
+        name: payoutName.trim(), accountNumber: accountNumber.trim(), bankCode: payoutBankCode, currency: "KES",
+      });
+      Object.assign(data, {
+        payoutMethod, payoutName: payoutName.trim(),
+        payoutPhone: payoutMethod === "mobile_money" ? accountNumber.trim() : null,
+        payoutAccountNumber: payoutMethod === "bank" ? accountNumber.trim() : null,
+        payoutBankCode, payoutBankName: payoutBankName || "", paystackRecipientCode: recipientCode,
+      });
+    } catch (err) {
+      console.error("Paystack recipient creation failed:", err.message);
+      return res.status(502).json({ error: "Could not register your payout details with Paystack: " + err.message });
+    }
+  }
+
   const settings = await prisma.moderatorSettings.upsert({
     where:  { userId: req.user.id },
-    update: { pesapalEmail: pesapalEmail.trim().toLowerCase(), displayName: displayName || "", feePercent },
-    create: { userId: req.user.id, pesapalEmail: pesapalEmail.trim().toLowerCase(), displayName: displayName || "", feePercent },
+    update: data,
+    create: { userId: req.user.id, ...data },
   });
   res.json({ ...settings, configured: true });
 });

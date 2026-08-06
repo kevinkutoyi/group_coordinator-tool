@@ -1167,7 +1167,7 @@ export default function AdminDashboardPage({ navigate }) {
                   <thead>
                     <tr style={{borderBottom:"2px solid var(--border)",color:"var(--muted)",fontSize:"0.75rem",textTransform:"uppercase",letterSpacing:"0.05em"}}>
                       <th style={{padding:"8px 12px",textAlign:"left"}}>Moderator</th>
-                      <th style={{padding:"8px 12px",textAlign:"left"}}>PesaPal Email</th>
+                      <th style={{padding:"8px 12px",textAlign:"left"}}>Payout Destination</th>
                       <th style={{padding:"8px 12px",textAlign:"right"}}>Payments</th>
                       <th style={{padding:"8px 12px",textAlign:"right"}}>Amount Owed</th>
                       <th style={{padding:"8px 12px",textAlign:"right"}}>Action</th>
@@ -1181,16 +1181,16 @@ export default function AdminDashboardPage({ navigate }) {
                           <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>{mod.moderatorEmail}</div>
                         </td>
                         <td style={{padding:"12px 12px"}}>
-                          {mod.pesapalEmail ? (
+                          {mod.paystackReady ? (
                             <span style={{
                               background:"rgba(74,222,128,0.1)",color:"var(--success)",
                               border:"1px solid rgba(74,222,128,0.25)",
                               borderRadius:6,padding:"3px 8px",fontSize:"0.78rem",fontFamily:"monospace"
                             }}>
-                              {mod.pesapalEmail}
+                              {mod.payoutMethod === "mobile_money" ? "📱 " : "🏦 "}{mod.payoutDestination}
                             </span>
                           ) : (
-                            <span style={{color:"var(--error)",fontSize:"0.78rem"}}>⚠ Not set</span>
+                            <span style={{color:"var(--error)",fontSize:"0.78rem"}}>⚠ Paystack not set up</span>
                           )}
                         </td>
                         <td style={{padding:"12px 12px",textAlign:"right",color:"var(--muted)"}}>
@@ -1205,22 +1205,33 @@ export default function AdminDashboardPage({ navigate }) {
                         <td style={{padding:"12px 12px",textAlign:"right"}}>
                           <button
                             className="btn btn-sm btn-primary"
-                            disabled={payoutBusy[mod.moderatorId]}
+                            disabled={payoutBusy[mod.moderatorId] || !mod.paystackReady}
+                            title={!mod.paystackReady ? "Moderator hasn't set up Paystack payout details yet" : undefined}
                             onClick={async () => {
                               if (!window.confirm(
-                                `Confirm payout of KES ${kes(mod.amountOwedUSD)} ($${mod.amountOwedUSD.toFixed(2)}) to ${mod.moderatorName} at ${mod.pesapalEmail || mod.moderatorEmail}?
+                                `Send KES ${kes(mod.amountOwedUSD)} ($${mod.amountOwedUSD.toFixed(2)}) to ${mod.moderatorName} via Paystack (${mod.payoutDestination})?
 
-Make sure you have already sent the funds via PesaPal before clicking OK.`
+This will initiate a real transfer.`
                               )) return;
                               setPayoutBusy(b => ({...b,[mod.moderatorId]:true}));
                               try {
-                                await api.markPaid({ moderatorId: mod.moderatorId });
-                                setPayoutMsg({type:"ok", text:`✅ Payout of KES ${kes(mod.amountOwedUSD)} ($${mod.amountOwedUSD.toFixed(2)}) to ${mod.moderatorName} recorded.`});
+                                const result = await api.markPaid({ moderatorId: mod.moderatorId });
+                                if (result.requiresOtp) {
+                                  const otp = window.prompt("Paystack requires an OTP to confirm this transfer. Enter the code sent to your Paystack account:");
+                                  if (otp) {
+                                    await api.finalizePayoutOtp({ payoutId: result.payout.id, otp });
+                                    setPayoutMsg({type:"ok", text:`✅ Transfer to ${mod.moderatorName} confirmed.`});
+                                  } else {
+                                    setPayoutMsg({type:"err", text:"Transfer created but not confirmed — enter the OTP from Payout History to complete it."});
+                                  }
+                                } else {
+                                  setPayoutMsg({type:"ok", text: result.message || `✅ Transfer to ${mod.moderatorName} initiated.`});
+                                }
                                 loadAll();
                               } catch(err) { setPayoutMsg({type:"err", text:err.message}); }
                               finally { setPayoutBusy(b => ({...b,[mod.moderatorId]:false})); }
                             }}>
-                            {payoutBusy[mod.moderatorId] ? <span className="spinner"/> : "✓ Mark as Paid"}
+                            {payoutBusy[mod.moderatorId] ? <span className="spinner"/> : "⚡ Pay via Paystack"}
                           </button>
                         </td>
                       </tr>
@@ -1243,16 +1254,39 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
                   <div style={{fontSize:"0.72rem",color:"var(--muted)"}}>
                     {new Date(p.paidAt).toLocaleDateString("en-KE",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}
                     {" · "}{p.paymentCount} payment{p.paymentCount!==1?"s":""}
-                    {" · "}<span style={{fontFamily:"monospace"}}>{p.pesapalEmail}</span>
+                    {p.method === "paystack" && <>{" · "}<span style={{fontFamily:"monospace"}}>via Paystack</span></>}
                   </div>
                   {p.notes && <div style={{fontSize:"0.72rem",color:"var(--muted)",fontStyle:"italic"}}>{p.notes}</div>}
                 </div>
                 <div style={{textAlign:"right"}}>
                   <div style={{fontWeight:700,color:"var(--success)",fontSize:"0.95rem",whiteSpace:"nowrap"}}>KES {kes(p.amountPaid)} · ${(p.amountPaid || 0).toFixed(2)}</div>
-                  <span style={{
-                    padding:"2px 8px",borderRadius:99,fontSize:"0.68rem",fontWeight:600,
-                    background:"rgba(74,222,128,0.1)",color:"var(--success)",border:"1px solid rgba(74,222,128,0.2)"
-                  }}>Paid ✓</span>
+                  {(() => {
+                    const status = p.transferStatus;
+                    const badge = status === "failed" || status === "reversed"
+                      ? { label: `⚠ ${status === "failed" ? "Failed" : "Reversed"}`, bg: "rgba(248,113,113,0.1)", color: "var(--error)", border: "rgba(248,113,113,0.2)" }
+                      : status === "otp"
+                      ? { label: "⏳ Awaiting OTP", bg: "rgba(251,191,36,0.1)", color: "#fbbf24", border: "rgba(251,191,36,0.25)" }
+                      : { label: "Paid ✓", bg: "rgba(74,222,128,0.1)", color: "var(--success)", border: "rgba(74,222,128,0.2)" };
+                    return (
+                      <span style={{
+                        padding:"2px 8px",borderRadius:99,fontSize:"0.68rem",fontWeight:600,
+                        background:badge.bg,color:badge.color,border:`1px solid ${badge.border}`
+                      }}>{badge.label}</span>
+                    );
+                  })()}
+                  {p.transferStatus === "otp" && (
+                    <div style={{marginTop:6}}>
+                      <button className="btn btn-xs btn-outline" onClick={async () => {
+                        const otp = window.prompt("Enter the OTP to confirm this transfer:");
+                        if (!otp) return;
+                        try {
+                          await api.finalizePayoutOtp({ payoutId: p.id, otp });
+                          setPayoutMsg({type:"ok", text:"✅ Transfer confirmed."});
+                          loadAll();
+                        } catch(err) { setPayoutMsg({type:"err", text:err.message}); }
+                      }}>Enter OTP</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

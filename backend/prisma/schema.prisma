@@ -195,10 +195,19 @@ model PlatformEarning {
 model ModeratorSettings {
   id           String   @id @default(uuid())
   userId       String   @unique
-  pesapalEmail String
+  pesapalEmail String                          // legacy — kept for display/backward-compat, no longer used to move money
   displayName  String   @default("")
   feePercent   Float    @default(8)
   updatedAt    DateTime @updatedAt
+
+  // Paystack payout details — how this moderator actually gets paid now.
+  payoutMethod          String? // "mobile_money" | "bank"
+  payoutName            String? // account holder name, must match the M-Pesa/bank account
+  payoutPhone           String? // M-Pesa number, for payoutMethod = "mobile_money"
+  payoutBankCode        String? // Paystack bank_code (MPESA for mobile money, or a bank's code)
+  payoutBankName        String? // human-readable bank/telco name, cached for display
+  payoutAccountNumber   String? // bank account number, for payoutMethod = "bank"
+  paystackRecipientCode String? // cached Paystack transfer recipient_code once created
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -221,6 +230,13 @@ model ModeratorPayout {
   paidAt         DateTime @default(now())
   paidBy         String   @default("superadmin")
   weekEnding     DateTime @default(now())
+
+  // Paystack transfer tracking
+  method         String   @default("manual")  // "manual" | "paystack"
+  transferCode   String?                       // Paystack transfer_code
+  transferRef    String?                       // our generated idempotency reference
+  transferStatus String?                       // pending | otp | success | failed | reversed
+  transferError  String?
 
   // Relations
   moderator User @relation("ModeratorPayouts", fields: [moderatorId], references: [id])

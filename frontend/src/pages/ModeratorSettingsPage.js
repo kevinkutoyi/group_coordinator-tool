@@ -8,9 +8,15 @@ export default function ModeratorSettingsPage({ navigate }) {
   const [settings, setSettings] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [form, setForm]         = useState({ pesapalEmail: "", displayName: "" });
+  const [form, setForm]         = useState({
+    pesapalEmail: "", displayName: "",
+    payoutMethod: "mobile_money", payoutName: "", payoutPhone: "",
+    payoutBankCode: "", payoutBankName: "", payoutAccountNumber: "",
+  });
   const [busy, setBusy]   = useState(false);
   const [msg, setMsg]     = useState(null);
+  const [banks, setBanks] = useState([]);
+  const [banksLoading, setBanksLoading] = useState(false);
 
   useEffect(() => {
     if (!session.isModerator()) { navigate("login"); return; }
@@ -19,21 +25,42 @@ export default function ModeratorSettingsPage({ navigate }) {
         setSettings(s);
         setDashboard(d);
         if (s.configured) {
-          setForm({ pesapalEmail: s.pesapalEmail || "", displayName: s.displayName || "" });
+          setForm(f => ({
+            ...f,
+            pesapalEmail: s.pesapalEmail || "", displayName: s.displayName || "",
+            payoutMethod: s.payoutMethod || "mobile_money",
+            payoutName: s.payoutName || "", payoutPhone: s.payoutPhone || "",
+            payoutBankCode: s.payoutBankCode || "", payoutBankName: s.payoutBankName || "",
+            payoutAccountNumber: s.payoutAccountNumber || "",
+          }));
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    setBanksLoading(true);
+    api.getPaystackBanks(form.payoutMethod === "mobile_money" ? "mobile_money" : undefined)
+      .then(setBanks)
+      .catch(() => setBanks([]))
+      .finally(() => setBanksLoading(false));
+  }, [form.payoutMethod]);
+
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  function setBankCode(e) {
+    const code = e.target.value;
+    const bank = banks.find(b => b.code === code);
+    setForm(f => ({ ...f, payoutBankCode: code, payoutBankName: bank?.name || "" }));
+  }
 
   async function handleSave(e) {
     e.preventDefault(); setBusy(true); setMsg(null);
     try {
       const saved = await api.saveModeratorSettings(form);
       setSettings(saved);
-      setMsg({ type: "ok", text: "✅ Settings saved! Your PesaPal email is registered for Sunday payouts." });
+      setMsg({ type: "ok", text: saved.paystackRecipientCode ? "✅ Settings saved! Your Paystack payout account is registered." : "✅ Settings saved." });
     } catch (err) {
       setMsg({ type: "err", text: err.message });
     } finally { setBusy(false); }
@@ -52,7 +79,7 @@ export default function ModeratorSettingsPage({ navigate }) {
         <div>
           <h1 className="page-title" style={{ marginBottom: 0 }}>⚙️ Moderator Settings</h1>
           <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginTop: 4 }}>
-            Register your PesaPal email to receive your Sunday payout
+            Set up your Paystack payout account to receive your earnings
           </p>
         </div>
       </div>
@@ -68,13 +95,13 @@ export default function ModeratorSettingsPage({ navigate }) {
         {/* ── Left: form ── */}
         <form className="card mss-form" onSubmit={handleSave}>
 
-          {/* PesaPal payout email */}
+          {/* Contact email */}
           <div className="mss-section-header">
             <div className="mss-section-icon">💸</div>
             <div>
               <div className="mss-section-title">Payout Account</div>
               <div className="mss-section-sub">
-                The PesaPal-registered email where you receive your earnings every Sunday
+                Set up your Paystack payout details to receive earnings from the admin
               </div>
             </div>
             {settings?.configured && (
@@ -82,18 +109,17 @@ export default function ModeratorSettingsPage({ navigate }) {
             )}
           </div>
 
-          <label className="form-label">PesaPal Email <span style={{ color: "var(--error)" }}>*</span></label>
+          <label className="form-label">Contact Email <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             type="email"
             className="form-input"
             value={form.pesapalEmail}
             onChange={set("pesapalEmail")}
-            placeholder="yourname@pesapal.com"
+            placeholder="you@example.com"
             required
           />
           <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 4, marginBottom: 14 }}>
-            This must be the email linked to your PesaPal account. The super admin
-            sends your payout to this address every Sunday.
+            We'll use this to reach you about your payouts.
           </p>
 
           <label className="form-label">Display Name (optional)</label>
@@ -104,6 +130,70 @@ export default function ModeratorSettingsPage({ navigate }) {
             placeholder="e.g. John's Groups"
             style={{ marginBottom: 20 }}
           />
+
+          {/* Paystack payout method */}
+          <label className="form-label">Payout Method <span style={{ color: "var(--error)" }}>*</span></label>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            <button type="button"
+              className={`btn btn-sm ${form.payoutMethod === "mobile_money" ? "btn-primary" : "btn-outline"}`}
+              onClick={() => setForm(f => ({ ...f, payoutMethod: "mobile_money", payoutBankCode: "", payoutBankName: "" }))}>
+              📱 M-Pesa
+            </button>
+            <button type="button"
+              className={`btn btn-sm ${form.payoutMethod === "bank" ? "btn-primary" : "btn-outline"}`}
+              onClick={() => setForm(f => ({ ...f, payoutMethod: "bank", payoutBankCode: "", payoutBankName: "" }))}>
+              🏦 Bank Account
+            </button>
+          </div>
+
+          <label className="form-label">Account Holder Name <span style={{ color: "var(--error)" }}>*</span></label>
+          <input
+            className="form-input"
+            value={form.payoutName}
+            onChange={set("payoutName")}
+            placeholder="Full name as registered with M-Pesa/bank"
+            style={{ marginBottom: 14 }}
+          />
+
+          {form.payoutMethod === "mobile_money" ? (
+            <>
+              <label className="form-label">M-Pesa Provider <span style={{ color: "var(--error)" }}>*</span></label>
+              <select className="form-input" value={form.payoutBankCode} onChange={setBankCode} style={{ marginBottom: 14 }}>
+                <option value="">{banksLoading ? "Loading…" : "Select provider"}</option>
+                {banks.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
+              </select>
+
+              <label className="form-label">M-Pesa Phone Number <span style={{ color: "var(--error)" }}>*</span></label>
+              <input
+                className="form-input"
+                value={form.payoutPhone}
+                onChange={set("payoutPhone")}
+                placeholder="e.g. 0712345678"
+                style={{ marginBottom: 14 }}
+              />
+            </>
+          ) : (
+            <>
+              <label className="form-label">Bank <span style={{ color: "var(--error)" }}>*</span></label>
+              <select className="form-input" value={form.payoutBankCode} onChange={setBankCode} style={{ marginBottom: 14 }}>
+                <option value="">{banksLoading ? "Loading…" : "Select bank"}</option>
+                {banks.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
+              </select>
+
+              <label className="form-label">Account Number <span style={{ color: "var(--error)" }}>*</span></label>
+              <input
+                className="form-input"
+                value={form.payoutAccountNumber}
+                onChange={set("payoutAccountNumber")}
+                placeholder="Your bank account number"
+                style={{ marginBottom: 14 }}
+              />
+            </>
+          )}
+
+          <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 4, marginBottom: 20 }}>
+            These details are registered directly with Paystack so the admin can send payouts to you with one click.
+          </p>
 
           <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? "Saving…" : settings?.configured ? "Update Settings" : "Save Settings"}
@@ -137,8 +227,8 @@ export default function ModeratorSettingsPage({ navigate }) {
               </div>
             </div>
             <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>
-              All member payments go to the platform's PesaPal account.
-              Every Sunday the super admin reviews the queue and sends your accumulated earnings to your PesaPal email above.
+              All member payments go to the platform's Paystack account.
+              The admin reviews the payout queue and sends your accumulated earnings directly to your M-Pesa or bank account above via Paystack.
             </p>
           </div>
 
