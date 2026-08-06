@@ -46,6 +46,8 @@ export default function AdminDashboardPage({ navigate }) {
   const [dashLoading, setDashLoading] = useState(true);
   const [dateRangeKey, setDateRangeKey] = useState("7d");
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [tab, setTab]           = useState("pending");
   const [pending, setPending]   = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -110,19 +112,30 @@ export default function AdminDashboardPage({ navigate }) {
   }, []);
 
   const RANGE_DAYS = { "7d": 7, "30d": 30, "90d": 90 };
-  const RANGE_LABELS = { "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days" };
+  const RANGE_LABELS = { "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", "all": "All" };
 
   const loadDashboard = useCallback(async () => {
     setDashLoading(true);
     try {
-      const days = RANGE_DAYS[dateRangeKey] || 7;
-      const to = new Date();
-      const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+      let from, to;
+      if (dateRangeKey === "all") {
+        // Covers everything from the platform's earliest possible record up to now.
+        to = new Date();
+        from = new Date(0);
+      } else if (dateRangeKey === "custom" && customFrom && customTo) {
+        from = new Date(customFrom);
+        to = new Date(customTo);
+        to.setHours(23, 59, 59, 999); // include the whole "to" day
+      } else {
+        const days = RANGE_DAYS[dateRangeKey] || 7;
+        to = new Date();
+        from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+      }
       const data = await api.getAdminDashboard(`?from=${from.toISOString()}&to=${to.toISOString()}`);
       setDashData(data);
     } catch (err) { console.error(err); }
     finally { setDashLoading(false); }
-  }, [dateRangeKey]);
+  }, [dateRangeKey, customFrom, customTo]);
 
   useEffect(() => {
     if (!session.isSuperAdmin()) return;
@@ -359,6 +372,8 @@ export default function AdminDashboardPage({ navigate }) {
             dateRangeKey={dateRangeKey} setDateRangeKey={setDateRangeKey}
             rangeMenuOpen={rangeMenuOpen} setRangeMenuOpen={setRangeMenuOpen}
             rangeLabels={RANGE_LABELS}
+            customFrom={customFrom} setCustomFrom={setCustomFrom}
+            customTo={customTo} setCustomTo={setCustomTo}
             onRefresh={loadDashboard}
             goto={goto}
             navigate={navigate}
@@ -1369,7 +1384,7 @@ Make sure you have already sent the funds via PesaPal before clicking OK.`
 //  KPI row, Needs Attention / Your Products, Recent Activity / Quick Actions.
 //  Every number comes from GET /api/admin/dashboard — nothing is fabricated.
 // ═══════════════════════════════════════════════════════════════════════════
-function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRangeKey, rangeMenuOpen, setRangeMenuOpen, rangeLabels, onRefresh, goto, navigate }) {
+function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRangeKey, rangeMenuOpen, setRangeMenuOpen, rangeLabels, customFrom, setCustomFrom, customTo, setCustomTo, onRefresh, goto, navigate }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
@@ -1396,10 +1411,10 @@ function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRan
         </div>
         <div style={{ display:"flex", gap:10, alignItems:"center", position:"relative" }}>
           <button className="admin-daterange" onClick={() => setRangeMenuOpen(o => !o)}>
-            📅 {fromLabel} – {toLabel} ⌄
+            📅 {dateRangeKey === "all" ? "All" : `${fromLabel} – ${toLabel}`} ⌄
           </button>
           {rangeMenuOpen && (
-            <div style={{ position:"absolute", top:"110%", right:70, background:"var(--card)", border:"1px solid var(--border)", borderRadius:10, boxShadow:"var(--shadow)", zIndex:10, minWidth:160 }}>
+            <div style={{ position:"absolute", top:"110%", right:70, background:"var(--card)", border:"1px solid var(--border)", borderRadius:10, boxShadow:"var(--shadow)", zIndex:10, minWidth:210 }}>
               {Object.keys(rangeLabels).map(key => (
                 <button key={key}
                   onClick={() => { setDateRangeKey(key); setRangeMenuOpen(false); }}
@@ -1407,6 +1422,28 @@ function AdminDashboardHome({ data, loading, adminName, dateRangeKey, setDateRan
                   {rangeLabels[key]}
                 </button>
               ))}
+              <div style={{ borderTop:"1px solid var(--border)", padding:"10px 14px 12px" }}>
+                <div style={{ fontSize:"0.72rem", fontWeight:600, color:"var(--muted)", marginBottom:7, textTransform:"uppercase", letterSpacing:"0.03em" }}>Custom range</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  <label style={{ fontSize:"0.7rem", color:"var(--muted)" }}>
+                    From
+                    <input type="date" value={customFrom} max={customTo || undefined}
+                      onChange={e => setCustomFrom(e.target.value)}
+                      style={{ width:"100%", marginTop:3, fontSize:"0.8rem", padding:"6px 8px", borderRadius:7, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)" }} />
+                  </label>
+                  <label style={{ fontSize:"0.7rem", color:"var(--muted)" }}>
+                    To
+                    <input type="date" value={customTo} min={customFrom || undefined}
+                      onChange={e => setCustomTo(e.target.value)}
+                      style={{ width:"100%", marginTop:3, fontSize:"0.8rem", padding:"6px 8px", borderRadius:7, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)" }} />
+                  </label>
+                  <button className="btn btn-primary btn-sm" style={{ width:"100%", marginTop:2 }}
+                    disabled={!customFrom || !customTo}
+                    onClick={() => { setDateRangeKey("custom"); setRangeMenuOpen(false); }}>
+                    Apply
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           <button className="btn btn-outline btn-sm" onClick={onRefresh}>↻</button>
