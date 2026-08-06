@@ -53,6 +53,15 @@ fi
 if echo "$CHANGED" | grep -q "^backend/prisma/schema.prisma"; then
   yellow "► Running migrations..."
   cd "$BE" && npx prisma migrate deploy
+  # `migrate deploy` only applies SQL — it does NOT regenerate the Prisma
+  # Client. Without this, PM2 keeps running against the OLD generated client
+  # (new models/fields show as undefined at runtime) until something else
+  # happens to trigger `npm install` (which auto-generates via postinstall).
+  # That gap bit us on 2026-08-08: the email_logs table existed but
+  # `prisma.emailLog` was undefined until this was added. Always regenerate
+  # right after migrating so the client and schema can never drift apart.
+  yellow "► Regenerating Prisma client..."
+  npx prisma generate
 fi
 
 yellow "► Linting backend..."
