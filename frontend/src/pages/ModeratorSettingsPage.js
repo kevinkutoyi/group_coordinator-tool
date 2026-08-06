@@ -60,7 +60,7 @@ export default function ModeratorSettingsPage({ navigate }) {
     try {
       const saved = await api.saveModeratorSettings(form);
       setSettings(saved);
-      setMsg({ type: "ok", text: saved.paystackRecipientCode ? "✅ Settings saved! Your Paystack payout account is registered." : "✅ Settings saved." });
+      setMsg({ type: "ok", text: saved.paystackRecipientCode ? "✅ Settings saved! Your payout account is registered." : "✅ Settings saved." });
     } catch (err) {
       setMsg({ type: "err", text: err.message });
     } finally { setBusy(false); }
@@ -82,7 +82,7 @@ export default function ModeratorSettingsPage({ navigate }) {
         <div>
           <h1 className="page-title" style={{ marginBottom: 0 }}>⚙️ Moderator Settings</h1>
           <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginTop: 4 }}>
-            Set up your Paystack payout account to receive your earnings
+            Set up your payout account to receive your earnings
           </p>
         </div>
       </div>
@@ -104,7 +104,7 @@ export default function ModeratorSettingsPage({ navigate }) {
             <div>
               <div className="mss-section-title">Payout Account</div>
               <div className="mss-section-sub">
-                Set up your Paystack payout details to receive earnings from the admin
+                Set up your payout details to receive earnings from the admin
               </div>
             </div>
             {settings?.configured && (
@@ -134,7 +134,7 @@ export default function ModeratorSettingsPage({ navigate }) {
             style={{ marginBottom: 20 }}
           />
 
-          {/* Paystack payout method */}
+          {/* Payout method */}
           <label className="form-label">Payout Method <span style={{ color: "var(--error)" }}>*</span></label>
           <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
             <button type="button"
@@ -195,7 +195,7 @@ export default function ModeratorSettingsPage({ navigate }) {
           )}
 
           <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 4, marginBottom: 20 }}>
-            These details are registered directly with Paystack so the admin can send payouts to you with one click.
+            These details are verified automatically so the admin can send payouts to you with one click.
           </p>
 
           <button className="btn btn-primary" type="submit" disabled={busy}>
@@ -230,8 +230,8 @@ export default function ModeratorSettingsPage({ navigate }) {
               </div>
             </div>
             <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>
-              All member payments go to the platform's Paystack account.
-              The admin reviews the payout queue and sends your accumulated earnings directly to your M-Pesa or bank account above via Paystack.
+              All member payments go to the platform's account.
+              The admin reviews the payout queue and sends your accumulated earnings directly to your M-Pesa or bank account above.
             </p>
           </div>
 
