@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import CredentialVault from "../components/CredentialVault";
 import GroupCard from "../components/GroupCard";
 import { api, session } from "../api";
+import { kes, useKesRate } from "../currency";
 import "./GroupDetailPage.css";
 
 // Discount is taken off the total for the chosen duration (e.g. 6 months
@@ -20,12 +21,8 @@ function durationPrice(pricePerSlot, months) {
   return +(gross * (1 - d.discount / 100)).toFixed(2);
 }
 
-// Money — always 2 decimal places, never rounded to a whole number.
-function kes(usdAmount) {
-  return ((usdAmount || 0) * 130).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 export default function GroupDetailPage({ id, navigate, user }) {
+  useKesRate(); // loads the platform's live USD→KES rate once, re-renders when it arrives
   const [group, setGroup]         = useState(null);
   const [loading, setLoading]     = useState(true);
   const [busy, setBusy]           = useState(false);

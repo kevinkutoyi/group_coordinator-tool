@@ -1,15 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
+import { kes, kesRaw, useKesRate, refreshRate } from "../currency";
 import "./AdminDashboardPage.css";
 import "./EarningsPage.css";
-
-// Money — always 2 decimal places, never rounded to a whole number.
-function kes(usdAmount) {
-  return ((usdAmount || 0) * 130).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function kesRaw(kesAmount) {
-  return (kesAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 const SIDEBAR_SECTIONS = [
   { items: [
@@ -41,6 +34,7 @@ const SIDEBAR_SECTIONS = [
 ];
 
 export default function AdminDashboardPage({ navigate }) {
+  useKesRate(); // loads the platform's live USD→KES rate once, re-renders when it arrives
   const [view, setView]         = useState("dashboard");
   const [dashData, setDashData]     = useState(null);
   const [dashLoading, setDashLoading] = useState(true);
@@ -85,6 +79,10 @@ export default function AdminDashboardPage({ navigate }) {
   const [feeInput, setFeeInput]         = useState("8");
   const [feeBusy, setFeeBusy]           = useState(false);
   const [feeMsg, setFeeMsg]             = useState(null);
+  const [rateValue, setRateValue]       = useState(130);
+  const [rateInput, setRateInput]       = useState("130");
+  const [rateBusy, setRateBusy]         = useState(false);
+  const [rateMsg, setRateMsg]           = useState(null);
 
   // Search + pending payments
   const [searchEmail, setSearchEmail]         = useState("");
@@ -176,6 +174,8 @@ export default function AdminDashboardPage({ navigate }) {
       setPayoutQueue(pq?.queue || []); setPayoutHistory(ph || []);
       const fee = as_?.feePercent ?? 8;
       setFeePercent(fee); setFeeInput(String(fee));
+      const rate = as_?.kesPerUsd ?? 130;
+      setRateValue(rate); setRateInput(String(rate));
     } catch { navigate("admin-login"); }
     finally { setLoading(false); }
   }, [navigate]);
@@ -1002,6 +1002,7 @@ export default function AdminDashboardPage({ navigate }) {
 {/* ── Settings tab: platform fee ── */}
       {tab === "settings" && (
         <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20,marginBottom:20,alignItems:"start"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:20}}>
             {/* Platform fee editor */}
             <div className="card">
               <h2 className="section-h2" style={{marginBottom:14}}>⚙️ Platform Fee</h2>
@@ -1041,6 +1042,47 @@ export default function AdminDashboardPage({ navigate }) {
               )}
             </div>
 
+            {/* Exchange rate editor */}
+            <div className="card">
+              <h2 className="section-h2" style={{marginBottom:14}}>💱 Currency</h2>
+              <p style={{color:"var(--muted)",fontSize:"0.82rem",marginBottom:14}}>
+                USD→KES rate used for every KES figure across the platform (dashboard, payments, payouts, pricing). Update this whenever the real market rate shifts.
+              </p>
+              <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{color:"var(--muted)",fontSize:"0.9rem"}}>1 USD =</span>
+                <input
+                  type="number" min="1" max="1000" step="0.01"
+                  className="form-input"
+                  value={rateInput}
+                  onChange={e => setRateInput(e.target.value)}
+                  style={{width:110,fontWeight:700,fontSize:"1.1rem",textAlign:"center"}}
+                />
+                <span style={{color:"var(--muted)",fontSize:"0.9rem"}}>KES</span>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={rateBusy}
+                  onClick={async () => {
+                    setRateBusy(true); setRateMsg(null);
+                    try {
+                      const r = await api.updateKesRate(parseFloat(rateInput));
+                      setRateValue(r.kesPerUsd);
+                      setRateMsg({type:"ok", text:`Exchange rate updated to KES ${r.kesPerUsd} per USD`});
+                      loadAll(); refreshRate();
+                    } catch(err) { setRateMsg({type:"err", text:err.message}); }
+                    finally { setRateBusy(false); }
+                  }}>
+                  {rateBusy ? <span className="spinner"/> : "Save"}
+                </button>
+              </div>
+              {rateMsg && (
+                <div className={`msg-box ${rateMsg.type==="ok"?"msg-ok":"msg-err"}`}
+                  style={{marginTop:12}} onClick={()=>setRateMsg(null)}>
+                  {rateMsg.text} <span style={{opacity:.4}}>✕</span>
+                </div>
+              )}
+            </div>
+            </div>
+
             {/* Payout summary */}
             <div className="card">
               <h2 className="section-h2" style={{marginBottom:14}}>📊 Summary</h2>
@@ -1058,6 +1100,10 @@ export default function AdminDashboardPage({ navigate }) {
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
                   <span style={{color:"var(--muted)"}}>Platform fee rate</span>
                   <strong style={{color:"var(--success)"}}>{feePercent}%</strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
+                  <span style={{color:"var(--muted)"}}>Exchange rate</span>
+                  <strong style={{color:"var(--accent)"}}>1 USD = {rateValue} KES</strong>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.84rem"}}>
                   <span style={{color:"var(--muted)"}}>Total payouts processed</span>

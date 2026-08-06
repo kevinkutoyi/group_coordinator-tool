@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+import { kes, useKesRate } from "../currency";
 import "./GroupCard.css";
 
 const CYCLE_LABELS = {
@@ -19,9 +20,8 @@ const SERVICE_GRADIENTS = {
   hbo:     ["#5822B4","#3d1880"],
 };
 
-const KES_RATE = 130;
-
 export default function GroupCard({ group, onClick }) {
+  useKesRate(); // loads the platform's live USD→KES rate once, re-renders when it arrives
   const filled    = group.memberCount || 0;
   const pct       = Math.round((filled / group.maxSlots) * 100);
   const spotsLeft = group.maxSlots - filled;
@@ -107,7 +107,7 @@ export default function GroupCard({ group, onClick }) {
             <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text)", lineHeight: 1.2 }}>
               <span style={{ color: "var(--accent)" }}>USD {group.pricePerSlot}</span>
               <span style={{ fontSize: "0.9rem", fontWeight: 400, color: "var(--muted)", margin: "0 8px" }}>·</span>
-              <span style={{ color: "var(--accent2)" }}>KES {Math.round(group.pricePerSlot * KES_RATE)}</span>
+              <span style={{ color: "var(--accent2)" }}>KES {kes(group.pricePerSlot)}</span>
             </div>
             <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 3 }}>
               per {group.billingCycle === "monthly" ? "month" : "period"} per slot

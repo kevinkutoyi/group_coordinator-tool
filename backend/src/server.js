@@ -16,6 +16,7 @@ app.set("trust proxy", 1);
 const prisma = new PrismaClient();
 const PORT   = process.env.PORT || 3001;
 const DEFAULT_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || "8");
+const DEFAULT_KES_PER_USD = parseFloat(process.env.KES_PER_USD || "130");
 const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || "";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_in_production";
 
@@ -33,6 +34,15 @@ async function getPlatformFeePercent() {
     const s = await prisma.platformSettings.findUnique({ where: { id: 1 } });
     return s?.feePercent ?? DEFAULT_FEE_PERCENT;
   } catch { return DEFAULT_FEE_PERCENT; }
+}
+
+// USD→KES rate, admin-configurable from Settings (fluctuates with the real
+// market rate — see the "Currency" card next to Platform Fee).
+async function getPlatformKesRate() {
+  try {
+    const s = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+    return s?.kesPerUsd ?? DEFAULT_KES_PER_USD;
+  } catch { return DEFAULT_KES_PER_USD; }
 }
 
 // discountPercent is taken off the total for the chosen duration (e.g. 6
@@ -1263,6 +1273,7 @@ app.post("/api/admin/expired-members/:memberId/remind", requireSuperAdmin, async
 
 app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
   const now = new Date();
+  const kesRate = await getPlatformKesRate();
 
   // Date range for the period-over-period counters (defaults to last 7 days).
   const to   = req.query.to   ? new Date(req.query.to)   : now;
@@ -1345,11 +1356,11 @@ app.get("/api/admin/dashboard", requireSuperAdmin, async (req, res) => {
     range: { from, to },
     kpis: {
       revenueUSD: +revenueUSD.toFixed(2),
-      revenueKES: +(revenueUSD * 130).toFixed(2),
+      revenueKES: +(revenueUSD * kesRate).toFixed(2),
       commissionsUSD: +commissionsUSD.toFixed(2),
-      commissionsKES: +(commissionsUSD * 130).toFixed(2),
+      commissionsKES: +(commissionsUSD * kesRate).toFixed(2),
       totalRevenueUSD: +totalRevenueUSD.toFixed(2),
-      totalRevenueKES: +(totalRevenueUSD * 130).toFixed(2),
+      totalRevenueKES: +(totalRevenueUSD * kesRate).toFixed(2),
       activeCustomers, newCustomers,
       activeSubscriptions: activeMemberRows.length, newConfirmedPayments,
       pendingPaymentsCount,
@@ -1410,7 +1421,7 @@ app.get("/api/admin/earnings", requireSuperAdmin, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 app.get("/api/admin/settings", requireSuperAdmin, async (req, res) => {
-  res.json({ feePercent: await getPlatformFeePercent() });
+  res.json({ feePercent: await getPlatformFeePercent(), kesPerUsd: await getPlatformKesRate() });
 });
 
 app.put("/api/admin/settings/fee", requireSuperAdmin, async (req, res) => {
@@ -1421,11 +1432,20 @@ app.put("/api/admin/settings/fee", requireSuperAdmin, async (req, res) => {
   res.json({ feePercent: +feePercent, message: "Platform fee updated." });
 });
 
+app.put("/api/admin/settings/rate", requireSuperAdmin, async (req, res) => {
+  const { kesPerUsd } = req.body;
+  if (kesPerUsd == null || kesPerUsd < 1 || kesPerUsd > 1000)
+    return res.status(400).json({ error: "kesPerUsd must be between 1 and 1000" });
+  await prisma.platformSettings.upsert({ where: { id: 1 }, update: { kesPerUsd: +kesPerUsd }, create: { id: 1, kesPerUsd: +kesPerUsd } });
+  res.json({ kesPerUsd: +kesPerUsd, message: "Exchange rate updated." });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  ADMIN — SUNDAY PAYOUT QUEUE
 // ═══════════════════════════════════════════════════════════════════════════
 
 app.get("/api/admin/payout-queue", requireSuperAdmin, async (req, res) => {
+  const kesRate = await getPlatformKesRate();
   const pendingPayments = await prisma.payment.findMany({ where: { payoutStatus: "pending" } });
   const byMod = {};
   for (const p of pendingPayments) {
@@ -1449,11 +1469,11 @@ app.get("/api/admin/payout-queue", requireSuperAdmin, async (req, res) => {
     byMod[p.moderatorId].payments.push({ id: p.id, memberName: p.memberName, amount: p.amount, moderatorOwed: p.moderatorOwed, platformFee: p.platformFee, confirmedAt: p.confirmedAt });
   }
   const queue = Object.values(byMod)
-    .map(m => ({ ...m, amountOwedKES: +(m.amountOwedUSD * 130).toFixed(2) }))
+    .map(m => ({ ...m, amountOwedKES: +(m.amountOwedUSD * kesRate).toFixed(2) }))
     .sort((a, b) => b.amountOwedUSD - a.amountOwedUSD);
   const totalOwedUSD = +queue.reduce((a, m) => a + m.amountOwedUSD, 0).toFixed(2);
   const payoutHistory = await prisma.moderatorPayout.findMany({ orderBy: { paidAt: "desc" }, take: 50 });
-  res.json({ queue, totalOwedUSD, totalOwedKES: +(totalOwedUSD * 130).toFixed(2), payoutHistory });
+  res.json({ queue, totalOwedUSD, totalOwedKES: +(totalOwedUSD * kesRate).toFixed(2), payoutHistory });
 });
 
 app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, async (req, res) => {
@@ -1880,9 +1900,9 @@ app.get("/api/admin/email-logs", requireSuperAdmin, async (req, res) => {
 //  CURRENCY & PUBLIC STATS
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.get("/api/currency/rate", (req, res) => {
-  const rate = parseFloat(process.env.KES_PER_USD || "130");
-  res.json({ KES_PER_USD: rate, USD_PER_KES: +(1 / rate).toFixed(6), source: "env" });
+app.get("/api/currency/rate", async (req, res) => {
+  const rate = await getPlatformKesRate();
+  res.json({ KES_PER_USD: rate, USD_PER_KES: +(1 / rate).toFixed(6), source: "platform_settings" });
 });
 
 app.get("/api/stats", async (req, res) => {

@@ -133,6 +133,7 @@ export const api = {
   getAdminDashboard: (params="")  => req(`/admin/dashboard${params}`),
   getAdminSettings:  ()           => req("/admin/settings"),
   updateFeePercent:  (feePercent) => req("/admin/settings/fee", { method: "PUT", body: { feePercent } }),
+  updateKesRate:     (kesPerUsd)  => req("/admin/settings/rate", { method: "PUT", body: { kesPerUsd } }),
   getPayoutQueue:    ()           => req("/admin/payout-queue"),
   markPaid:          (body)       => req("/admin/payouts/mark-paid", { method: "POST", body }),
   getPayoutHistory:  ()           => req("/admin/payouts/history"),

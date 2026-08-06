@@ -315,6 +315,7 @@ model FooterSubscriber {
 model PlatformSettings {
   id         Int   @id @default(1)            // singleton row
   feePercent Float @default(8)
+  kesPerUsd  Float @default(130)              // USD→KES rate used for every conversion, platform-wide
 
   @@map("platform_settings")
 }
