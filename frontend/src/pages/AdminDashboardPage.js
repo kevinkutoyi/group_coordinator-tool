@@ -1969,7 +1969,7 @@ const EMAIL_TYPE_LABELS = {
   payment_reminder: "Payment Reminder", expired_renewal_reminder: "Expired Renewal Reminder",
   group_message: "Coordinator Message", blog_notification: "Blog Notification", group_review: "Group Review Decision",
   admin_direct: "Admin Direct Email", renewal_confirm: "Renewal Confirmed", group_approved: "Group Approved",
-  group_rejected: "Group Rejected", generic: "Other",
+  group_rejected: "Group Rejected", generic: "Other", backfilled: "Historical (Imported)",
 };
 
 const EMAIL_STATUS_STYLE = {
