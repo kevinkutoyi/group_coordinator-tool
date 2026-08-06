@@ -72,6 +72,7 @@ export const api = {
   suspendUser:  (id)         => req(`/admin/users/${id}/suspend`, { method: "PATCH" }),
   getPendingPayments:   ()  => req(`/admin/pending-payments`),
   remindPendingPayment: (id) => req(`/admin/pending-payments/${id}/remind`, { method: "POST" }),
+  getConfirmedPayments: ()  => req(`/admin/confirmed-payments`),
   unsuspendUser:        (id) => req(`/admin/users/${id}/unsuspend`, { method: "PATCH" }),
   promoteToModerator:   (id) => req(`/admin/users/${id}/promote-to-moderator`, { method: "PATCH" }),
 

@@ -89,6 +89,8 @@ export default function AdminDashboardPage({ navigate }) {
   // Search + pending payments
   const [searchEmail, setSearchEmail]         = useState("");
   const [pendingPayments, setPendingPayments] = useState([]);
+  const [confirmedPayments, setConfirmedPayments] = useState([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
 
   // Expired subscriptions
   const [expiredMembers, setExpiredMembers] = useState([]);
@@ -141,6 +143,10 @@ export default function AdminDashboardPage({ navigate }) {
     if (!session.isSuperAdmin()) return;
     loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (tab === "pending-payments") loadPayments();
+  }, [tab]);
 
   async function promote(uid) {
     setBusy(b => ({ ...b, [uid]: true }));
@@ -215,6 +221,17 @@ export default function AdminDashboardPage({ navigate }) {
     try { const data = await api.getExpiredMembers(); setExpiredMembers(data); }
     catch (err) { setExpiredMsg({ type: "err", text: err.message }); }
     finally { setExpiredLoading(false); }
+  }
+
+  async function loadPayments() {
+    setPaymentsLoading(true);
+    try {
+      const [pending, confirmed] = await Promise.all([
+        api.getPendingPayments(), api.getConfirmedPayments(),
+      ]);
+      setPendingPayments(pending); setConfirmedPayments(confirmed);
+    } catch (err) { setMsg({ type:"err", text: err.message }); }
+    finally { setPaymentsLoading(false); }
   }
 
   async function remindExpiredAll() {
@@ -299,6 +316,11 @@ export default function AdminDashboardPage({ navigate }) {
   const filteredPendingPayments = pendingPayments.filter(pp =>
     !searchEmail.trim() || pp.email.toLowerCase().includes(searchEmail.toLowerCase().trim()) || pp.name?.toLowerCase().includes(searchEmail.toLowerCase().trim())
   );
+
+  const filteredConfirmedPayments = confirmedPayments.filter(cp =>
+    !searchEmail.trim() || cp.email.toLowerCase().includes(searchEmail.toLowerCase().trim()) || cp.memberName?.toLowerCase().includes(searchEmail.toLowerCase().trim())
+  );
+  const confirmedTotalUSD = filteredConfirmedPayments.reduce((a, cp) => a + (cp.amount || 0), 0);
 
   const statusColor = { active:"var(--success)", pending:"var(--warning)", suspended:"var(--error)" };
   const roleBg = { customer:"rgba(74,222,128,0.12)", moderator:"rgba(124,106,255,0.12)", superadmin:"rgba(255,106,142,0.12)" };
@@ -451,54 +473,97 @@ export default function AdminDashboardPage({ navigate }) {
           />
           {searchEmail.trim() && (
             <p style={{ fontSize:"0.78rem", color:"var(--muted)", margin:"6px 4px 0 4px" }}>
-              Filtering by &ldquo;{searchEmail}&rdquo; · {tab === "pending-payments" ? `${filteredPendingPayments.length} pending payment${filteredPendingPayments.length !== 1 ? "s" : ""}` : `${filtered.length} user${filtered.length !== 1 ? "s" : ""}`}
+              Filtering by &ldquo;{searchEmail}&rdquo; · {tab === "pending-payments" ? `${filteredConfirmedPayments.length} confirmed · ${filteredPendingPayments.length} pending` : `${filtered.length} user${filtered.length !== 1 ? "s" : ""}`}
               <button className="btn btn-sm btn-outline" style={{ marginLeft:10, padding:"2px 10px" }} onClick={() => setSearchEmail("")}>Clear</button>
             </p>
           )}
         </div>
       )}
 
-      {/* Pending Payments tab */}
+      {/* Payments tab — Confirmed / Pending, two columns */}
       {tab === "pending-payments" && (
-        <div className="card">
-          <h2 className="section-h2" style={{ marginBottom:8 }}>💳 Pending Payments</h2>
-          <p style={{ color:"var(--muted)", fontSize:"0.85rem", marginBottom:18 }}>
-            Members who joined a group but haven&rsquo;t completed payment. Click <strong>🔔 Send Reminder</strong> to nudge them with a personalised email.
-          </p>
-          {filteredPendingPayments.length === 0 ? (
-            <div className="empty-state">
-              <div className="emoji">✅</div>
-              <h3>{searchEmail.trim() ? "No matches" : "No pending payments"}</h3>
-              <p>{searchEmail.trim() ? "Try a different search." : "All joiners have either paid or expired out."}</p>
-            </div>
-          ) : filteredPendingPayments.map(pp => (
-            <div key={pp.id} className="card" style={{ marginBottom:12, padding:16 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                <div className="user-av">{pp.name?.[0]?.toUpperCase()}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontWeight:600 }}>{pp.name}</div>
-                  <div style={{ fontSize:"0.78rem", color:"var(--muted)", wordBreak:"break-all" }}>{pp.email}</div>
-                  <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:4 }}>
-                    {pp.group.serviceIcon} <strong style={{ color:"var(--text)" }}>{pp.group.serviceName} — {pp.group.planName}</strong>
-                    {" · "}${pp.memberPays}{pp.durationLabel ? ` · ${pp.durationLabel}` : ""}
+        paymentsLoading ? <div style={{textAlign:"center",padding:60}}><span className="spinner"/></div> : (
+        <div className="admin-payments-cols">
+          {/* Confirmed Payments */}
+          <div className="card">
+            <h2 className="section-h2" style={{ marginBottom:4 }}>✅ Confirmed Payments</h2>
+            <p style={{ color:"var(--muted)", fontSize:"0.85rem", marginBottom:6 }}>
+              Completed transactions. These add up to the platform&rsquo;s Total Revenue.
+            </p>
+            <p style={{ fontSize:"0.9rem", fontWeight:700, color:"var(--success)", marginBottom:16 }}>
+              KES {kes(confirmedTotalUSD)} · ${confirmedTotalUSD.toFixed(2)} total
+            </p>
+            {filteredConfirmedPayments.length === 0 ? (
+              <div className="empty-state">
+                <div className="emoji">🧾</div>
+                <h3>{searchEmail.trim() ? "No matches" : "No confirmed payments yet"}</h3>
+                <p>{searchEmail.trim() ? "Try a different search." : "Completed payments will show up here."}</p>
+              </div>
+            ) : filteredConfirmedPayments.map(cp => (
+              <div key={cp.id} className="card" style={{ marginBottom:12, padding:16 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                  <div className="user-av">{cp.memberName?.[0]?.toUpperCase()}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:600 }}>{cp.memberName}</div>
+                    <div style={{ fontSize:"0.78rem", color:"var(--muted)", wordBreak:"break-all" }}>{cp.email}</div>
+                    <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:4 }}>
+                      {cp.group?.serviceIcon} <strong style={{ color:"var(--text)" }}>{cp.group?.serviceName} — {cp.group?.planName}</strong>
+                      {cp.months ? ` · ${cp.months}mo` : ""}
+                    </div>
+                    <div style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:2 }}>
+                      {cp.confirmedAt ? new Date(cp.confirmedAt).toLocaleDateString() : ""}
+                    </div>
                   </div>
-                  <div style={{ fontSize:"0.74rem", color: pp.daysWaiting >= 3 ? "var(--error)" : "var(--warning)", marginTop:2 }}>
-                    ⏳ Pending {pp.daysWaiting} day{pp.daysWaiting !== 1 ? "s" : ""}
-                    {" · "}joined {new Date(pp.joinedAt).toLocaleDateString()}
+                  <div style={{ fontWeight:700, color:"var(--success)", whiteSpace:"nowrap" }}>
+                    KES {kes(cp.amount)} · ${(cp.amount || 0).toFixed(2)}
                   </div>
                 </div>
-                <button
-                  className="btn btn-sm btn-primary"
-                  disabled={busy[pp.id]}
-                  onClick={() => sendPaymentReminder(pp.id)}
-                  style={{ whiteSpace:"nowrap" }}
-                >
-                  {busy[pp.id] ? <><span className="spinner"/> Sending…</> : "🔔 Send Reminder"}
-                </button>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          {/* Pending Payments */}
+          <div className="card">
+            <h2 className="section-h2" style={{ marginBottom:8 }}>💳 Pending Payments</h2>
+            <p style={{ color:"var(--muted)", fontSize:"0.85rem", marginBottom:18 }}>
+              Members who joined a group but haven&rsquo;t completed payment. Click <strong>🔔 Send Reminder</strong> to nudge them with a personalised email.
+            </p>
+            {filteredPendingPayments.length === 0 ? (
+              <div className="empty-state">
+                <div className="emoji">✅</div>
+                <h3>{searchEmail.trim() ? "No matches" : "No pending payments"}</h3>
+                <p>{searchEmail.trim() ? "Try a different search." : "All joiners have either paid or expired out."}</p>
+              </div>
+            ) : filteredPendingPayments.map(pp => (
+              <div key={pp.id} className="card" style={{ marginBottom:12, padding:16 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                  <div className="user-av">{pp.name?.[0]?.toUpperCase()}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:600 }}>{pp.name}</div>
+                    <div style={{ fontSize:"0.78rem", color:"var(--muted)", wordBreak:"break-all" }}>{pp.email}</div>
+                    <div style={{ fontSize:"0.78rem", color:"var(--muted)", marginTop:4 }}>
+                      {pp.group.serviceIcon} <strong style={{ color:"var(--text)" }}>{pp.group.serviceName} — {pp.group.planName}</strong>
+                      {" · "}${pp.memberPays}{pp.durationLabel ? ` · ${pp.durationLabel}` : ""}
+                    </div>
+                    <div style={{ fontSize:"0.74rem", color: pp.daysWaiting >= 3 ? "var(--error)" : "var(--warning)", marginTop:2 }}>
+                      ⏳ Pending {pp.daysWaiting} day{pp.daysWaiting !== 1 ? "s" : ""}
+                      {" · "}joined {new Date(pp.joinedAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    disabled={busy[pp.id]}
+                    onClick={() => sendPaymentReminder(pp.id)}
+                    style={{ whiteSpace:"nowrap" }}
+                  >
+                    {busy[pp.id] ? <><span className="spinner"/> Sending…</> : "🔔 Send Reminder"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+        )
       )}
 
       {/* User list */}

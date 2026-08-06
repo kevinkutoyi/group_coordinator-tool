@@ -421,6 +421,22 @@ app.post("/api/admin/pending-payments/:memberId/remind", requireSuperAdmin, asyn
   }
 });
 
+app.get("/api/admin/confirmed-payments", requireSuperAdmin, async (req, res) => {
+  const payments = await prisma.payment.findMany({
+    where: { confirmedAt: { not: null } },
+    include: {
+      group: { select: { id: true, serviceName: true, serviceIcon: true, planName: true, organizerName: true } },
+      user:  { select: { email: true } },
+    },
+    orderBy: { confirmedAt: "desc" },
+  });
+  res.json(payments.map(p => ({
+    id: p.id, memberName: p.memberName, email: p.user?.email || "",
+    amount: p.amount, months: p.months, confirmedAt: p.confirmedAt,
+    group: p.group,
+  })));
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  SERVICES & DURATIONS
 // ═══════════════════════════════════════════════════════════════════════════

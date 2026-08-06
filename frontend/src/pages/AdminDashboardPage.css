@@ -127,6 +127,9 @@
 .admin-kpi-delta { font-size: 0.78rem; margin-top: 6px; color: var(--muted); }
 .admin-kpi-delta.up { color: var(--success); font-weight: 600; }
 
+.admin-payments-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .admin-payments-cols { grid-template-columns: 1fr; } }
+
 .admin-kpi-combo { grid-column: span 2; display: flex; flex-direction: column; justify-content: center; padding: 10px 20px; }
 .admin-kpi-combo-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; }
 .admin-kpi-combo-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
