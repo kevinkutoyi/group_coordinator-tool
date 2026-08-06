@@ -71,52 +71,53 @@ export default function ModeratorDashboardPage({ navigate }) {
       {/* KPI cards */}
       <div className="mod-kpis">
         <div className="mod-kpi-card">
-          <div className="mod-kpi-icon">👥</div>
-          <div className="mod-kpi-val">{summary.totalMembers}</div>
+          <div className="mod-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>👥</div>
           <div className="mod-kpi-label">Total Members</div>
+          <div className="mod-kpi-val">{summary.totalMembers}</div>
         </div>
         <div className="mod-kpi-card">
-          <div className="mod-kpi-icon">📋</div>
-          <div className="mod-kpi-val">{summary.activeGroups}<span>/{summary.totalGroups}</span></div>
+          <div className="mod-kpi-icon" style={{ background:"rgba(59,130,246,0.14)", color:"#3b82f6" }}>📋</div>
           <div className="mod-kpi-label">Active Groups</div>
-        </div>
-        <div className="mod-kpi-card mod-kpi-earn">
-          <div className="mod-kpi-icon">💰</div>
-          <div className="mod-kpi-val" style={{ color:"var(--accent3)", whiteSpace:"nowrap" }}>
-            KES {kes(summary.totalOwed)}
-          </div>
-          <div className="mod-kpi-label">Total Owed to You · ${(summary.totalOwed ?? 0).toFixed(2)}</div>
+          <div className="mod-kpi-val">{summary.activeGroups}<span> / {summary.totalGroups}</span></div>
         </div>
         <div className="mod-kpi-card">
-          <div className="mod-kpi-icon">✅</div>
-          <div className="mod-kpi-val" style={{ color:"var(--success)", whiteSpace:"nowrap" }}>
-            KES {kes(summary.totalPaid)}
-          </div>
-          <div className="mod-kpi-label">Already Paid Out · ${(summary.totalPaid ?? 0).toFixed(2)}</div>
+          <div className="mod-kpi-icon" style={{ background:"rgba(23,166,115,0.14)", color:"var(--accent3)" }}>💰</div>
+          <div className="mod-kpi-label">Total Owed to You</div>
+          <div className="mod-kpi-val" style={{ color:"var(--accent3)", whiteSpace:"nowrap" }}>KES {kes(summary.totalOwed)}</div>
+          <div className="mod-kpi-sub">${(summary.totalOwed ?? 0).toFixed(2)}</div>
+        </div>
+        <div className="mod-kpi-card">
+          <div className="mod-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>✅</div>
+          <div className="mod-kpi-label">Already Paid Out</div>
+          <div className="mod-kpi-val" style={{ color:"var(--success)", whiteSpace:"nowrap" }}>KES {kes(summary.totalPaid)}</div>
+          <div className="mod-kpi-sub">${(summary.totalPaid ?? 0).toFixed(2)}</div>
         </div>
         {summary.totalPending > 0 && (
-          <div className="mod-kpi-card mod-kpi-warn">
-            <div className="mod-kpi-icon">🕐</div>
-            <div className="mod-kpi-val" style={{ color:"var(--warning)", whiteSpace:"nowrap" }}>
-              KES {kes(summary.totalPending)}
-            </div>
-            <div className="mod-kpi-label">Pending Next Payout · ${(summary.totalPending ?? 0).toFixed(2)}</div>
+          <div className="mod-kpi-card">
+            <div className="mod-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🕐</div>
+            <div className="mod-kpi-label">Pending Next Payout</div>
+            <div className="mod-kpi-val" style={{ color:"var(--warning)", whiteSpace:"nowrap" }}>KES {kes(summary.totalPending)}</div>
+            <div className="mod-kpi-sub">${(summary.totalPending ?? 0).toFixed(2)}</div>
           </div>
         )}
         {summary.pendingReview > 0 && (
-          <div className="mod-kpi-card mod-kpi-warn">
-            <div className="mod-kpi-icon">⏳</div>
-            <div className="mod-kpi-val" style={{ color:"var(--warning)" }}>{summary.pendingReview}</div>
+          <div className="mod-kpi-card">
+            <div className="mod-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>⏳</div>
             <div className="mod-kpi-label">Groups Awaiting Review</div>
+            <div className="mod-kpi-val" style={{ color:"var(--warning)" }}>{summary.pendingReview}</div>
           </div>
         )}
         {summary.totalProfit != null && (
           <div className="mod-kpi-card">
-            <div className="mod-kpi-icon">📈</div>
+            <div className="mod-kpi-icon" style={{
+              background: summary.totalProfit >= 0 ? "rgba(22,163,74,0.14)" : "rgba(220,38,38,0.14)",
+              color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)",
+            }}>📈</div>
+            <div className="mod-kpi-label">Est. Monthly Profit</div>
             <div className="mod-kpi-val" style={{ color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)", whiteSpace:"nowrap" }}>
               {summary.totalProfit < 0 ? "-" : ""}KES {kes(Math.abs(summary.totalProfit))}
             </div>
-            <div className="mod-kpi-label">Est. Monthly Profit · ${summary.totalProfit.toFixed(2)}</div>
+            <div className="mod-kpi-sub">${summary.totalProfit.toFixed(2)}</div>
           </div>
         )}
       </div>

@@ -25,27 +25,32 @@
 .mod-setup-banner div { flex:1; color: var(--text); }
 .mod-setup-banner strong { color: #fbbf24; }
 
-/* KPIs */
+/* KPIs — same card anatomy as the admin Platform Earnings cards
+   (icon badge, label, big value, small sub-line), kept on this page's
+   own dark theme instead of the admin light-theme override. */
 .mod-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
 }
 .mod-kpi-card {
   background: var(--card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 18px 16px;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  text-align: center; transition: border-color 0.2s;
+  border-radius: 14px; padding: 18px 20px;
+  transition: border-color 0.2s;
+  overflow: hidden;
 }
 .mod-kpi-card:hover { border-color: var(--border-hover); }
-.mod-kpi-earn { border-color: rgba(106,255,203,0.2); background: rgba(106,255,203,0.03); }
-.mod-kpi-warn { border-color: rgba(251,191,36,0.2); background: rgba(251,191,36,0.03); }
-.mod-kpi-icon { font-size: 1.4rem; }
-.mod-kpi-val {
-  font-family: var(--font-head); font-size: 1.8rem; font-weight: 800; line-height: 1;
+.mod-kpi-icon {
+  width: 42px; height: 42px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; margin-bottom: 12px;
 }
-.mod-kpi-val span { font-size: 1rem; color: var(--muted); font-family: var(--font-body); }
-.mod-kpi-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.mod-kpi-label { font-size: 0.84rem; color: var(--muted); margin-bottom: 4px; }
+.mod-kpi-val {
+  font-family: var(--font-head); font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2;
+}
+.mod-kpi-val span { font-size: 0.95rem; color: var(--muted); font-family: var(--font-body); font-weight: 500; }
+.mod-kpi-sub { font-size: 0.78rem; margin-top: 6px; color: var(--muted); }
 
 /* Earnings breakdown */
 .mod-earnings-card { }
