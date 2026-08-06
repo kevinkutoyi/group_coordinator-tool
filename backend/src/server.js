@@ -478,8 +478,13 @@ function maskEmail(email) {
 
 // Renew date + subscription cost are sensitive financial info — only the
 // group's own organizer (moderator) or a superadmin should ever see them.
-function computeGroupFinancials(group) {
-  const feePercent   = group.feePercent ?? 8;
+//
+// liveFeePercent is the CURRENT platform rate (from Settings), not
+// group.feePercent (a snapshot frozen at group-creation time) — this
+// projection should track the same rate real payments actually use,
+// otherwise it silently drifts out of sync after any fee change.
+function computeGroupFinancials(group, liveFeePercent) {
+  const feePercent   = liveFeePercent ?? group.feePercent ?? 8;
   const confirmed    = (group.members || []).filter(m => m.role !== "organizer" && m.paymentStatus === "confirmed").length;
   const monthlyRevenue = +(confirmed * (group.pricePerSlot || 0) * (1 - feePercent / 100)).toFixed(2);
   const subscriptionCost = group.subscriptionCost || 0;
@@ -487,10 +492,10 @@ function computeGroupFinancials(group) {
   return { monthlyRevenue, profit };
 }
 
-function sanitizeGroupFinancials(group, viewerRole, viewerId) {
+function sanitizeGroupFinancials(group, viewerRole, viewerId, liveFeePercent) {
   const canSeeFinancials = viewerRole === "superadmin" || (viewerRole === "moderator" && viewerId === group.organizerId);
   if (canSeeFinancials) {
-    const { monthlyRevenue, profit } = computeGroupFinancials(group);
+    const { monthlyRevenue, profit } = computeGroupFinancials(group, liveFeePercent);
     return { ...group, monthlyRevenue, profit };
   }
   // Payment log (per-member amounts, platform fee, moderator payout) is
@@ -575,6 +580,7 @@ app.get("/api/groups", async (req, res) => {
     : { reviewStatus: "approved" };
 
   const groups = await prisma.group.findMany({ where, include: { members: true, payments: true }, orderBy: { createdAt: "desc" } });
+  const liveFeePercent = (viewerRole === "superadmin" || viewerRole === "moderator") ? await getPlatformFeePercent() : null;
   res.json(groups.map(g => {
     const confirmed = g.members.filter(m => m.role !== "organizer" && m.paymentStatus === "confirmed");
     const sortedConfirmed = confirmed.slice().sort((a, b) =>
@@ -593,7 +599,7 @@ app.get("/api/groups", async (req, res) => {
         : null,
       members: g.members.map(({ email, ...m }) => m),
     };
-    return sanitizeGroupFinancials(base, viewerRole, viewerId);
+    return sanitizeGroupFinancials(base, viewerRole, viewerId, liveFeePercent);
   }));
 });
 
@@ -611,7 +617,8 @@ app.get("/api/groups/:id", async (req, res) => {
   if (!isApproved && !isSuperAdmin && !isOwner)
     return res.status(404).json({ error: "Group not found" });
 
-  res.json(sanitizeGroupFinancials(group, viewerRole, viewerId));
+  const liveFeePercent = (isSuperAdmin || isOwner) ? await getPlatformFeePercent() : null;
+  res.json(sanitizeGroupFinancials(group, viewerRole, viewerId, liveFeePercent));
 });
 
 app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res) => {
@@ -1551,7 +1558,7 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), async (req, res) =
     const modOwed        = g.payments.reduce((a, p) => a + p.moderatorOwed, 0);
     const modPaid        = g.payments.filter(p => p.payoutStatus === "paid").reduce((a, p) => a + p.moderatorOwed, 0);
     const modPending     = g.payments.filter(p => p.payoutStatus === "pending").reduce((a, p) => a + p.moderatorOwed, 0);
-    const { monthlyRevenue, profit } = computeGroupFinancials(g);
+    const { monthlyRevenue, profit } = computeGroupFinancials(g, feePercent);
     return { id: g.id, serviceName: g.serviceName, serviceIcon: g.serviceIcon, planName: g.planName, status: g.status, reviewStatus: g.reviewStatus, billingCycle: g.billingCycle, maxSlots: g.maxSlots, confirmedMembers: confirmed, totalSlots: g.maxSlots, totalCollected: +totalCollected.toFixed(2), platformFees: +platformFees.toFixed(2), modOwed: +modOwed.toFixed(2), modPaid: +modPaid.toFixed(2), modPending: +modPending.toFixed(2), subscriptionCost: g.subscriptionCost || 0, monthlyRevenue, profit, createdAt: g.createdAt };
   });
 
