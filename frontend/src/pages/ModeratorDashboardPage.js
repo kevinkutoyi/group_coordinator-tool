@@ -106,19 +106,6 @@ export default function ModeratorDashboardPage({ navigate }) {
             <div className="mod-kpi-val" style={{ color:"var(--warning)" }}>{summary.pendingReview}</div>
           </div>
         )}
-        {summary.totalProfit != null && (
-          <div className="mod-kpi-card">
-            <div className="mod-kpi-icon" style={{
-              background: summary.totalProfit >= 0 ? "rgba(22,163,74,0.14)" : "rgba(220,38,38,0.14)",
-              color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)",
-            }}>📈</div>
-            <div className="mod-kpi-label">Est. Monthly Profit</div>
-            <div className="mod-kpi-val" style={{ color: summary.totalProfit >= 0 ? "var(--success)" : "var(--error)", whiteSpace:"nowrap" }}>
-              {summary.totalProfit < 0 ? "-" : ""}KES {kes(Math.abs(summary.totalProfit))}
-            </div>
-            <div className="mod-kpi-sub">${summary.totalProfit.toFixed(2)}</div>
-          </div>
-        )}
       </div>
 
       {/* Earnings breakdown card */}
