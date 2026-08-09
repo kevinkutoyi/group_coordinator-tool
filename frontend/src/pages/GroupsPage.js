@@ -13,6 +13,8 @@ const CATEGORY_ORDER = [
   "Social Media Accounts",
   "Design & Creativity",
   "VPNs & Proxies",
+  "E-books and Manuals",
+  "Tech Help & Services",
 ];
 const CATEGORY_ICON = {
   [ALL_LISTINGS]: "🗂️",
@@ -21,6 +23,8 @@ const CATEGORY_ICON = {
   "Social Media Accounts": "👥",
   "Design & Creativity": "🎨",
   "VPNs & Proxies": "🛡️",
+  "E-books and Manuals": "📚",
+  "Tech Help & Services": "🛠️",
 };
 
 export default function GroupsPage({ navigate }) {

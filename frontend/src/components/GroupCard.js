@@ -25,6 +25,12 @@ const SERVICE_GRADIENTS = {
   canva:    ["#8B3DFF","#5a1fc9"],
   revoicer: ["#FF7A00","#c25b00"],
   nordvpn:  ["#4687F4","#1c4faa"],
+  ebooks:          ["#8B5E34","#5e3e21"],
+  "howto-guides":  ["#3D8B6E","#28604a"],
+  "tech-setup":        ["#3B82F6","#1e56b3"],
+  "tech-design":       ["#EC4899","#a92a6b"],
+  "tech-network":      ["#14B8A6","#0c8074"],
+  "tech-troubleshoot": ["#F97316","#c2560a"],
 };
 
 export default function GroupCard({ group, onClick }) {
@@ -121,8 +127,14 @@ export default function GroupCard({ group, onClick }) {
             </div>
           </div>
           <div className="gc-price-meta">
-            <span className="gc-full-price">${group.totalPrice}/mo full plan</span>
-            <span className="gc-save-badge">Save ${(group.totalPrice - group.pricePerSlot).toFixed(2)}</span>
+            {group.maxSlots > 1 ? (
+              <>
+                <span className="gc-full-price">${group.totalPrice}/mo full plan</span>
+                <span className="gc-save-badge">Save ${(group.totalPrice - group.pricePerSlot).toFixed(2)}</span>
+              </>
+            ) : (
+              <span className="gc-save-badge">One-time service</span>
+            )}
           </div>
         </div>
 

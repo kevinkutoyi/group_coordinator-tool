@@ -122,7 +122,7 @@ export default function CreateGroupPage({ navigate }) {
               </div>
               <div className="form-group">
                 <label>Max Slots</label>
-                <input type="number" min="2" max={selectedPlan.maxSlots} required value={form.maxSlots} onChange={set("maxSlots")} />
+                <input type="number" min="1" max={selectedPlan.maxSlots} required value={form.maxSlots} onChange={set("maxSlots")} />
               </div>
             </div>
           )}

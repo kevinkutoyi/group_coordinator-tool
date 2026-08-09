@@ -94,7 +94,8 @@ const requireSuperAdmin = requireRole("superadmin");
 // `category` groups services for the "Browse by Category" cards on the
 // frontend Browse Groups page (see CATEGORY_ORDER in GroupsPage.js) — use
 // one of: "Streaming & Entertainment", "AI & Productivity",
-// "Social Media Accounts", "Design & Creativity", "VPNs & Proxies".
+// "Social Media Accounts", "Design & Creativity", "VPNs & Proxies",
+// "E-books and Manuals", "Tech Help & Services".
 const SERVICES = [
   // ── Streaming & Entertainment ──────────────────────────────────────────
   { id: "spotify",  name: "Spotify",         icon: "🎵", category: "Streaming & Entertainment",
@@ -138,6 +139,27 @@ const SERVICES = [
   // ── VPNs & Proxies ──────────────────────────────────────────────────────
   { id: "nordvpn",  name: "NordVPN",          icon: "🛡️", category: "VPNs & Proxies",
     plans: [{ name: "Complete", price: 14.99, maxSlots: 4 }] },
+
+  // ── E-books and Manuals ─────────────────────────────────────────────────
+  // Same "pool money, unlock the shared file" model as everything else —
+  // the download link/notes go in the group's Credential Vault after payment.
+  { id: "ebooks",       name: "E-books Bundle",   icon: "📚", category: "E-books and Manuals",
+    plans: [{ name: "Digital Library Bundle", price: 15.00, maxSlots: 5 }] },
+  { id: "howto-guides", name: "How-To Guides",    icon: "📖", category: "E-books and Manuals",
+    plans: [{ name: "Guide Pack", price: 10.00, maxSlots: 5 }] },
+
+  // ── Tech Help & Services ────────────────────────────────────────────────
+  // Not a cost-split — each of these is a one-off job. maxSlots is fixed at
+  // 1 so it's a single customer paying, then the moderator's contact info /
+  // scheduling details go in the Credential Vault to arrange the actual work.
+  { id: "tech-setup",        name: "Setup & Installation", icon: "🖥️", category: "Tech Help & Services",
+    plans: [{ name: "Quick Setup", price: 15.00, maxSlots: 1 }] },
+  { id: "tech-design",       name: "Design Services",      icon: "🖌️", category: "Tech Help & Services",
+    plans: [{ name: "Design Job", price: 25.00, maxSlots: 1 }] },
+  { id: "tech-network",      name: "Network & Internet",   icon: "📶", category: "Tech Help & Services",
+    plans: [{ name: "Network Setup", price: 20.00, maxSlots: 1 }] },
+  { id: "tech-troubleshoot", name: "Troubleshooting",      icon: "🔧", category: "Tech Help & Services",
+    plans: [{ name: "Quick Fix", price: 12.00, maxSlots: 1 }] },
 ];
 
 const SUBSCRIPTION_DURATIONS = [
