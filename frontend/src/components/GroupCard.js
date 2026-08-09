@@ -10,14 +10,21 @@ const CYCLE_LABELS = {
 };
 
 const SERVICE_GRADIENTS = {
-  spotify: ["#1DB954","#158a3e"],
-  netflix: ["#E50914","#8b0000"],
-  chatgpt: ["#10a37f","#0d7a60"],
-  claude:  ["#7c6aff","#5548cc"],
-  youtube: ["#FF0000","#cc0000"],
-  apple:   ["#555","#222"],
-  disney:  ["#113ccf","#0a2596"],
-  hbo:     ["#5822B4","#3d1880"],
+  spotify:  ["#1DB954","#158a3e"],
+  netflix:  ["#E50914","#8b0000"],
+  chatgpt:  ["#10a37f","#0d7a60"],
+  claude:   ["#7c6aff","#5548cc"],
+  youtube:  ["#FF0000","#cc0000"],
+  apple:    ["#555","#222"],
+  disney:   ["#113ccf","#0a2596"],
+  hbo:      ["#5822B4","#3d1880"],
+  gemini:   ["#4285F4","#1a56c4"],
+  x:        ["#333","#000"],
+  facebook: ["#1877F2","#0e52b3"],
+  binance:  ["#F0B90B","#b88a00"],
+  canva:    ["#8B3DFF","#5a1fc9"],
+  revoicer: ["#FF7A00","#c25b00"],
+  nordvpn:  ["#4687F4","#1c4faa"],
 };
 
 export default function GroupCard({ group, onClick }) {

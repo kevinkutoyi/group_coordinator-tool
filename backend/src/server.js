@@ -91,26 +91,53 @@ function requireRole(...roles) {
 const requireSuperAdmin = requireRole("superadmin");
 
 // ── Services Catalogue ────────────────────────────────────────────────────
+// `category` groups services for the "Browse by Category" cards on the
+// frontend Browse Groups page (see CATEGORY_ORDER in GroupsPage.js) — use
+// one of: "Streaming & Entertainment", "AI & Productivity",
+// "Social Media Accounts", "Design & Creativity", "VPNs & Proxies".
 const SERVICES = [
-  { id: "spotify",  name: "Spotify",         icon: "🎵",
+  // ── Streaming & Entertainment ──────────────────────────────────────────
+  { id: "spotify",  name: "Spotify",         icon: "🎵", category: "Streaming & Entertainment",
     plans: [{ name: "Premium Duo", price: 16.99, maxSlots: 2 },
             { name: "Premium Family", price: 17.99, maxSlots: 6 }] },
-  { id: "netflix",  name: "Netflix",          icon: "🎬",
+  { id: "netflix",  name: "Netflix",          icon: "🎬", category: "Streaming & Entertainment",
     plans: [{ name: "Standard", price: 15.49, maxSlots: 2 },
             { name: "Premium",  price: 22.99, maxSlots: 4 }] },
-  { id: "chatgpt",  name: "ChatGPT Plus",     icon: "🤖",
-    plans: [{ name: "Family Plan", price: 30.00, maxSlots: 5 }] },
-  { id: "claude",   name: "Claude AI",        icon: "✨",
-    plans: [{ name: "Claude Max 5x", price: 100.00, maxSlots: 5 }] },
-  { id: "youtube",  name: "YouTube Premium",  icon: "▶️",
+  { id: "youtube",  name: "YouTube Premium",  icon: "▶️", category: "Streaming & Entertainment",
     plans: [{ name: "Family Plan", price: 22.99, maxSlots: 6 }] },
-  { id: "apple",    name: "Apple One",        icon: "🍎",
+  { id: "apple",    name: "Apple One",        icon: "🍎", category: "Streaming & Entertainment",
     plans: [{ name: "Family", price: 25.95, maxSlots: 6 }] },
-  { id: "disney",   name: "Disney+",          icon: "🏰",
+  { id: "disney",   name: "Disney+",          icon: "🏰", category: "Streaming & Entertainment",
     plans: [{ name: "Standard", price: 7.99, maxSlots: 4 },
             { name: "Premium",  price: 13.99, maxSlots: 4 }] },
-  { id: "hbo",      name: "Max (HBO)",        icon: "👑",
+  { id: "hbo",      name: "Max (HBO)",        icon: "👑", category: "Streaming & Entertainment",
     plans: [{ name: "Ultimate", price: 20.99, maxSlots: 4 }] },
+
+  // ── AI & Productivity ──────────────────────────────────────────────────
+  { id: "chatgpt",  name: "ChatGPT Plus",     icon: "🤖", category: "AI & Productivity",
+    plans: [{ name: "Family Plan", price: 30.00, maxSlots: 5 }] },
+  { id: "claude",   name: "Claude AI",        icon: "✨", category: "AI & Productivity",
+    plans: [{ name: "Claude Max 5x", price: 100.00, maxSlots: 5 }] },
+  { id: "gemini",   name: "Gemini (Google AI Pro)", icon: "♊", category: "AI & Productivity",
+    plans: [{ name: "AI Pro", price: 19.99, maxSlots: 3 }] },
+
+  // ── Social Media Accounts ──────────────────────────────────────────────
+  { id: "x",        name: "X Premium+",       icon: "𝕏", category: "Social Media Accounts",
+    plans: [{ name: "Premium+", price: 40.00, maxSlots: 3 }] },
+  { id: "facebook", name: "Meta Verified",    icon: "📘", category: "Social Media Accounts",
+    plans: [{ name: "Verified", price: 14.99, maxSlots: 2 }] },
+  { id: "binance",  name: "Binance",          icon: "🔶", category: "Social Media Accounts",
+    plans: [{ name: "Account", price: 20.00, maxSlots: 2 }] },
+
+  // ── Design & Creativity ─────────────────────────────────────────────────
+  { id: "canva",    name: "Canva",            icon: "🎨", category: "Design & Creativity",
+    plans: [{ name: "Business", price: 25.00, maxSlots: 5 }] },
+  { id: "revoicer", name: "Revoicer",         icon: "🎙️", category: "Design & Creativity",
+    plans: [{ name: "PRO", price: 47.00, maxSlots: 3 }] },
+
+  // ── VPNs & Proxies ──────────────────────────────────────────────────────
+  { id: "nordvpn",  name: "NordVPN",          icon: "🛡️", category: "VPNs & Proxies",
+    plans: [{ name: "Complete", price: 14.99, maxSlots: 4 }] },
 ];
 
 const SUBSCRIPTION_DURATIONS = [

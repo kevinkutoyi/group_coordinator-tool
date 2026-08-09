@@ -2,31 +2,59 @@ import React, { useEffect, useState } from "react";
 import GroupCard from "../components/GroupCard";
 import { api, session } from "../api";
 
+// Fixed display order for category cards — matches the `category` field set
+// on each entry in the backend SERVICES catalog (server.js).
+const CATEGORY_ORDER = [
+  "Streaming & Entertainment",
+  "AI & Productivity",
+  "Social Media Accounts",
+  "Design & Creativity",
+  "VPNs & Proxies",
+];
+const CATEGORY_ICON = {
+  "Streaming & Entertainment": "🎬",
+  "AI & Productivity": "🤖",
+  "Social Media Accounts": "👥",
+  "Design & Creativity": "🎨",
+  "VPNs & Proxies": "🛡️",
+};
+
 export default function GroupsPage({ navigate }) {
-  const [groups, setGroups]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter]   = useState("all");
-  const [search, setSearch]   = useState("");
+  const [groups, setGroups]     = useState([]);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [filter, setFilter]     = useState("all");
+  const [search, setSearch]     = useState("");
+  const [activeCategory, setActiveCategory] = useState(null);
 
   useEffect(() => {
-    api.getGroups()
-      .then(setGroups)
+    Promise.all([api.getGroups(), api.getServices()])
+      .then(([g, s]) => { setGroups(g); setServices(s); })
       .catch(() => alert("Could not load groups. Is the backend running?"))
       .finally(() => setLoading(false));
   }, []);
 
   const canCreate = ["moderator","superadmin"].includes(session.getRole());
 
+  // Group the services catalog into categories, preserving CATEGORY_ORDER and
+  // only showing categories that actually have services registered for them.
+  const categories = CATEGORY_ORDER
+    .map(name => ({ name, services: services.filter(s => s.category === name) }))
+    .filter(c => c.services.length > 0);
+
+  const serviceCategory = Object.fromEntries(services.map(s => [s.id, s.category]));
+
   const filtered = groups.filter(g => {
     // Customers and guests only see approved groups
     const role = session.getRole();
     if (role !== "superadmin" && role !== "moderator" && g.reviewStatus !== "approved") return false;
-    const matchFilter = filter === "all" || g.status === filter;
+    const matchFilter   = filter === "all" || g.status === filter;
+    const matchCategory = !activeCategory || serviceCategory[g.serviceId] === activeCategory;
     const q = search.toLowerCase();
     const matchSearch = (g.serviceName||"").toLowerCase().includes(q) ||
       (g.planName||"").toLowerCase().includes(q) ||
       (g.organizerName||"").toLowerCase().includes(q);
-    return matchFilter && matchSearch;
+    return matchFilter && matchCategory && matchSearch;
   });
 
   return (
@@ -44,7 +72,58 @@ export default function GroupsPage({ navigate }) {
         }
       </div>
 
-      <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:28 }}>
+      {/* ── Browse by category ── */}
+      {categories.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <h2 style={{ fontSize:"1rem", fontWeight:700, color:"var(--text)", margin:0 }}>Browse by Category</h2>
+            {activeCategory && (
+              <button className="btn btn-sm btn-outline" onClick={() => setActiveCategory(null)}>
+                ✕ Clear category
+              </button>
+            )}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:14 }}>
+            {categories.map(cat => {
+              const active = activeCategory === cat.name;
+              return (
+                <div
+                  key={cat.name}
+                  className="card"
+                  onClick={() => setActiveCategory(active ? null : cat.name)}
+                  style={{
+                    cursor:"pointer", padding:"16px 18px",
+                    border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
+                    background: active ? "rgba(124,106,255,0.08)" : "var(--card)",
+                    transition:"border-color 0.2s, background 0.2s",
+                  }}
+                >
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                    <span style={{ fontSize:"1.4rem" }}>{CATEGORY_ICON[cat.name] || "📦"}</span>
+                    <span style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--text)" }}>{cat.name}</span>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                    {cat.services.slice(0, 4).map(s => (
+                      <span key={s.id} title={s.name} style={{
+                        display:"inline-flex", alignItems:"center", gap:4,
+                        background:"var(--bg3)", border:"1px solid var(--border)",
+                        borderRadius:99, padding:"3px 9px", fontSize:"0.72rem", color:"var(--muted)",
+                      }}>
+                        <span>{s.icon}</span>{s.name}
+                      </span>
+                    ))}
+                    {cat.services.length > 4 && (
+                      <span style={{ fontSize:"0.72rem", color:"var(--muted)" }}>+{cat.services.length - 4} more</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:28, alignItems:"center" }}>
         <input
           placeholder="Search by service, plan, organizer…"
           value={search}
@@ -58,6 +137,11 @@ export default function GroupsPage({ navigate }) {
             {f.charAt(0).toUpperCase()+f.slice(1)}
           </button>
         ))}
+        {activeCategory && (
+          <span style={{ fontSize:"0.8rem", color:"var(--muted)" }}>
+            Showing <strong style={{ color:"var(--text)" }}>{activeCategory}</strong>
+          </span>
+        )}
       </div>
 
       {loading ? (
@@ -66,7 +150,7 @@ export default function GroupsPage({ navigate }) {
         <div className="empty-state">
           <div className="emoji">🔍</div>
           <h3>No groups found</h3>
-          <p>Try a different filter, or check back soon for new groups.</p>
+          <p>{activeCategory ? `No groups in ${activeCategory} yet — check back soon.` : "Try a different filter, or check back soon for new groups."}</p>
         </div>
       ) : (
         <div className="grid-2">
