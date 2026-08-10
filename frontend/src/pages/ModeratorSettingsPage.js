@@ -254,15 +254,18 @@ export default function ModeratorSettingsPage({ navigate }) {
                   </span>
                 </div>
                 <div className="mss-split-row">
-                  <span>Total owed to you</span>
+                  <span>Total earned (lifetime)</span>
                   <span>KES {kes(sum.totalOwed)} · ${(sum.totalOwed ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="mss-split-row">
                   <span>Already paid out</span>
                   <span style={{ color: "var(--success)" }}>KES {kes(sum.totalPaid)} · ${(sum.totalPaid ?? 0).toFixed(2)}</span>
                 </div>
+                {/* Still-unpaid balance — same figure as the admin's Reports →
+                    Pending Payouts "Amount Owed" column, so it reads zero once
+                    you've been paid instead of a lifetime total that never resets. */}
                 <div className="mss-split-row mss-split-total">
-                  <span>Pending next payout</span>
+                  <span>Amount owed to you</span>
                   <span style={{ color: "var(--accent)" }}>
                     KES {kes(sum.totalPending)} · ${(sum.totalPending ?? 0).toFixed(2)}
                   </span>

@@ -81,9 +81,12 @@ export default function ModeratorDashboardPage({ navigate }) {
         </div>
         <div className="mod-kpi-card">
           <div className="mod-kpi-icon" style={{ background:"rgba(23,166,115,0.14)", color:"var(--accent3)" }}>💰</div>
-          <div className="mod-kpi-label">Total Owed to You</div>
-          <div className="mod-kpi-val" style={{ color:"var(--accent3)", whiteSpace:"nowrap" }}>KES {kes(summary.totalOwed)}</div>
-          <div className="mod-kpi-sub">${(summary.totalOwed ?? 0).toFixed(2)}</div>
+          <div className="mod-kpi-label">Amount Owed to You</div>
+          {/* Still-unpaid balance only (payoutStatus="pending") — same figure the
+              admin sees in Reports → Pending Payouts, so it reads zero once you've
+              been paid instead of showing a lifetime total that never resets. */}
+          <div className="mod-kpi-val" style={{ color:"var(--accent3)", whiteSpace:"nowrap" }}>KES {kes(summary.totalPending)}</div>
+          <div className="mod-kpi-sub">${(summary.totalPending ?? 0).toFixed(2)}</div>
         </div>
         <div className="mod-kpi-card">
           <div className="mod-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>✅</div>
@@ -91,14 +94,6 @@ export default function ModeratorDashboardPage({ navigate }) {
           <div className="mod-kpi-val" style={{ color:"var(--success)", whiteSpace:"nowrap" }}>KES {kes(summary.totalPaid)}</div>
           <div className="mod-kpi-sub">${(summary.totalPaid ?? 0).toFixed(2)}</div>
         </div>
-        {summary.totalPending > 0 && (
-          <div className="mod-kpi-card">
-            <div className="mod-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>🕐</div>
-            <div className="mod-kpi-label">Pending Next Payout</div>
-            <div className="mod-kpi-val" style={{ color:"var(--warning)", whiteSpace:"nowrap" }}>KES {kes(summary.totalPending)}</div>
-            <div className="mod-kpi-sub">${(summary.totalPending ?? 0).toFixed(2)}</div>
-          </div>
-        )}
         {summary.pendingReview > 0 && (
           <div className="mod-kpi-card">
             <div className="mod-kpi-icon" style={{ background:"rgba(217,119,6,0.14)", color:"var(--warning)" }}>⏳</div>
@@ -123,7 +118,7 @@ export default function ModeratorDashboardPage({ navigate }) {
             </span>
           </div>
           <div className="mod-earn-row">
-            <span>Your total owed ({modKeeps}% of gross)</span>
+            <span>Total earned ({modKeeps}% of gross, lifetime)</span>
             <span style={{ color:"var(--accent3)" }}>KES {kes(summary.totalOwed)} · ${(summary.totalOwed ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row">
@@ -131,11 +126,11 @@ export default function ModeratorDashboardPage({ navigate }) {
             <span style={{ color:"var(--success)" }}>KES {kes(summary.totalPaid)} · ${(summary.totalPaid ?? 0).toFixed(2)}</span>
           </div>
           <div className="mod-earn-row mod-earn-total">
-            <span>Pending next Sunday payout</span>
+            <span>Amount owed to you</span>
             <span style={{ color:"var(--warning)" }}>KES {kes(summary.totalPending)} · ${(summary.totalPending ?? 0).toFixed(2)}</span>
           </div>
           <p style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:12 }}>
-            All payments land in the platform PesaPal account. Every Sunday the super admin pays out your {modKeeps}% share to your registered PesaPal email.
+            All payments land in the platform account. The admin reviews the payout queue and pays out your {modKeeps}% share to your registered payout account.
           </p>
         </div>
       )}
