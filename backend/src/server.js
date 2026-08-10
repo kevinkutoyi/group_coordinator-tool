@@ -1796,6 +1796,47 @@ app.patch("/api/admin/groups/:id/review", requireSuperAdmin, async (req, res) =>
   res.json(updated);
 });
 
+// Let the admin edit a moderator's submitted listing — category (via
+// serviceId), plan name, pricing, slots, description, etc — before (or
+// after) approving it. Recomputes pricePerSlot/fees whenever price, slots,
+// or the service itself changes, same as group creation.
+app.patch("/api/admin/groups/:id", requireSuperAdmin, async (req, res) => {
+  const group = await prisma.group.findUnique({ where: { id: req.params.id } });
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  const { serviceId, planName, totalPrice, maxSlots, description, billingCycle, subscriptionCost, renewDate } = req.body;
+
+  const data = {};
+  if (serviceId !== undefined) {
+    const service = SERVICES.find(s => s.id === serviceId);
+    if (!service) return res.status(404).json({ error: "Service not found" });
+    data.serviceId = serviceId;
+    data.serviceName = service.name;
+    data.serviceIcon = service.icon;
+  }
+  if (planName !== undefined)     data.planName = planName;
+  if (billingCycle !== undefined) data.billingCycle = billingCycle;
+  if (description !== undefined)  data.description = description;
+  if (subscriptionCost !== undefined) data.subscriptionCost = +subscriptionCost || 0;
+  if (renewDate !== undefined)    data.renewDate = renewDate ? new Date(renewDate) : null;
+
+  const newTotalPrice = totalPrice !== undefined ? +totalPrice : group.totalPrice;
+  const newMaxSlots    = maxSlots   !== undefined ? +maxSlots   : group.maxSlots;
+  if (totalPrice !== undefined) data.totalPrice = newTotalPrice;
+  if (maxSlots   !== undefined) data.maxSlots   = newMaxSlots;
+
+  if (totalPrice !== undefined || maxSlots !== undefined) {
+    const pricePerSlot = +(newTotalPrice / newMaxSlots).toFixed(2);
+    const fees = await calcFee(pricePerSlot, 1);
+    data.pricePerSlot = pricePerSlot;
+    data.platformFee  = fees.platformFee;
+    data.memberPays   = fees.memberPays;
+    data.feePercent   = fees.feePercent;
+  }
+
+  const updated = await prisma.group.update({ where: { id: req.params.id }, data });
+  res.json(updated);
+});
 
 // ─── DELETE A GROUP ENTIRELY (super admin only, irreversible) ───────────────
 app.delete("/api/admin/groups/:id", requireSuperAdmin, async (req, res) => {

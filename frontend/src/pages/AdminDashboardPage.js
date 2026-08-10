@@ -60,6 +60,11 @@ export default function AdminDashboardPage({ navigate }) {
   const [reviewBusy, setReviewBusy]   = useState({});
   const [reviewNote, setReviewNote]   = useState("");
   const [reviewTarget, setReviewTarget] = useState(null);
+  const [services, setServices]       = useState([]);
+  const [editTarget, setEditTarget]   = useState(null);
+  const [editForm, setEditForm]       = useState(null);
+  const [editBusy, setEditBusy]       = useState(false);
+  const [editMsg, setEditMsg]         = useState(null);
   const [orgEmailForm, setOrgEmailForm] = useState({ subject:"", body:"", senderEmail:"" });
   const [orgEmailBusy, setOrgEmailBusy] = useState(false);
   const [orgEmailMsg, setOrgEmailMsg]   = useState(null);
@@ -163,14 +168,16 @@ export default function AdminDashboardPage({ navigate }) {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, u, g, subs, hist, pg, oeh, pq, ph, as_] = await Promise.all([
+      const [p, u, g, subs, hist, pg, oeh, pq, ph, as_, svc] = await Promise.all([
         api.getPendingMods(), api.getUsers(), api.getGroups(),
         api.getSubscribers(), api.getNewsletterHistory(),
         api.getPendingGroups(), api.getOrganizerEmailHistory(),
         api.getPayoutQueue(), api.getPayoutHistory(), api.getAdminSettings(),
+        api.getServices(),
       ]);
       setPending(p); setAllUsers(u); setGroups(g); setSubscribers(subs);
       setNlHistory(hist); setPGroups(pg); setOrgEmailHistory(oeh);
+      setServices(svc || []);
       setPayoutQueue(pq?.queue || []); setPayoutHistory(ph || []);
       const fee = as_?.feePercent ?? 8;
       setFeePercent(fee); setFeeInput(String(fee));
@@ -188,6 +195,38 @@ export default function AdminDashboardPage({ navigate }) {
       setAllUsers(data);
     } catch (err) { alert(err.message); }
     finally { setBusy(b => ({ ...b, [uid]: false })); }
+  }
+
+  function openEdit(g) {
+    setEditTarget(g);
+    setEditMsg(null);
+    setEditForm({
+      serviceId: g.serviceId || "",
+      planName: g.planName || "",
+      totalPrice: g.totalPrice ?? "",
+      maxSlots: g.maxSlots ?? "",
+      description: g.description || "",
+      billingCycle: g.billingCycle || "monthly",
+      subscriptionCost: g.subscriptionCost ?? "",
+      renewDate: g.renewDate ? new Date(g.renewDate).toISOString().split("T")[0] : "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editTarget) return;
+    setEditBusy(true); setEditMsg(null);
+    try {
+      const updated = await api.editGroup(editTarget.id, {
+        ...editForm,
+        totalPrice: +editForm.totalPrice,
+        maxSlots: +editForm.maxSlots,
+        subscriptionCost: editForm.subscriptionCost ? +editForm.subscriptionCost : 0,
+      });
+      setPGroups(list => list.map(g => g.id === updated.id ? { ...g, ...updated } : g));
+      setMsg({ type:"ok", text:"Listing updated." });
+      setEditTarget(null); setEditForm(null);
+    } catch (err) { setEditMsg({ type:"err", text: err.message }); }
+    finally { setEditBusy(false); }
   }
 
   async function approve(id) {
@@ -858,6 +897,10 @@ export default function AdminDashboardPage({ navigate }) {
                   ❌ Reject
                 </button>
                 <button className="btn btn-sm btn-outline"
+                  onClick={() => openEdit(g)}>
+                  ✏️ Edit
+                </button>
+                <button className="btn btn-sm btn-outline"
                   onClick={() => navigate("group", { id: g.id, slug: `${g.serviceName} ${g.planName}` })}>
                   👁️ Preview
                 </button>
@@ -961,6 +1004,87 @@ export default function AdminDashboardPage({ navigate }) {
                   finally { setReviewBusy(b=>({...b,[reviewTarget.id]:false})); }
                 }}>
                 {reviewBusy[reviewTarget?.id] ? <span className="spinner"/> : "Confirm Reject"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit listing modal — change category/service, plan, pricing, slots, etc before publishing */}
+      {editTarget && editForm && (
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setEditTarget(null)}>
+          <div className="modal" style={{maxWidth:520}}>
+            <h3>Edit Listing</h3>
+            <p style={{color:"var(--muted)",fontSize:"0.84rem",marginBottom:16}}>
+              Editing: <strong>{editTarget.serviceName} — {editTarget.planName}</strong>
+            </p>
+
+            {editMsg && (
+              <div className={`msg-box ${editMsg.type==="ok"?"msg-ok":"msg-err"}`} style={{marginBottom:12}} onClick={()=>setEditMsg(null)}>
+                {editMsg.text} <span style={{opacity:.4}}>✕</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label>Service / Category</label>
+              <select value={editForm.serviceId} onChange={e=>setEditForm(f=>({...f, serviceId:e.target.value}))}>
+                {Object.entries(
+                  services.reduce((acc, s) => { (acc[s.category] = acc[s.category] || []).push(s); return acc; }, {})
+                ).map(([category, svcs]) => (
+                  <optgroup key={category} label={category}>
+                    {svcs.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Plan Name</label>
+                <input value={editForm.planName} onChange={e=>setEditForm(f=>({...f, planName:e.target.value}))}/>
+              </div>
+              <div className="form-group">
+                <label>Billing Cycle</label>
+                <select value={editForm.billingCycle} onChange={e=>setEditForm(f=>({...f, billingCycle:e.target.value}))}>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="biannually">Every 6 mo</option>
+                  <option value="annually">Annually</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Total Plan Price ($)</label>
+                <input type="number" step="0.01" value={editForm.totalPrice} onChange={e=>setEditForm(f=>({...f, totalPrice:e.target.value}))}/>
+              </div>
+              <div className="form-group">
+                <label>Max Slots</label>
+                <input type="number" min="1" value={editForm.maxSlots} onChange={e=>setEditForm(f=>({...f, maxSlots:e.target.value}))}/>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Subscription Cost ($)</label>
+                <input type="number" step="0.01" value={editForm.subscriptionCost} onChange={e=>setEditForm(f=>({...f, subscriptionCost:e.target.value}))}/>
+              </div>
+              <div className="form-group">
+                <label>Renew Date</label>
+                <input type="date" value={editForm.renewDate} onChange={e=>setEditForm(f=>({...f, renewDate:e.target.value}))}/>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Description</label>
+              <textarea rows={3} value={editForm.description} onChange={e=>setEditForm(f=>({...f, description:e.target.value}))} style={{resize:"vertical"}}/>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={()=>{setEditTarget(null);setEditForm(null);}}>Cancel</button>
+              <button className="btn btn-primary" disabled={editBusy} onClick={saveEdit}>
+                {editBusy ? <span className="spinner"/> : "Save Changes"}
               </button>
             </div>
           </div>

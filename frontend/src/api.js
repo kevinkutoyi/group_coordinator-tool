@@ -124,6 +124,7 @@ export const api = {
   // Admin — group review
   getPendingGroups:  ()          => req("/admin/groups/pending"),
   reviewGroup:       (id, body)  => req(`/admin/groups/${id}/review`, { method: "PATCH", body }),
+  editGroup:         (id, body)  => req(`/admin/groups/${id}`, { method: "PATCH", body }),
   deleteGroup:       (id)        => req(`/admin/groups/${id}`, { method: "DELETE" }),
 
   // Admin — email organizers
