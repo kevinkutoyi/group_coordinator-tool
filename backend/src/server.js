@@ -630,6 +630,12 @@ app.get("/api/groups", async (req, res) => {
 
   const groups = await prisma.group.findMany({ where, include: { members: true, payments: true }, orderBy: { createdAt: "desc" } });
   const liveFeePercent = (viewerRole === "superadmin" || viewerRole === "moderator") ? await getPlatformFeePercent() : null;
+
+  // One aggregate query for every group's rating (not N+1) — cheap enough to
+  // include on every card in the Browse Groups grid.
+  const reviewStats = await prisma.groupReview.groupBy({ by: ["groupId"], _avg: { rating: true }, _count: { rating: true } });
+  const reviewByGroup = Object.fromEntries(reviewStats.map(r => [r.groupId, { avgRating: +r._avg.rating.toFixed(1), reviewCount: r._count.rating }]));
+
   res.json(groups.map(g => {
     const confirmed = g.members.filter(m => m.role !== "organizer" && m.paymentStatus === "confirmed");
     const sortedConfirmed = confirmed.slice().sort((a, b) =>
@@ -647,6 +653,8 @@ app.get("/api/groups", async (req, res) => {
         ? { maskedEmail: confirmedMaskedEmails[0], joinedAt: sortedConfirmed[0].joinedAt }
         : null,
       members: g.members.map(({ email, ...m }) => m),
+      avgRating: reviewByGroup[g.id]?.avgRating || null,
+      reviewCount: reviewByGroup[g.id]?.reviewCount || 0,
     };
     return sanitizeGroupFinancials(base, viewerRole, viewerId, liveFeePercent);
   }));
@@ -709,6 +717,86 @@ app.post("/api/groups", requireRole("moderator", "superadmin"), async (req, res)
     },
   });
   res.status(201).json(group);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GROUP REVIEWS — 5-star rating, one per (group, confirmed paying member)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// "Jane Doe" -> "Jane D." — first name kept, surname reduced to an initial
+// so reviews don't publish a member's full name.
+function reviewerDisplayName(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Anonymous";
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
+}
+
+function summarizeReviews(reviews) {
+  const count = reviews.length;
+  const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  for (const r of reviews) breakdown[r.rating] = (breakdown[r.rating] || 0) + 1;
+  const avg = count ? reviews.reduce((a, r) => a + r.rating, 0) / count : 0;
+  const recommend = count ? reviews.filter(r => r.rating >= 4).length / count : 0;
+  return {
+    count,
+    average: +avg.toFixed(1),
+    recommendPercent: Math.round(recommend * 100),
+    breakdown: Object.fromEntries(
+      Object.entries(breakdown).map(([star, n]) => [star, count ? Math.round((n / count) * 100) : 0])
+    ),
+  };
+}
+
+app.get("/api/groups/:id/reviews", async (req, res) => {
+  const groupId = req.params.id;
+  const authHeader = req.headers.authorization || "";
+  let viewerId = null;
+  try { viewerId = jwt.verify(authHeader.replace("Bearer ", ""), JWT_SECRET).id; } catch {}
+
+  const reviews = await prisma.groupReview.findMany({
+    where: { groupId }, orderBy: { createdAt: "desc" },
+    include: { user: { select: { name: true } } },
+  });
+  const summary = summarizeReviews(reviews);
+
+  let canReview = false, myReview = null;
+  if (viewerId) {
+    const [membership, existing] = await Promise.all([
+      prisma.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: viewerId } } }),
+      prisma.groupReview.findUnique({ where: { groupId_userId: { groupId, userId: viewerId } } }),
+    ]);
+    canReview = !!membership && membership.paymentStatus === "confirmed" && membership.role !== "organizer";
+    myReview = existing;
+  }
+
+  res.json({
+    summary,
+    reviews: reviews.map(r => ({
+      id: r.id, rating: r.rating, comment: r.comment, createdAt: r.createdAt,
+      reviewerName: reviewerDisplayName(r.user?.name),
+    })),
+    canReview, myReview,
+  });
+});
+
+app.post("/api/groups/:id/reviews", requireAuth, async (req, res) => {
+  const groupId = req.params.id;
+  const { rating, comment = "" } = req.body;
+  const stars = parseInt(rating, 10);
+  if (!stars || stars < 1 || stars > 5) return res.status(400).json({ error: "rating must be 1-5" });
+  if (comment.length > 500) return res.status(400).json({ error: "Review is too long (max 500 characters)" });
+
+  const membership = await prisma.groupMember.findUnique({ where: { groupId_userId: { groupId, userId: req.user.id } } });
+  if (!membership || membership.paymentStatus !== "confirmed" || membership.role === "organizer")
+    return res.status(403).json({ error: "Only members with a confirmed payment on this group can leave a review." });
+
+  const review = await prisma.groupReview.upsert({
+    where: { groupId_userId: { groupId, userId: req.user.id } },
+    update: { rating: stars, comment: comment.trim() },
+    create: { groupId, userId: req.user.id, rating: stars, comment: comment.trim() },
+  });
+  res.json(review);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -103,6 +103,9 @@ export default function GroupCard({ group, onClick }) {
           <div className="gc-title">
             <h3>{group.serviceName}</h3>
             <p className="gc-plan">{group.planName}</p>
+            {group.reviewCount > 0 && (
+              <p className="gc-rating">★ {group.avgRating} <span>({group.reviewCount})</span></p>
+            )}
           </div>
           {/* Billing cycle badge */}
           <div className="gc-cycle-badge" style={{ "--cycle-color": cycle.color }}>

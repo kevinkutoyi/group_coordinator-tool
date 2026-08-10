@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import CredentialVault from "../components/CredentialVault";
 import GroupCard from "../components/GroupCard";
+import GroupReviews from "../components/GroupReviews";
 import { api, session } from "../api";
 import { kes, useKesRate } from "../currency";
 import "./GroupDetailPage.css";
@@ -745,6 +746,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
             )}
           </div>
         )}
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <GroupReviews groupId={group.id} />
       </div>
 
       {recommendations.length > 0 && (

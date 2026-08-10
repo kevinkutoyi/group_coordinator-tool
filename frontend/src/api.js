@@ -86,6 +86,8 @@ export const api = {
   getGroup:     (id)         => req(`/groups/${id}`),
   createGroup:  (body)       => req("/groups",             { method: "POST", body }),
   updateStatus: (id, status) => req(`/groups/${id}/status`,{ method: "PATCH", body: { status } }),
+  getGroupReviews:  (id)         => req(`/groups/${id}/reviews`),
+  submitGroupReview: (id, body)  => req(`/groups/${id}/reviews`, { method: "POST", body }),
 
   // Membership
   joinGroup:    (id, body)   => req(`/groups/${id}/join`,  { method: "POST", body }),

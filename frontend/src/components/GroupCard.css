@@ -133,6 +133,8 @@
 .gc-title { flex: 1; min-width: 0; }
 .gc-title h3 { font-size: 0.98rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gc-plan  { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+.gc-rating { font-size: 0.72rem; color: var(--warning); margin-top: 3px; font-weight: 600; }
+.gc-rating span { color: var(--muted); font-weight: 400; }
 
 /* Billing cycle badge */
 .gc-cycle-badge {

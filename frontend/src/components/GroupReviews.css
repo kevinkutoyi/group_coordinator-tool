@@ -1,0 +1,33 @@
+.gr-wrap { padding: 18px 20px; }
+.gr-title { font-size: 0.95rem; font-weight: 700; margin: 0 0 12px; }
+.gr-empty { font-size: 0.82rem; color: var(--muted); margin: 0; }
+
+.gr-summary { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.gr-avg { text-align: center; flex-shrink: 0; min-width: 80px; }
+.gr-avg-num { font-family: var(--font-head); font-size: 1.8rem; font-weight: 800; line-height: 1; color: var(--text); }
+.gr-avg-num span { font-size: 1.1rem; color: var(--warning); margin-left: 2px; }
+.gr-avg-count { font-size: 0.7rem; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+
+.gr-bars { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 3px; }
+.gr-bar-row { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted); }
+.gr-bar-label { width: 22px; flex-shrink: 0; }
+.gr-bar-track { flex: 1; height: 5px; border-radius: 99px; background: var(--bg3); overflow: hidden; }
+.gr-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--warning), #f59e0b); }
+.gr-bar-pct { width: 28px; text-align: right; flex-shrink: 0; }
+
+.gr-recommend { font-size: 0.78rem; color: var(--success); margin: 4px 0 0; }
+
+.gr-form-toggle { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.gr-form { display: flex; flex-direction: column; gap: 8px; }
+.gr-star-picker { font-size: 1.4rem; letter-spacing: 4px; color: var(--warning); cursor: pointer; line-height: 1; }
+.gr-star-input { transition: opacity 0.1s; }
+.gr-textarea { width: 100%; resize: vertical; font-size: 0.82rem; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg2); color: var(--text); font-family: inherit; }
+.gr-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.gr-list { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.gr-item-head { display: flex; align-items: center; gap: 8px; }
+.gr-item-name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+.gr-item-date { font-size: 0.7rem; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.gr-item-comment { font-size: 0.8rem; color: var(--muted); margin: 3px 0 0; line-height: 1.4; }
+.gr-showall { align-self: center; background: none; border: none; color: var(--accent); font-size: 0.76rem; cursor: pointer; margin-top: 4px; padding: 4px; }
+.gr-showall:hover { text-decoration: underline; }

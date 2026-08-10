@@ -33,6 +33,7 @@ model User {
   moderatorSettings ModeratorSettings?
   moderatorPayouts  ModeratorPayout[]  @relation("ModeratorPayouts")
   payments          Payment[]          @relation("UserPayments")
+  reviews           GroupReview[]
 
   @@map("users")
 }
@@ -79,6 +80,7 @@ model Group {
   platformEarnings PlatformEarning[]
   credentials  GroupCredential?
   emails       GroupEmail[]
+  reviews      GroupReview[]
 
   @@map("groups")
 }
@@ -450,4 +452,23 @@ model GroupProfile {
   updatedAt DateTime @updatedAt
   members   GroupMember[]
   @@map("group_profiles")
+}
+
+// ─── Group Reviews ────────────────────────────────────────────────────────
+// One review per (group, user) — only members with a confirmed payment on
+// that group are allowed to create one (enforced in server.js, not here).
+model GroupReview {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  rating    Int                       // 1-5
+  comment   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_reviews")
 }
