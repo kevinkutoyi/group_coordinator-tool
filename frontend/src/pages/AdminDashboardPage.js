@@ -77,6 +77,7 @@ export default function AdminDashboardPage({ navigate }) {
 
   // Payouts
   const [payoutQueue, setPayoutQueue]   = useState([]);
+  const [ownAccount, setOwnAccount]     = useState(null);
   const [payoutHistory, setPayoutHistory] = useState([]);
   const [payoutBusy, setPayoutBusy]     = useState({});
   const [payoutMsg, setPayoutMsg]       = useState(null);
@@ -178,7 +179,7 @@ export default function AdminDashboardPage({ navigate }) {
       setPending(p); setAllUsers(u); setGroups(g); setSubscribers(subs);
       setNlHistory(hist); setPGroups(pg); setOrgEmailHistory(oeh);
       setServices(svc || []);
-      setPayoutQueue(pq?.queue || []); setPayoutHistory(ph || []);
+      setPayoutQueue(pq?.queue || []); setPayoutHistory(ph || []); setOwnAccount(pq?.ownAccount || null);
       const fee = as_?.feePercent ?? 8;
       setFeePercent(fee); setFeeInput(String(fee));
       const rate = as_?.kesPerUsd ?? 130;
@@ -1276,6 +1277,22 @@ export default function AdminDashboardPage({ navigate }) {
               <div className={`msg-box ${payoutMsg.type==="ok"?"msg-ok":"msg-err"}`}
                 style={{marginBottom:14}} onClick={()=>setPayoutMsg(null)}>
                 {payoutMsg.text} <span style={{opacity:.4}}>✕</span>
+              </div>
+            )}
+
+            {/* Revenue from listings the superadmin's own account organizes never
+                needs a Paystack payout — it's already in the platform wallet you
+                control, so it's excluded from the table below and just noted here. */}
+            {ownAccount && (
+              <div style={{
+                display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8,
+                padding:"10px 14px", marginBottom:16, borderRadius:10,
+                background:"rgba(124,106,255,0.06)", border:"1px solid var(--border)", fontSize:"0.82rem",
+              }}>
+                <span style={{color:"var(--muted)"}}>
+                  🔑 Your own listings ({ownAccount.paymentCount} payment{ownAccount.paymentCount!==1?"s":""}) — already in your wallet, no payout needed
+                </span>
+                <strong>KES {kes(ownAccount.amountUSD)} · ${ownAccount.amountUSD.toFixed(2)}</strong>
               </div>
             )}
 

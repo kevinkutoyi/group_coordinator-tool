@@ -1543,6 +1543,11 @@ app.get("/api/admin/payout-queue", requireSuperAdmin, async (req, res) => {
   const kesRate = await getPlatformKesRate();
   const pendingPayments = await prisma.payment.findMany({ where: { payoutStatus: "pending" } });
   const byMod = {};
+  // Payments organized by the superadmin's own account aren't owed to anyone
+  // external — that revenue already sits in the platform's own wallet, so
+  // there's nothing to "pay out" and no payout account to configure. Tracked
+  // separately here instead of appearing as a broken payout-queue row.
+  let ownAccountUSD = 0, ownAccountCount = 0;
   for (const p of pendingPayments) {
     if (!p.moderatorId) continue;
     if (!byMod[p.moderatorId]) {
@@ -1558,22 +1563,34 @@ app.get("/api/admin/payout-queue", requireSuperAdmin, async (req, res) => {
           : modSettings?.payoutMethod === "bank" ? `${modSettings?.payoutBankName || ""} • ${modSettings?.payoutAccountNumber || ""}`
           : null,
         paystackReady: !!modSettings?.paystackRecipientCode,
+        isOwnAccount: modUser?.role === "superadmin",
         amountOwedUSD: 0, paymentCount: 0, payments: [],
       };
     }
     // Payment.amount/moderatorOwed are always stored in USD — the per-row `currency`
     // tag is unreliable (some rows say "KES" for the same USD-scale values, a legacy
     // labeling bug), so it's ignored here rather than trusted for arithmetic.
+    if (byMod[p.moderatorId].isOwnAccount) {
+      ownAccountUSD = +(ownAccountUSD + p.moderatorOwed).toFixed(2);
+      ownAccountCount += 1;
+      continue;
+    }
     byMod[p.moderatorId].amountOwedUSD = +(byMod[p.moderatorId].amountOwedUSD + p.moderatorOwed).toFixed(2);
     byMod[p.moderatorId].paymentCount += 1;
     byMod[p.moderatorId].payments.push({ id: p.id, memberName: p.memberName, amount: p.amount, moderatorOwed: p.moderatorOwed, platformFee: p.platformFee, confirmedAt: p.confirmedAt });
   }
   const queue = Object.values(byMod)
+    .filter(m => !m.isOwnAccount)
     .map(m => ({ ...m, amountOwedKES: +(m.amountOwedUSD * kesRate).toFixed(2) }))
     .sort((a, b) => b.amountOwedUSD - a.amountOwedUSD);
   const totalOwedUSD = +queue.reduce((a, m) => a + m.amountOwedUSD, 0).toFixed(2);
   const payoutHistory = await prisma.moderatorPayout.findMany({ orderBy: { paidAt: "desc" }, take: 50 });
-  res.json({ queue, totalOwedUSD, totalOwedKES: +(totalOwedUSD * kesRate).toFixed(2), payoutHistory });
+  res.json({
+    queue, totalOwedUSD, totalOwedKES: +(totalOwedUSD * kesRate).toFixed(2), payoutHistory,
+    ownAccount: ownAccountCount > 0 ? {
+      paymentCount: ownAccountCount, amountUSD: ownAccountUSD, amountKES: +(ownAccountUSD * kesRate).toFixed(2),
+    } : null,
+  });
 });
 
 app.post("/api/admin/payouts/mark-paid", requireSuperAdmin, async (req, res) => {
