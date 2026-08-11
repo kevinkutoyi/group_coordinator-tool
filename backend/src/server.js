@@ -563,10 +563,15 @@ function urlSlugify(text) {
 
 app.get("/sitemap.xml", async (req, res) => {
   try {
-    const base = "https://splitsubs.com";
+    const base = process.env.FRONTEND_URL || "https://splitsubs.com";
+    // Mirrors CATEGORY_ORDER in frontend/src/pages/GroupsPage.js (which
+    // slugifies the same way, via frontend/src/slugify.js) — one URL per
+    // Browse Groups category, plus the synthetic "All Listings" page.
+    const categorySlugs = ["all-listings", ...new Set(SERVICES.map(s => urlSlugify(s.category)))];
     const urls = [
       { loc: base + "/", changefreq: "daily", priority: "1.0" },
       { loc: base + "/groups", changefreq: "hourly", priority: "0.9" },
+      ...categorySlugs.map(slug => ({ loc: base + "/groups/" + slug, changefreq: "daily", priority: "0.8" })),
       { loc: base + "/blog", changefreq: "daily", priority: "0.7" },
     ];
 
@@ -601,7 +606,7 @@ app.get("/sitemap.xml", async (req, res) => {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ` +
       urls.map(u => `  <url>
-    <loc>${u.loc}</loc>
+    <loc>${escapeHtml(u.loc)}</loc>
 ` +
         (u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>
 ` : "") +
@@ -2449,39 +2454,6 @@ app.get("/blog/:slug", async (req, res) => {
   } catch (err) {
     console.error("Blog post SSR error:", err);
     res.status(500).send("Error rendering blog post");
-  }
-});
-
-// ── sitemap.xml ────────────────────────────────────────────────────────────
-app.get("/sitemap.xml", async (req, res) => {
-  try {
-    const posts = await prisma.blogPost.findMany({
-      where: { status: "published", reviewStatus: "approved", noIndex: false },
-      orderBy: { publishedAt: "desc" },
-      select: { slug: true, updatedAt: true },
-    });
-    const urls = [
-      { loc: SITE_URL + "/", priority: "1.0", changefreq: "daily" },
-      { loc: SITE_URL + "/groups", priority: "0.9", changefreq: "hourly" },
-      { loc: SITE_URL + "/blog", priority: "0.8", changefreq: "daily" },
-      ...posts.map(p => ({
-        loc: `${SITE_URL}/blog/${p.slug}`,
-        lastmod: p.updatedAt.toISOString(),
-        priority: "0.7", changefreq: "weekly",
-      })),
-    ];
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url>
-    <loc>${escapeHtml(u.loc)}</loc>
-    ${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ""}
-    <changefreq>${u.changefreq}</changefreq>
-    <priority>${u.priority}</priority>
-  </url>`).join("\n")}
-</urlset>`;
-    res.set("Content-Type", "application/xml; charset=utf-8").send(xml);
-  } catch (err) {
-    res.status(500).send("Sitemap error");
   }
 });
 
