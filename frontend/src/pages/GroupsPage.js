@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import GroupCard from "../components/GroupCard";
 import { api, session } from "../api";
+import { slugify } from "../slugify";
 
 // Fixed display order for category cards — matches the `category` field set
 // on each entry in the backend SERVICES catalog (server.js). "All Listings"
@@ -26,15 +27,21 @@ const CATEGORY_ICON = {
   "E-books and Manuals": "📚",
   "Tech Help & Services": "🛠️",
 };
+// URL slug -> category name, e.g. "streaming-entertainment" -> "Streaming &
+// Entertainment" — gives every category its own crawlable /groups/:slug URL
+// instead of client-only filter state, for SEO / Search Console indexing.
+const CATEGORY_SLUG_TO_NAME = Object.fromEntries(CATEGORY_ORDER.map(name => [slugify(name), name]));
 
-export default function GroupsPage({ navigate }) {
+export default function GroupsPage({ navigate, categoryParam }) {
   const [groups, setGroups]     = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState("all");
   const [search, setSearch]     = useState("");
-  // No category selected yet — listings stay hidden until the user picks one.
-  const [activeCategory, setActiveCategory] = useState(null);
+  // Source of truth is the URL (categoryParam) — this just mirrors it locally.
+  const [activeCategory, setActiveCategory] = useState(
+    () => CATEGORY_SLUG_TO_NAME[categoryParam?.category] || null
+  );
 
   useEffect(() => {
     Promise.all([api.getGroups(), api.getServices()])
@@ -43,7 +50,42 @@ export default function GroupsPage({ navigate }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Stay in sync with the URL — browser back/forward, or a category link
+  // clicked elsewhere in the app, both change categoryParam without this
+  // component remounting.
+  useEffect(() => {
+    setActiveCategory(CATEGORY_SLUG_TO_NAME[categoryParam?.category] || null);
+  }, [categoryParam?.category]);
+
+  // SEO — distinct title/description/canonical per category page.
+  useEffect(() => {
+    document.title = activeCategory
+      ? `${activeCategory} — Browse Groups | SplitSubs`
+      : "Browse Groups | SplitSubs";
+
+    const desc = activeCategory && activeCategory !== ALL_LISTINGS
+      ? `Split the cost of ${activeCategory.toLowerCase()} subscriptions with a trusted group on SplitSubs. Browse open slots and join today.`
+      : "Browse group-buy subscription listings on SplitSubs — split the cost of streaming, AI tools, VPNs, design software and more with trusted group members.";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", desc);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.setAttribute("rel", "canonical");
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute("href", `https://splitsubs.com/groups${activeCategory ? `/${slugify(activeCategory)}` : ""}`);
+  }, [activeCategory]);
+
   const canCreate = ["moderator","superadmin"].includes(session.getRole());
+
+  function selectCategory(name) {
+    navigate("groups", { category: slugify(name) });
+  }
+  function clearCategory() {
+    navigate("groups");
+  }
 
   // Group the services catalog into categories, preserving CATEGORY_ORDER.
   // "All Listings" shows a sample pulled from across every category instead
@@ -91,7 +133,7 @@ export default function GroupsPage({ navigate }) {
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
             <h2 style={{ fontSize:"1rem", fontWeight:700, color:"var(--text)", margin:0 }}>Browse by Category</h2>
             {activeCategory && (
-              <button className="btn btn-sm btn-outline" onClick={() => setActiveCategory(null)}>
+              <button className="btn btn-sm btn-outline" onClick={clearCategory}>
                 ✕ Clear category
               </button>
             )}
@@ -103,7 +145,7 @@ export default function GroupsPage({ navigate }) {
                 <div
                   key={cat.name}
                   className="card"
-                  onClick={() => setActiveCategory(cat.name)}
+                  onClick={() => selectCategory(cat.name)}
                   style={{
                     cursor:"pointer", padding:"16px 18px",
                     border: active ? "1px solid var(--accent)" : "1px solid var(--border)",

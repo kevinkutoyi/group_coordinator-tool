@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { session } from "./api";
+import { slugify } from "./slugify";
 import Header from "./components/Header";
 import HomePage from "./pages/HomePage";
 import GroupsPage from "./pages/GroupsPage";
@@ -59,13 +60,7 @@ const SIMPLE_PAGES = [
   "payment-callback", "unsubscribe", "blog",
 ];
 
-export function slugify(text) {
-  return String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-}
+export { slugify };
 
 const UUID_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
@@ -73,6 +68,12 @@ function pathToPage(pathname, search) {
   const q = Object.fromEntries(new URLSearchParams(search || ""));
 
   if (!pathname || pathname === "/") return { page: "home", param: null };
+
+  // /groups/:categorySlug — one crawlable URL per category, e.g.
+  // /groups/streaming-entertainment — rather than a query param or client-
+  // only filter state, so Google can index each category separately.
+  const gc = pathname.match(/^\/groups\/([^/]+)\/?$/);
+  if (gc) return { page: "groups", param: { category: gc[1] } };
 
   const g  = pathname.match(/^\/group\/([^/]+)\/?$/);
   if (g)  {
@@ -100,6 +101,10 @@ function pathToPage(pathname, search) {
 
 function pageToPath(target, param) {
   if (target === "home")          return "/";
+  if (target === "groups") {
+    if (param && typeof param === "object" && param.category) return `/groups/${param.category}`;
+    return "/groups";
+  }
   if (target === "group") {
     if (param && typeof param === "object" && param.id) {
       const slug = slugify(param.slug);
@@ -178,7 +183,7 @@ export default function App() {
       <Header page={page} navigate={navigate} user={user} />
       <main className="main-content">
         {page === "home"             && <HomePage             navigate={navigate} />}
-        {page === "groups"           && <GroupsPage           navigate={navigate} />}
+        {page === "groups"           && <GroupsPage           navigate={navigate} categoryParam={pageParam} />}
         {page === "group"            && <GroupDetailPage      id={pageParam}      navigate={navigate} user={user} />}
         {page === "blog"             && <BlogPage                                 navigate={navigate} />}
         {page === "blog-post"        && <BlogPostPage           id={pageParam}      navigate={navigate} />}
