@@ -15,6 +15,7 @@ const SERVICE_GRADIENTS = {
   chatgpt:  ["#10a37f","#0d7a60"],
   claude:   ["#7c6aff","#5548cc"],
   youtube:  ["#FF0000","#cc0000"],
+  dstv:     ["#003876","#001d3d"],
   apple:    ["#555","#222"],
   disney:   ["#113ccf","#0a2596"],
   hbo:      ["#5822B4","#3d1880"],
