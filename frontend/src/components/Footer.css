@@ -170,6 +170,23 @@
 }
 .footer-col button:hover { color: var(--text); }
 
+.footer-support-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 7px;
+}
+.footer-support-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--success, #4ade80);
+  background: rgba(74,222,128,0.12);
+  border: 1px solid rgba(74,222,128,0.3);
+  border-radius: 99px;
+  padding: 1px 7px;
+  line-height: 1.5;
+}
+
 .footer-legal {
   font-size: 0.75rem;
   color: var(--muted);

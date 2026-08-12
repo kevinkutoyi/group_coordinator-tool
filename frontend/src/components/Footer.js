@@ -131,7 +131,10 @@ export default function Footer({ navigate }) {
 
           <div className="footer-col">
             <div className="footer-col-title">Legal</div>
-            <button onClick={() => window.dispatchEvent(new Event("open-support-chat"))}>Support</button>
+            <button onClick={() => window.dispatchEvent(new Event("open-support-chat"))} className="footer-support-btn">
+              Support
+              <span className="footer-support-badge">24/7</span>
+            </button>
             <button onClick={() => navigate("terms")}>Terms & Conditions</button>
             <button onClick={() => navigate("privacy")}>Privacy Policy</button>
             <button onClick={() => navigate("refund-policy")}>Refund Policy</button>
