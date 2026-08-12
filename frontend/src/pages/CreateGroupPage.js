@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, session } from "../api";
+import { REAL_CATEGORIES, CATEGORY_ICON } from "../categories";
 import "./CreateGroupPage.css";
 
 const BILLING_CYCLES = [
@@ -10,11 +11,12 @@ const BILLING_CYCLES = [
 ];
 
 export default function CreateGroupPage({ navigate }) {
-  const [services, setServices]   = useState([]);
-  const [selectedService, setSvc] = useState(null);
-  const [selectedPlan, setPlan]   = useState(null);
-  const [busy, setBusy]           = useState(false);
-  const [error, setError]         = useState("");
+  const [services, setServices]     = useState([]);
+  const [selectedCategory, setCategory] = useState("");
+  const [selectedService, setSvc]   = useState(null);
+  const [selectedPlan, setPlan]     = useState(null);
+  const [busy, setBusy]             = useState(false);
+  const [error, setError]           = useState("");
   const [form, setForm] = useState({
     serviceId:    "",
     planName:     "",
@@ -32,8 +34,21 @@ export default function CreateGroupPage({ navigate }) {
     api.getServices().then(setServices).catch(() => setError("Could not load services."));
   }, []);
 
+  // Services narrowed down to whichever category was picked above — the
+  // service dropdown is empty/disabled until a category is selected.
+  const categoryServices = selectedCategory
+    ? services.filter(s => s.category === selectedCategory)
+    : [];
+
+  function handleCategoryChange(e) {
+    const cat = e.target.value;
+    setCategory(cat);
+    setSvc(null); setPlan(null);
+    setForm(f => ({ ...f, serviceId: "", planName: "", totalPrice: "", maxSlots: "" }));
+  }
+
   function handleServiceChange(e) {
-    const svc = services.find(s => s.id === e.target.value);
+    const svc = categoryServices.find(s => s.id === e.target.value);
     setSvc(svc || null); setPlan(null);
     setForm(f => ({ ...f, serviceId: e.target.value, planName: "", totalPrice: "", maxSlots: "" }));
   }
@@ -91,13 +106,35 @@ export default function CreateGroupPage({ navigate }) {
           <h2 className="create-section-title">Subscription Details</h2>
 
           <div className="form-group">
+            <label>Category</label>
+            <select required value={selectedCategory} onChange={handleCategoryChange}>
+              <option value="">— Choose a category —</option>
+              {REAL_CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>{CATEGORY_ICON[cat] || "📦"} {cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
             <label>Service</label>
-            <select required value={form.serviceId} onChange={handleServiceChange}>
-              <option value="">— Choose a service —</option>
-              {services.map(s => (
+            <select
+              required
+              value={form.serviceId}
+              onChange={handleServiceChange}
+              disabled={!selectedCategory}
+            >
+              <option value="">
+                {selectedCategory ? "— Choose a service —" : "Choose a category first"}
+              </option>
+              {categoryServices.map(s => (
                 <option key={s.id} value={s.id}>{s.icon} {s.name}</option>
               ))}
             </select>
+            {selectedCategory && categoryServices.length === 0 && (
+              <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 4 }}>
+                No services listed in this category yet.
+              </div>
+            )}
           </div>
 
           {selectedService && (
@@ -182,10 +219,19 @@ export default function CreateGroupPage({ navigate }) {
             </div>
           </div>
 
+          {!session.isSuperAdmin() && (
+            <div className="msg-box" style={{ marginBottom: 8, fontSize: "0.8rem" }}>
+              ⏳ This listing will be reviewed by the admin before it goes live in{" "}
+              {selectedCategory ? <strong>{selectedCategory}</strong> : "its category"}.
+            </div>
+          )}
+
           {error && <div className="msg-box msg-err" style={{ marginBottom:8 }}>{error}</div>}
 
           <button type="submit" className="btn btn-primary" style={{ width:"100%" }} disabled={busy}>
-            {busy ? <><span className="spinner"/> Creating…</> : "🚀 Create Group"}
+            {busy
+              ? <><span className="spinner"/> Creating…</>
+              : session.isSuperAdmin() ? "🚀 Create Group" : "🚀 Submit for Approval"}
           </button>
         </form>
 

@@ -2,31 +2,8 @@ import React, { useEffect, useState } from "react";
 import GroupCard from "../components/GroupCard";
 import { api, session } from "../api";
 import { slugify } from "../slugify";
+import { ALL_LISTINGS, CATEGORY_ORDER, CATEGORY_ICON } from "../categories";
 
-// Fixed display order for category cards — matches the `category` field set
-// on each entry in the backend SERVICES catalog (server.js). "All Listings"
-// is a synthetic first category, not a real value in the catalog.
-const ALL_LISTINGS = "All Listings";
-const CATEGORY_ORDER = [
-  ALL_LISTINGS,
-  "Streaming & Entertainment",
-  "AI & Productivity",
-  "Social Media Accounts",
-  "Design & Creativity",
-  "VPNs & Proxies",
-  "E-books and Manuals",
-  "Tech Help & Services",
-];
-const CATEGORY_ICON = {
-  [ALL_LISTINGS]: "🗂️",
-  "Streaming & Entertainment": "🎬",
-  "AI & Productivity": "🤖",
-  "Social Media Accounts": "👥",
-  "Design & Creativity": "🎨",
-  "VPNs & Proxies": "🛡️",
-  "E-books and Manuals": "📚",
-  "Tech Help & Services": "🛠️",
-};
 // URL slug -> category name, e.g. "streaming-entertainment" -> "Streaming &
 // Entertainment" — gives every category its own crawlable /groups/:slug URL
 // instead of client-only filter state, for SEO / Search Console indexing.
