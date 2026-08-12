@@ -21,6 +21,7 @@ import ModeratorSettingsPage from "./pages/ModeratorSettingsPage";
 import UnsubscribePage from "./pages/UnsubscribePage";
 import BlogPage from "./pages/BlogPage";
 import BlogPostPage from "./pages/BlogPostPage";
+import LegalPage from "./pages/LegalPage";
 import WelcomeModal from "./components/WelcomeModal";
 import Footer from "./components/Footer";
 import "./App.css";
@@ -58,6 +59,7 @@ const SIMPLE_PAGES = [
   "home", "groups", "create", "signup", "login", "admin-login", "blog-editor", "forgot-password",
   "admin", "earnings", "my-groups", "mod-dash", "mod-settings",
   "payment-callback", "unsubscribe", "blog",
+  "terms", "privacy", "refund-policy", "data-protection",
 ];
 
 export { slugify };
@@ -200,6 +202,10 @@ export default function App() {
         {page === "mod-dash"         && <ModeratorDashboardPage navigate={navigate} />}
         {page === "mod-settings"     && <ModeratorSettingsPage  navigate={navigate} />}
         {page === "unsubscribe"      && <UnsubscribePage      email={pageParam?.email} navigate={navigate} />}
+        {page === "terms"            && <LegalPage            type="terms"            navigate={navigate} />}
+        {page === "privacy"          && <LegalPage            type="privacy"          navigate={navigate} />}
+        {page === "refund-policy"    && <LegalPage            type="refund"           navigate={navigate} />}
+        {page === "data-protection"  && <LegalPage            type="data-protection"  navigate={navigate} />}
         {page === "payment-callback" && <PaymentCallbackPage  params={pageParam}  navigate={navigate} />}
       </main>
       <Footer navigate={navigate} />

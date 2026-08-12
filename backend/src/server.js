@@ -576,6 +576,10 @@ app.get("/sitemap.xml", async (req, res) => {
       { loc: base + "/groups", changefreq: "hourly", priority: "0.9" },
       ...categorySlugs.map(slug => ({ loc: base + "/groups/" + slug, changefreq: "daily", priority: "0.8" })),
       { loc: base + "/blog", changefreq: "daily", priority: "0.7" },
+      { loc: base + "/terms", changefreq: "monthly", priority: "0.3" },
+      { loc: base + "/privacy", changefreq: "monthly", priority: "0.3" },
+      { loc: base + "/refund-policy", changefreq: "monthly", priority: "0.3" },
+      { loc: base + "/data-protection", changefreq: "monthly", priority: "0.3" },
     ];
 
     const groups = await prisma.group.findMany({

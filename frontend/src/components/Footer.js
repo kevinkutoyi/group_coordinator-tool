@@ -119,19 +119,35 @@ export default function Footer({ navigate }) {
         {/* Divider */}
         <div className="footer-divider" />
 
+        {/* Column links */}
+        <div className="footer-columns">
+          <div className="footer-col">
+            <div className="footer-col-title">Quick Links</div>
+            <button onClick={() => navigate("home")}>Home</button>
+            <button onClick={() => navigate("groups")}>Browse Groups</button>
+            <button onClick={() => navigate("signup")}>Sign Up</button>
+            <button onClick={() => navigate("login")}>Log In</button>
+          </div>
+
+          <div className="footer-col">
+            <div className="footer-col-title">Legal</div>
+            <button onClick={() => window.dispatchEvent(new Event("open-support-chat"))}>Support</button>
+            <button onClick={() => navigate("terms")}>Terms & Conditions</button>
+            <button onClick={() => navigate("privacy")}>Privacy Policy</button>
+            <button onClick={() => navigate("refund-policy")}>Refund Policy</button>
+            <button onClick={() => navigate("data-protection")}>Data Protection Policy</button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="footer-divider" />
+
         {/* Bottom bar */}
         <div className="footer-bottom">
           <div className="footer-brand">
             <span className="footer-logo">⚡ SplitSubs</span>
             <span className="footer-tagline">Share legally, save smartly.</span>
           </div>
-
-          <nav className="footer-links">
-            <button onClick={() => navigate("home")}>Home</button>
-            <button onClick={() => navigate("groups")}>Browse Groups</button>
-            <button onClick={() => navigate("signup")}>Sign Up</button>
-            <button onClick={() => navigate("login")}>Log In</button>
-          </nav>
 
           <p className="footer-legal">
             © {new Date().getFullYear()} SplitSubs. All group buys use official family/group plans only.

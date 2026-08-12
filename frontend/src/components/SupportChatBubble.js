@@ -25,6 +25,14 @@ export default function SupportChatBubble() {
     }
   }, [open]);
 
+  // Lets distant components (e.g. the footer's "Support" link) open this
+  // chat panel without needing to lift its state up.
+  useEffect(() => {
+    function onOpenRequest() { setOpen(true); }
+    window.addEventListener("open-support-chat", onOpenRequest);
+    return () => window.removeEventListener("open-support-chat", onOpenRequest);
+  }, []);
+
   // Drag handlers
   useEffect(() => {
     if (!dragging) return;
