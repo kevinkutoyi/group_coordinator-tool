@@ -85,13 +85,26 @@ export default function SupportChatBubble({ navigate }) {
       try {
         const u = await api.getMyUnreadCount();
         setUnread(u.count || 0);
+      } catch {}
+    };
+    refresh();
+    const interval = setInterval(refresh, open ? 5000 : 20000);
+    return () => clearInterval(interval);
+  }, [open]);
+
+  // Admin online/offline presence — fetched regardless of login state so
+  // logged-out visitors (who see the login-prompt panel) also see accurate status.
+  useEffect(() => {
+    if (session.isSuperAdmin()) return;
+    const refreshPresence = async () => {
+      try {
         const pres = await api.getSuperadminPresence();
         setAdminOnline(pres.online);
         setAdminLastSeen(pres.lastSeen);
       } catch {}
     };
-    refresh();
-    const interval = setInterval(refresh, open ? 5000 : 20000);
+    refreshPresence();
+    const interval = setInterval(refreshPresence, open ? 5000 : 20000);
     return () => clearInterval(interval);
   }, [open]);
 
