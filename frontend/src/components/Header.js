@@ -25,7 +25,7 @@ export default function Header({ page, navigate, user }) {
         <nav className="nav">
           <button className={`nav-link ${page==="home"?"active":""}`} onClick={() => navigate("home")}>Home</button>
           <button className={`nav-link ${page==="groups"?"active":""}`} onClick={() => navigate("groups")}>Browse Groups</button>
-          <SupportChatBubble />
+          <SupportChatBubble navigate={navigate} />
           <SupportAdminBubble />
           <a href="/blog" className="nav-link">📝 Blog</a>
           {(session.isSuperAdmin() || session.isModerator()) && (

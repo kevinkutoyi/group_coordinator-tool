@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api, session } from "../api";
 
-export default function SupportChatBubble() {
+export default function SupportChatBubble({ navigate }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unread, setUnread] = useState(0);
@@ -151,34 +151,38 @@ export default function SupportChatBubble() {
     };
   }, [open]);
 
-  if (!session.isLoggedIn() || session.isSuperAdmin()) return null;
+  if (session.isSuperAdmin()) return null;
+
+  const loggedIn = session.isLoggedIn();
 
   return (
     <>
-      {/* Nav icon button */}
-      <button ref={triggerRef} onClick={() => setOpen(true)} className="nav-chat-icon"
-        title="Chat with SplitSubs Admin" aria-label="Chat with admin"
-        style={{
-          position: "relative", background: "transparent", border: "none",
-          color: "var(--muted)", cursor: "pointer", padding: "6px 10px",
-          borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 6,
-          fontSize: "0.92rem",
-        }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <ellipse cx="9" cy="9.5" rx="6.5" ry="5.5" fill="currentColor" opacity="0.45"/>
-  <path d="M22 14c0-3.31-3.13-6-7-6s-7 2.69-7 6c0 1.2.42 2.32 1.13 3.27L8 21l4.1-1.55c.91.32 1.9.5 2.9.5 3.87 0 7-2.69 7-6.5z" fill="currentColor"/>
-</svg>
-        {unread > 0 && (
-          <span style={{
-            position: "absolute", top: 0, right: 2,
-            background: "#f87171", color: "#fff", borderRadius: 99,
-            minWidth: 18, height: 18, padding: "0 5px",
-            fontSize: 10, fontWeight: 700, display: "flex",
-            alignItems: "center", justifyContent: "center",
-            border: "2px solid var(--bg, #14141e)",
-          }}>{unread}</span>
-        )}
-      </button>
+      {/* Nav icon button (only shown once signed in — guests use the footer's Support link) */}
+      {loggedIn && (
+        <button ref={triggerRef} onClick={() => setOpen(true)} className="nav-chat-icon"
+          title="Chat with SplitSubs Admin" aria-label="Chat with admin"
+          style={{
+            position: "relative", background: "transparent", border: "none",
+            color: "var(--muted)", cursor: "pointer", padding: "6px 10px",
+            borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 6,
+            fontSize: "0.92rem",
+          }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <ellipse cx="9" cy="9.5" rx="6.5" ry="5.5" fill="currentColor" opacity="0.45"/>
+    <path d="M22 14c0-3.31-3.13-6-7-6s-7 2.69-7 6c0 1.2.42 2.32 1.13 3.27L8 21l4.1-1.55c.91.32 1.9.5 2.9.5 3.87 0 7-2.69 7-6.5z" fill="currentColor"/>
+  </svg>
+          {unread > 0 && (
+            <span style={{
+              position: "absolute", top: 0, right: 2,
+              background: "#f87171", color: "#fff", borderRadius: 99,
+              minWidth: 18, height: 18, padding: "0 5px",
+              fontSize: 10, fontWeight: 700, display: "flex",
+              alignItems: "center", justifyContent: "center",
+              border: "2px solid var(--bg, #14141e)",
+            }}>{unread}</span>
+          )}
+        </button>
+      )}
 
       {/* Floating chat panel */}
       {open && pos && (
@@ -228,52 +232,81 @@ export default function SupportChatBubble() {
             }}>✕</button>
           </div>
 
-          <div ref={scrollRef} style={{
-            flex: 1, overflowY: "auto", padding: 14,
-            display: "flex", flexDirection: "column", gap: 8,
-          }}>
-            {messages.length === 0 ? (
-              <div style={{ textAlign: "center", color: "var(--muted)", padding: 30, fontSize: "0.86rem", lineHeight: 1.6 }}>
-                <div style={{ fontSize: "2rem", marginBottom: 8 }}>👋</div>
-                Hi! Send the SplitSubs admin team a message about anything — questions, issues, payments, or feedback. We typically reply within minutes.
-              </div>
-            ) : messages.map(m => {
-              const fromAdmin = m.senderRole === "superadmin";
-              return (
-                <div key={m.id} style={{ alignSelf: fromAdmin ? "flex-start" : "flex-end", maxWidth: "82%" }}>
-                  <div style={{
-                    background: fromAdmin ? "var(--bg3)" : "linear-gradient(135deg, #7c6aff, #ff6a8e)",
-                    color: fromAdmin ? "var(--text)" : "#fff",
-                    padding: "9px 13px", borderRadius: 12,
-                    fontSize: "0.88rem", lineHeight: 1.45,
-                    whiteSpace: "pre-wrap", wordBreak: "break-word",
-                  }}>{m.body}</div>
-                  <div style={{ fontSize: "0.66rem", color: "var(--muted)", marginTop: 3, textAlign: fromAdmin ? "left" : "right" }}>
-                    {fromAdmin ? "🛡️ SplitSubs Admin" : "You"} · {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {loggedIn ? (
+            <>
+              <div ref={scrollRef} style={{
+                flex: 1, overflowY: "auto", padding: 14,
+                display: "flex", flexDirection: "column", gap: 8,
+              }}>
+                {messages.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "var(--muted)", padding: 30, fontSize: "0.86rem", lineHeight: 1.6 }}>
+                    <div style={{ fontSize: "2rem", marginBottom: 8 }}>👋</div>
+                    Hi! Send the SplitSubs admin team a message about anything — questions, issues, payments, or feedback. We typically reply within minutes.
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                ) : messages.map(m => {
+                  const fromAdmin = m.senderRole === "superadmin";
+                  return (
+                    <div key={m.id} style={{ alignSelf: fromAdmin ? "flex-start" : "flex-end", maxWidth: "82%" }}>
+                      <div style={{
+                        background: fromAdmin ? "var(--bg3)" : "linear-gradient(135deg, #7c6aff, #ff6a8e)",
+                        color: fromAdmin ? "var(--text)" : "#fff",
+                        padding: "9px 13px", borderRadius: 12,
+                        fontSize: "0.88rem", lineHeight: 1.45,
+                        whiteSpace: "pre-wrap", wordBreak: "break-word",
+                      }}>{m.body}</div>
+                      <div style={{ fontSize: "0.66rem", color: "var(--muted)", marginTop: 3, textAlign: fromAdmin ? "left" : "right" }}>
+                        {fromAdmin ? "🛡️ SplitSubs Admin" : "You"} · {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-          <form onSubmit={send} style={{
-            padding: 12, borderTop: "1px solid var(--border)",
-            display: "flex", gap: 8,
-          }}>
-            <input
-              value={draft} onChange={e => setDraft(e.target.value)}
-              placeholder="Message admin…" autoFocus
-              style={{
-                flex: 1, background: "var(--bg3)", border: "1px solid var(--border)",
-                borderRadius: 10, padding: "10px 14px", color: "var(--text)", fontSize: "0.9rem",
-              }}
-            />
-            <button type="submit" disabled={sending || !draft.trim()} style={{
-              background: "linear-gradient(135deg, #7c6aff, #ff6a8e)",
-              color: "#fff", border: "none", borderRadius: 10,
-              padding: "0 16px", cursor: "pointer", fontSize: "0.95rem", fontWeight: 600,
-            }}>{sending ? "…" : "➤"}</button>
-          </form>
+              <form onSubmit={send} style={{
+                padding: 12, borderTop: "1px solid var(--border)",
+                display: "flex", gap: 8,
+              }}>
+                <input
+                  value={draft} onChange={e => setDraft(e.target.value)}
+                  placeholder="Message admin…" autoFocus
+                  style={{
+                    flex: 1, background: "var(--bg3)", border: "1px solid var(--border)",
+                    borderRadius: 10, padding: "10px 14px", color: "var(--text)", fontSize: "0.9rem",
+                  }}
+                />
+                <button type="submit" disabled={sending || !draft.trim()} style={{
+                  background: "linear-gradient(135deg, #7c6aff, #ff6a8e)",
+                  color: "#fff", border: "none", borderRadius: 10,
+                  padding: "0 16px", cursor: "pointer", fontSize: "0.95rem", fontWeight: 600,
+                }}>{sending ? "…" : "➤"}</button>
+              </form>
+            </>
+          ) : (
+            <div style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              padding: 30, textAlign: "center", gap: 14,
+            }}>
+              <div style={{ fontSize: "2rem" }}>👋</div>
+              <div style={{ color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.6 }}>
+                Log in or create a free account to chat with the SplitSubs support team.
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => { setOpen(false); navigate && navigate("login"); }}
+                  style={{
+                    background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)",
+                    borderRadius: 10, padding: "9px 18px", cursor: "pointer", fontSize: "0.88rem", fontWeight: 600,
+                  }}>Log In</button>
+                <button
+                  onClick={() => { setOpen(false); navigate && navigate("signup"); }}
+                  style={{
+                    background: "linear-gradient(135deg, #7c6aff, #ff6a8e)", color: "#fff",
+                    border: "none", borderRadius: 10, padding: "9px 18px", cursor: "pointer", fontSize: "0.88rem", fontWeight: 600,
+                  }}>Sign Up</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>
