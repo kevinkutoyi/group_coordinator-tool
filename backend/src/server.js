@@ -959,6 +959,11 @@ app.patch("/api/groups/:id/status", requireAuth, async (req, res) => {
   if (!group) return res.status(404).json({ error: "Group not found" });
   if (group.organizerId !== req.user.id && req.user.role !== "superadmin")
     return res.status(403).json({ error: "Forbidden" });
+  // A moderator's own listing can't be flipped to open/closed before the
+  // admin has reviewed it — that would let it start accepting members while
+  // still bypassing the approval queue. Superadmin is exempt.
+  if (req.user.role !== "superadmin" && group.reviewStatus === "pending")
+    return res.status(403).json({ error: "This listing is still awaiting admin approval and can't be reopened or closed yet." });
   res.json(await prisma.group.update({ where: { id: req.params.id }, data: { status } }));
 });
 

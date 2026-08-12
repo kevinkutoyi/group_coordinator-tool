@@ -91,6 +91,9 @@ export default function GroupCard({ group, onClick }) {
       {group.status === "full" && (
         <div className="gc-ribbon gc-ribbon-full">● Full</div>
       )}
+      {group.status === "pending_review" && (
+        <div className="gc-ribbon gc-ribbon-pending">⏳ Pending Approval</div>
+      )}
       {group.status === "closed" && (
         <div className="gc-ribbon gc-ribbon-closed">Closed</div>
       )}
@@ -168,7 +171,10 @@ export default function GroupCard({ group, onClick }) {
         <div className="gc-footer">
           <span className="gc-organizer">🛡️ {group.organizerName}</span>
           <span className={`gc-status-pill status-${group.status}`}>
-            {group.status === "open" ? "● Open" : group.status === "full" ? "● Full" : "Closed"}
+            {group.status === "open" ? "● Open"
+              : group.status === "full" ? "● Full"
+              : group.status === "pending_review" ? "⏳ Pending Approval"
+              : "Closed"}
           </span>
         </div>
       </div>

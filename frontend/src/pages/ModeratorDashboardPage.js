@@ -4,6 +4,7 @@ import { kes, useKesRate } from "../currency";
 import "./ModeratorDashboardPage.css";
 
 const STATUS_COLORS = { open:"var(--success)", full:"var(--warning)", closed:"var(--muted)", pending_review:"var(--accent)" };
+const STATUS_LABELS = { open:"Open", full:"Full", closed:"Closed", pending_review:"⏳ Pending Approval" };
 const REVIEW_LABELS = { approved:"✅ Live", pending:"⏳ Under Review", rejected:"❌ Rejected" };
 const REVIEW_COLORS = { approved:"var(--success)", pending:"var(--warning)", rejected:"var(--error)" };
 
@@ -193,7 +194,7 @@ export default function ModeratorDashboardPage({ navigate }) {
                     <div className="mgc-name">{g.serviceName} — {g.planName}</div>
                     <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
                       <span className="tag" style={{ color: STATUS_COLORS[g.status] || "var(--muted)", background:"var(--bg3)", border:"1px solid var(--border)", fontSize:"0.7rem" }}>
-                        {g.status}
+                        {STATUS_LABELS[g.status] || g.status}
                       </span>
                       <span className="tag" style={{ color: REVIEW_COLORS[g.reviewStatus] || "var(--muted)", background:"var(--bg3)", border:"1px solid var(--border)", fontSize:"0.7rem" }}>
                         {REVIEW_LABELS[g.reviewStatus] || g.reviewStatus}

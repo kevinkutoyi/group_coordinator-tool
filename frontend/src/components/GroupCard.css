@@ -43,6 +43,7 @@
 /* Status variants */
 .gc-status-full   { opacity: 0.82; }
 .gc-status-closed { opacity: 0.6; filter: grayscale(0.4); }
+.gc-status-pending_review { opacity: 0.82; }
 
 /* Mouse-tracking glow */
 .gc-glow {
@@ -92,6 +93,7 @@
   animation: ribbonPulse 1.8s ease-in-out infinite;
 }
 .gc-ribbon-full   { background: rgba(251,191,36,0.9); color: #000; }
+.gc-ribbon-pending { background: rgba(124,106,255,0.9); color: #fff; }
 .gc-ribbon-closed { background: rgba(100,100,120,0.85); color: #ccc; }
 
 @keyframes ribbonPulse {
@@ -287,6 +289,7 @@
 }
 .status-open   { background: rgba(74,222,128,0.12);  color: var(--success); border: 1px solid rgba(74,222,128,0.2); }
 .status-full   { background: rgba(251,191,36,0.12);  color: var(--warning); border: 1px solid rgba(251,191,36,0.2); }
+.status-pending_review { background: rgba(124,106,255,0.12); color: var(--accent); border: 1px solid rgba(124,106,255,0.2); }
 .status-closed { background: rgba(100,100,120,0.12); color: var(--muted);   border: 1px solid var(--border); }
 
 /* ── "Just joined" social-proof badge ──────────────────────────── */

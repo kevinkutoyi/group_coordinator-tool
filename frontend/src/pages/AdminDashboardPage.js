@@ -460,7 +460,7 @@ export default function AdminDashboardPage({ navigate }) {
           <div>
             <div className="admin-tabs" style={{marginBottom:16}}>
               <button className={`tab-btn ${tab==="groups"?"active":""}`} onClick={()=>setTab("groups")}>All Groups ({groups.length})</button>
-              <button className={`tab-btn ${tab==="group-review"?"active":""}`} onClick={()=>setTab("group-review")}>Pending Review ({pendingGroups.length})</button>
+              <button className={`tab-btn ${tab==="group-review"?"active":""}`} onClick={()=>setTab("group-review")}>⏳ Pending Products ({pendingGroups.length})</button>
             </div>
           </div>
         )}
@@ -854,11 +854,14 @@ export default function AdminDashboardPage({ navigate }) {
       {tab === "group-review" && (
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
-            <h2 className="section-h2" style={{margin:0}}>🔍 Groups Awaiting Review</h2>
+            <h2 className="section-h2" style={{margin:0}}>⏳ Pending Products</h2>
             <button className="btn btn-sm btn-outline" onClick={loadAll}>↻ Refresh</button>
           </div>
+          <p style={{color:"var(--muted)",fontSize:"0.82rem",marginTop:-8,marginBottom:16}}>
+            Every group submitted by a moderator waits here until you preview and approve it — nothing goes live to customers before that.
+          </p>
           {pendingGroups.length === 0 ? (
-            <div className="empty-state"><div className="emoji">✅</div><h3>All clear!</h3><p>No groups pending review.</p></div>
+            <div className="empty-state"><div className="emoji">✅</div><h3>All clear!</h3><p>No products pending approval.</p></div>
           ) : pendingGroups.map(g => (
             <div key={g.id} className="user-card card" style={{marginBottom:12}}>
               <div className="user-card-left" style={{flexWrap:"wrap",gap:12}}>

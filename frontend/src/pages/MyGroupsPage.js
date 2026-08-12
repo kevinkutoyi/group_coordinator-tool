@@ -220,7 +220,9 @@ export default function MyGroupsPage({ navigate }) {
                           <div style={{ fontWeight: 700, fontSize: "1rem" }}>{g.serviceName} — {g.planName}</div>
                           <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 2 }}>🛡️ You coordinate · {g.billingCycle}</div>
                         </div>
-                        <span className={"tag tag-" + g.status}>{g.status}</span>
+                        <span className={"tag tag-" + g.status}>
+                          {g.status === "pending_review" ? "⏳ Pending Approval" : g.status}
+                        </span>
                       </div>
 
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, fontSize: "0.8rem" }}>

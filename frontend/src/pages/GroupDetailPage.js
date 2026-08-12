@@ -306,7 +306,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
             <h1 className="gd-title">{group.serviceName} — {group.planName}</h1>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
               <span className={`tag tag-${group.status}`}>
-                {group.status === "open" ? "● Open" : group.status === "full" ? "● Full" : "Closed"}
+                {group.status === "open" ? "● Open"
+                  : group.status === "full" ? "● Full"
+                  : group.status === "pending_review" ? "⏳ Pending Approval"
+                  : "Closed"}
               </span>
               <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
                 Created {new Date(group.createdAt).toLocaleDateString()}
@@ -340,7 +343,12 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 📧 Group Emails
               </button>
             )}
-            {canManage && (
+            {canManage && group.reviewStatus === "pending" && !isSuperAdmin && (
+              <span className="tag" style={{ background: "rgba(124,106,255,0.12)", color: "var(--accent)", border: "1px solid rgba(124,106,255,0.2)" }}>
+                ⏳ Waiting for admin approval
+              </span>
+            )}
+            {canManage && (isSuperAdmin || group.reviewStatus !== "pending") && (
               <div className="manage-controls">
                 {group.status !== "open"   && <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange("open")}>🔓 Reopen</button>}
                 {group.status === "open"   && <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange("closed")}>🔒 Close</button>}
