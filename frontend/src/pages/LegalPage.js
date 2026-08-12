@@ -478,14 +478,6 @@ export default function LegalPage({ type, navigate }) {
       <h1 className="page-title" style={{ marginBottom: 4 }}>{doc.title}</h1>
       <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginBottom: 24 }}>Last updated: {doc.lastUpdated || LAST_UPDATED}</p>
 
-      <div style={{
-        background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)",
-        borderRadius: 10, padding: "12px 16px", marginBottom: 28, fontSize: "0.8rem", color: "var(--text)", lineHeight: 1.5,
-      }}>
-        ⚠️ This is a starting draft describing how SplitSubs actually operates today. It hasn't been reviewed by a lawyer —
-        please have it checked against your local regulations before treating it as your final, binding policy.
-      </div>
-
       {doc.intro && (
         <div style={{ marginBottom: 22 }}>
           {doc.intro.map((p, i) => (
