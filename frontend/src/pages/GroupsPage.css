@@ -89,9 +89,14 @@
 }
 
 .gp-rail-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 0.6rem;
   font-weight: 600;
   line-height: 1.15;
+  height: 1.4rem;
   color: var(--muted);
   word-break: break-word;
 }
@@ -147,7 +152,7 @@
 @media (min-width: 480px) {
   .gp-sidebar { flex-basis: 88px; }
   .gp-rail-icon { width: 40px; height: 40px; font-size: 1.3rem; }
-  .gp-rail-label { font-size: 0.66rem; }
+  .gp-rail-label { font-size: 0.66rem; height: 1.55rem; }
 }
 
 @media (min-width: 700px) {
@@ -155,12 +160,12 @@
   .gp-sidebar { flex-basis: 108px; }
   .gp-rail-item { padding: 12px 6px 10px; gap: 6px; }
   .gp-rail-icon { width: 44px; height: 44px; font-size: 1.4rem; }
-  .gp-rail-label { font-size: 0.72rem; }
+  .gp-rail-label { font-size: 0.72rem; height: 1.7rem; }
 }
 
 @media (max-width: 380px) {
   .gp-sidebar { flex-basis: 68px; }
   .gp-rail-icon { width: 32px; height: 32px; font-size: 1.05rem; border-radius: 9px; }
-  .gp-rail-label { font-size: 0.56rem; }
+  .gp-rail-label { font-size: 0.56rem; height: 1.3rem; }
   .gp-main .grid-2 { grid-template-columns: 1fr; }
 }
