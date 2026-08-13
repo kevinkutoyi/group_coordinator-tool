@@ -20,8 +20,24 @@ const HERO_SERVICES = [
   { icon:"🏰", name:"Disney+" }, { icon:"👑", name:"Max" },
 ];
 
+const FAQ_ITEMS = [
+  { q: "What is SplitSubs?",
+    a: "SplitSubs is a platform that makes premium digital subscriptions more affordable by connecting users to available subscription plans and shared access opportunities. You can discover, join, and manage subscriptions from one place without paying the full individual price." },
+  { q: "How does SplitSubs work?",
+    a: "Choose the subscription you want, select an available plan, and complete your payment. SplitSubs then provides the access details or membership instructions required for that subscription. Your access depends on the specific subscription and plan you purchase." },
+  { q: "Is SplitSubs safe and legitimate?",
+    a: "SplitSubs is designed to provide a structured marketplace for subscription access. We use account verification, payment controls, monitoring, and user-support processes to help protect our customers. However, availability and access ultimately depend on the terms and policies of each subscription provider." },
+  { q: "What happens if my subscription stops working?",
+    a: "If you experience an access problem, contact SplitSubs support through the platform. We will review the issue and, where applicable under the specific plan's terms, help restore access, provide an alternative, or offer another appropriate resolution." },
+  { q: "Can I get a refund?",
+    a: "Refund eligibility depends on the product, subscription, payment status, and circumstances of the request. Before purchasing, review the applicable refund terms for the specific plan. SplitSubs may decline refunds where access has already been successfully delivered, where misuse has occurred, or where the issue is outside SplitSubs' responsibility." },
+  { q: "What are SplitCoins?",
+    a: "SplitCoins are SplitSubs' platform rewards and digital credits designed to give users additional value when using the platform. Users may earn SplitCoins through eligible activities such as purchases, referrals, promotions, or loyalty programs and may use them for eligible SplitSubs products or benefits. SplitCoins are not automatically equivalent to cash and cannot be treated as an investment or a promise of financial returns." },
+];
+
 export default function HomePage({ navigate }) {
   const [stats, setStats] = useState(null);
+  const [openFaq, setOpenFaq] = useState(null);
   const user = session.getUser();
 
   useEffect(() => { api.getStats().then(setStats).catch(() => {}); }, []);
@@ -197,6 +213,29 @@ export default function HomePage({ navigate }) {
               <p>Join now to secure your slot before others do.</p>
             </div>
           </button>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section className="faq-section">
+        <h2 className="faq-title">Frequently Asked Questions</h2>
+        <div className="faq-list">
+          {FAQ_ITEMS.map((item, i) => {
+            const open = openFaq === i;
+            return (
+              <div key={item.q} className={`faq-item ${open ? "open" : ""}`}>
+                <button
+                  className="faq-q"
+                  aria-expanded={open}
+                  onClick={() => setOpenFaq(open ? null : i)}
+                >
+                  <span>{item.q}</span>
+                  <span className="faq-caret">{open ? "−" : "+"}</span>
+                </button>
+                {open && <p className="faq-a">{item.a}</p>}
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>
