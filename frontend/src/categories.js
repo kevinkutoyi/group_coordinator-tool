@@ -13,7 +13,7 @@ export const CATEGORY_ORDER = [
   "AI & Productivity",
   "Social Media Accounts",
   "Design & Creativity",
-  "VPNs & Proxies",
+  "Security, VPNs & Proxies",
   "E-books and Manuals",
   "Tech Help & Services",
 ];
@@ -27,7 +27,7 @@ export const CATEGORY_ICON = {
   "AI & Productivity": "🤖",
   "Social Media Accounts": "👥",
   "Design & Creativity": "🎨",
-  "VPNs & Proxies": "🛡️",
+  "Security, VPNs & Proxies": "🛡️",
   "E-books and Manuals": "📚",
   "Tech Help & Services": "🛠️",
 };
@@ -42,7 +42,7 @@ export const CATEGORY_SHORT_LABEL = {
   "AI & Productivity": "AI Tools",
   "Social Media Accounts": "Social Accounts",
   "Design & Creativity": "Design Tools",
-  "VPNs & Proxies": "VPNs & Proxies",
+  "Security, VPNs & Proxies": "Security & VPNs",
   "E-books and Manuals": "E-books & Manuals",
   "Tech Help & Services": "Technical Services",
 };

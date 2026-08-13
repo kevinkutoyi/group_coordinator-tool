@@ -94,7 +94,7 @@ const requireSuperAdmin = requireRole("superadmin");
 // `category` groups services for the "Browse by Category" cards on the
 // frontend Browse Groups page (see CATEGORY_ORDER in GroupsPage.js) — use
 // one of: "Streaming & Entertainment", "AI & Productivity",
-// "Social Media Accounts", "Design & Creativity", "VPNs & Proxies",
+// "Social Media Accounts", "Design & Creativity", "Security, VPNs & Proxies",
 // "E-books and Manuals", "Tech Help & Services".
 const SERVICES = [
   // ── Streaming & Entertainment ──────────────────────────────────────────
@@ -139,8 +139,8 @@ const SERVICES = [
   { id: "revoicer", name: "Revoicer",         icon: "🎙️", category: "Design & Creativity",
     plans: [{ name: "PRO", price: 47.00, maxSlots: 3 }] },
 
-  // ── VPNs & Proxies ──────────────────────────────────────────────────────
-  { id: "nordvpn",  name: "NordVPN",          icon: "🛡️", category: "VPNs & Proxies",
+  // ── Security, VPNs & Proxies ─────────────────────────────────────────────
+  { id: "nordvpn",  name: "NordVPN",          icon: "🛡️", category: "Security, VPNs & Proxies",
     plans: [{ name: "Complete", price: 14.99, maxSlots: 4 }] },
 
   // ── E-books and Manuals ─────────────────────────────────────────────────
