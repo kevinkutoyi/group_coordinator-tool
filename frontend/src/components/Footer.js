@@ -154,7 +154,10 @@ export default function Footer({ navigate }) {
 
           <div className="footer-legal-block">
             <p className="footer-legal">
-              © {new Date().getFullYear()} SplitSubs. All group buys use official family/group plans only.
+              © {new Date().getFullYear()} SplitSubs.
+            </p>
+            <p className="footer-legal footer-plans-note">
+              All group buys use official family/group plans only.
             </p>
             <p className="footer-legal footer-trademark-note">
               All copyrights, trade marks, service marks belong to the corresponding owners.

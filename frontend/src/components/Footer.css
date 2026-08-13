@@ -203,6 +203,9 @@
   opacity: 0.6;
   margin: 0;
 }
+.footer-plans-note {
+  text-align: center;
+}
 .footer-trademark-note {
   margin-top: 2px;
   font-size: 0.7rem;
