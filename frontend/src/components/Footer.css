@@ -187,18 +187,25 @@
   line-height: 1.5;
 }
 
-.footer-legal {
-  font-size: 0.75rem;
-  color: var(--muted);
-  opacity: 0.6;
-  margin: 0;
+.footer-legal-block {
   width: 100%;
   text-align: center;
   padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,0.04);
 }
 @media (min-width: 800px) {
-  .footer-legal { width: auto; text-align: right; border-top: none; padding-top: 0; }
+  .footer-legal-block { width: auto; text-align: right; border-top: none; padding-top: 0; }
+}
+
+.footer-legal {
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.6;
+  margin: 0;
+}
+.footer-trademark-note {
+  margin-top: 2px;
+  font-size: 0.7rem;
 }
 
 /* ── Social + contact row ── */

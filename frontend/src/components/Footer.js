@@ -152,9 +152,14 @@ export default function Footer({ navigate }) {
             <span className="footer-tagline">Share legally, save smartly.</span>
           </div>
 
-          <p className="footer-legal">
-            © {new Date().getFullYear()} SplitSubs. All group buys use official family/group plans only.
-          </p>
+          <div className="footer-legal-block">
+            <p className="footer-legal">
+              © {new Date().getFullYear()} SplitSubs. All group buys use official family/group plans only.
+            </p>
+            <p className="footer-legal footer-trademark-note">
+              All copyrights, trade marks, service marks belong to the corresponding owners.
+            </p>
+          </div>
         </div>
       </div>
     </footer>
