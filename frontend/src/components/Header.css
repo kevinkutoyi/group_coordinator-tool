@@ -7,12 +7,13 @@
 .header-inner {
   max-width: 1160px; margin: 0 auto; padding: 0 24px;
   height: 64px; display: flex; align-items: center; justify-content: space-between;
+  position: relative;
 }
 .logo {
   display: flex; align-items: center; gap: 8px;
   font-family: var(--font-head); font-size: 1.25rem; font-weight: 800;
   color: var(--text); background: none; border: none; cursor: pointer;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.02em; flex-shrink: 0;
 }
 .logo-icon { font-size: 1.3rem; filter: drop-shadow(0 0 8px rgba(124,106,255,0.6)); }
 .nav { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
@@ -25,6 +26,36 @@
 .nav-link.active { color: var(--text); }
 .admin-link { color: var(--accent) !important; }
 .nav-auth { display: flex; gap: 8px; margin-left: 8px; }
+
+/* Hamburger toggle — hidden on desktop, shown under the breakpoint below */
+.hamburger-btn {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 40px; height: 40px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 210;
+}
+.hamburger-btn span {
+  display: block;
+  width: 18px; height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.hamburger-btn.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger-btn.open span:nth-child(2) { opacity: 0; }
+.hamburger-btn.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.nav-backdrop {
+  display: none;
+}
 
 /* User menu */
 .user-menu-wrap { position: relative; margin-left: 8px; }
@@ -68,6 +99,75 @@
 .user-dropdown .divider { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; }
 .logout-btn { color: var(--error) !important; }
 
-@media (max-width: 640px) {
-  .nav-link:not(.active):not(:last-of-type) { display: none; }
+/* ── Responsive: collapse the nav into a hamburger-triggered panel ── */
+@media (max-width: 900px) {
+  .header-inner { padding: 0 16px; }
+
+  .hamburger-btn { display: flex; }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 64px 0 0 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 150;
+    animation: fadeIn 0.15s ease;
+  }
+
+  .nav {
+    position: fixed;
+    top: 64px; left: 0; right: 0;
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px 22px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+    z-index: 200;
+    transform: translateY(-12px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 0.2s ease, opacity 0.2s ease, visibility 0.2s;
+  }
+  .nav.nav-open {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .nav-link {
+    width: 100%;
+    text-align: left;
+    padding: 13px 12px;
+    font-size: 0.95rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px;
+  }
+
+  .nav-auth {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+    margin: 10px 0 0;
+  }
+  .nav-auth .btn { width: 100%; }
+
+  .user-menu-wrap { width: 100%; margin: 10px 0 0; }
+  .user-pill { width: 100%; justify-content: space-between; }
+  .user-dropdown {
+    position: static;
+    width: 100%;
+    margin-top: 6px;
+    box-shadow: none;
+    animation: none;
+  }
+}
+
+@media (min-width: 901px) {
+  .nav-backdrop { display: none !important; }
 }
