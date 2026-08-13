@@ -1,0 +1,166 @@
+/* ── Category rail + results layout ──────────────────────────────────
+   Categories sit in a persistent left column instead of a big grid above
+   the listings — switching category no longer means scrolling back up.
+   The rail stays docked (sticky) under the header as the results scroll. */
+
+.gp-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.gp-sidebar {
+  flex: 0 0 76px;
+  position: sticky;
+  top: 76px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  padding-bottom: 8px;
+}
+.gp-sidebar::-webkit-scrollbar { width: 4px; }
+.gp-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+.gp-sidebar-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.7;
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+
+.gp-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gp-rail-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 4px 8px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.18s, background 0.18s, transform 0.18s;
+  font-family: inherit;
+}
+.gp-rail-item:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+
+.gp-rail-item::before {
+  content: '';
+  position: absolute;
+  left: -1px; top: 50%;
+  width: 3px; height: 0;
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  border-radius: 0 4px 4px 0;
+  transform: translateY(-50%);
+  transition: height 0.18s ease;
+}
+.gp-rail-item.active::before { height: 60%; }
+
+.gp-rail-item.active {
+  border-color: rgba(124,106,255,0.4);
+  background: rgba(124,106,255,0.08);
+}
+
+.gp-rail-icon {
+  width: 36px; height: 36px;
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem;
+  background: var(--bg3);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.18s;
+  flex-shrink: 0;
+}
+.gp-rail-item.active .gp-rail-icon {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  box-shadow: 0 4px 14px rgba(124,106,255,0.35);
+  transform: scale(1.06);
+}
+
+.gp-rail-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--muted);
+  word-break: break-word;
+}
+.gp-rail-item.active .gp-rail-label { color: var(--text); }
+
+/* ── Results pane ── */
+.gp-main {
+  flex: 1;
+  min-width: 0;
+  scroll-margin-top: 76px;
+}
+
+.gp-main-head { margin-bottom: 18px; }
+.gp-active-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+}
+
+.gp-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.gp-chip-more {
+  font-size: 0.72rem;
+  color: var(--muted);
+  align-self: center;
+}
+
+/* Cards need a smaller minimum than the site-wide 340px once they're
+   sharing the row with the category rail, or they'd force the page wide. */
+.gp-main .grid-2 {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* ── Responsive tuning ── */
+@media (min-width: 480px) {
+  .gp-sidebar { flex-basis: 88px; }
+  .gp-rail-icon { width: 40px; height: 40px; font-size: 1.3rem; }
+  .gp-rail-label { font-size: 0.66rem; }
+}
+
+@media (min-width: 700px) {
+  .gp-layout { gap: 24px; }
+  .gp-sidebar { flex-basis: 108px; }
+  .gp-rail-item { padding: 12px 6px 10px; gap: 6px; }
+  .gp-rail-icon { width: 44px; height: 44px; font-size: 1.4rem; }
+  .gp-rail-label { font-size: 0.72rem; }
+}
+
+@media (max-width: 380px) {
+  .gp-sidebar { flex-basis: 68px; }
+  .gp-rail-icon { width: 32px; height: 32px; font-size: 1.05rem; border-radius: 9px; }
+  .gp-rail-label { font-size: 0.56rem; }
+  .gp-main .grid-2 { grid-template-columns: 1fr; }
+}

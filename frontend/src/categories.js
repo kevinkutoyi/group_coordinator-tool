@@ -31,3 +31,18 @@ export const CATEGORY_ICON = {
   "E-books and Manuals": "📚",
   "Tech Help & Services": "🛠️",
 };
+
+// Short, quick-scan labels for the compact category rail (GroupsPage.js
+// sidebar) — display-only. The full names above remain the canonical values
+// used for filtering, page titles, meta descriptions, and URL slugs, so
+// nothing here affects SEO or already-indexed /groups/:slug URLs.
+export const CATEGORY_SHORT_LABEL = {
+  [ALL_LISTINGS]: "All",
+  "Streaming & Entertainment": "Streaming",
+  "AI & Productivity": "AI Tools",
+  "Social Media Accounts": "Social",
+  "Design & Creativity": "Design",
+  "VPNs & Proxies": "VPNs",
+  "E-books and Manuals": "E-books",
+  "Tech Help & Services": "Tech Help",
+};
