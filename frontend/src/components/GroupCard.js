@@ -2,13 +2,6 @@ import React, { useRef, useState, useEffect } from "react";
 import { kes, useKesRate } from "../currency";
 import "./GroupCard.css";
 
-const CYCLE_LABELS = {
-  monthly:    { label:"Monthly",    icon:"📅", color:"#7c6aff" },
-  quarterly:  { label:"Quarterly",  icon:"🗓️", color:"#ff6a8e" },
-  biannually: { label:"Every 6 mo", icon:"📆", color:"#6affcb" },
-  annually:   { label:"Annual",     icon:"🏆", color:"#fbbf24" },
-};
-
 const SERVICE_GRADIENTS = {
   spotify:  ["#1DB954","#158a3e"],
   netflix:  ["#E50914","#8b0000"],
@@ -39,7 +32,6 @@ export default function GroupCard({ group, onClick }) {
   const filled    = group.memberCount || 0;
   const pct       = Math.round((filled / group.maxSlots) * 100);
   const spotsLeft = group.maxSlots - filled;
-  const cycle     = CYCLE_LABELS[group.billingCycle] || CYCLE_LABELS.monthly;
   const gradient  = SERVICE_GRADIENTS[group.serviceId] || ["#7c6aff","#5548cc"];
 
   // 3-D tilt on mouse move
@@ -110,10 +102,6 @@ export default function GroupCard({ group, onClick }) {
             {group.reviewCount > 0 && (
               <p className="gc-rating">★ {group.avgRating} <span>({group.reviewCount})</span></p>
             )}
-          </div>
-          {/* Billing cycle badge */}
-          <div className="gc-cycle-badge" style={{ "--cycle-color": cycle.color }}>
-            {cycle.icon} {cycle.label}
           </div>
         </div>
 

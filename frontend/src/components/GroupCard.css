@@ -133,26 +133,10 @@
 }
 
 .gc-title { flex: 1; min-width: 0; }
-.gc-title h3 { font-size: 0.98rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gc-title h3 { font-size: 0.98rem; font-weight: 700; line-height: 1.3; overflow-wrap: break-word; }
 .gc-plan  { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
 .gc-rating { font-size: 0.72rem; color: var(--warning); margin-top: 3px; font-weight: 600; }
 .gc-rating span { color: var(--muted); font-weight: 400; }
-
-/* Billing cycle badge */
-.gc-cycle-badge {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 99px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--cycle-color, #7c6aff);
-  background: var(--bg3);
-  border: 1px solid rgba(124,106,255,0.2);
-  white-space: nowrap;
-}
 
 .gc-desc {
   font-size: 0.8rem;
