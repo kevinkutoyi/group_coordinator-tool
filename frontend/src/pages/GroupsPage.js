@@ -77,14 +77,21 @@ export default function GroupsPage({ navigate, categoryParam }) {
 
   const serviceCategory = Object.fromEntries(services.map(s => [s.id, s.category]));
 
-  const activeCatData = categories.find(c => c.name === activeCategory);
+  // Landing on a bare /groups URL (no category in the path) shows "All
+  // Listings" immediately instead of an empty "pick a category" placeholder
+  // — activeCategory (nullable) still drives the SEO title/canonical below,
+  // so the bare URL keeps its own generic title rather than borrowing
+  // "All Listings"'s.
+  const effectiveCategory = activeCategory || ALL_LISTINGS;
 
-  const filtered = activeCategory === null ? [] : groups.filter(g => {
+  const activeCatData = categories.find(c => c.name === effectiveCategory);
+
+  const filtered = groups.filter(g => {
     // Customers and guests only see approved groups
     const role = session.getRole();
     if (role !== "superadmin" && role !== "moderator" && g.reviewStatus !== "approved") return false;
     const matchFilter   = filter === "all" || g.status === filter;
-    const matchCategory = activeCategory === ALL_LISTINGS || serviceCategory[g.serviceId] === activeCategory;
+    const matchCategory = effectiveCategory === ALL_LISTINGS || serviceCategory[g.serviceId] === effectiveCategory;
     const q = search.toLowerCase();
     const matchSearch = (g.serviceName||"").toLowerCase().includes(q) ||
       (g.planName||"").toLowerCase().includes(q) ||
@@ -97,7 +104,7 @@ export default function GroupsPage({ navigate, categoryParam }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:16, marginBottom:20 }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 4 }}>Browse Groups</h1>
-          <p className="page-sub" style={{ marginBottom:0 }}>Pick a category to see open slots</p>
+          <p className="page-sub" style={{ marginBottom:0 }}>Showing all open slots — narrow it down by category on the left</p>
         </div>
         {canCreate
           ? <button className="btn btn-primary" onClick={() => navigate("create")}>+ Create Group</button>
@@ -114,7 +121,7 @@ export default function GroupsPage({ navigate, categoryParam }) {
             <div className="gp-sidebar-title">Categories</div>
             <div className="gp-rail">
               {categories.map(cat => {
-                const active = activeCategory === cat.name;
+                const active = effectiveCategory === cat.name;
                 return (
                   <button
                     key={cat.name}
@@ -134,17 +141,11 @@ export default function GroupsPage({ navigate, categoryParam }) {
         <div className="gp-main" id="gp-main">
           {loading ? (
             <div style={{ textAlign:"center", padding:60 }}><span className="spinner"/></div>
-          ) : activeCategory === null ? (
-            <div className="empty-state">
-              <div className="emoji">🗂️</div>
-              <h3>Choose a category to get started</h3>
-              <p>Pick "{ALL_LISTINGS}" to see everything, or a category on the left.</p>
-            </div>
           ) : (
             <>
               <div className="gp-main-head">
                 <h2 className="gp-active-title">
-                  <span>{CATEGORY_ICON[activeCategory] || "📦"}</span> {activeCategory}
+                  <span>{CATEGORY_ICON[effectiveCategory] || "📦"}</span> {effectiveCategory}
                 </h2>
                 {activeCatData && activeCatData.services.length > 0 && (
                   <div className="gp-chip-row">
@@ -180,7 +181,7 @@ export default function GroupsPage({ navigate, categoryParam }) {
                 <div className="empty-state">
                   <div className="emoji">🔍</div>
                   <h3>No groups found</h3>
-                  <p>{activeCategory === ALL_LISTINGS ? "Try a different filter, or check back soon for new groups." : `No groups in ${activeCategory} yet — check back soon.`}</p>
+                  <p>{effectiveCategory === ALL_LISTINGS ? "Try a different filter, or check back soon for new groups." : `No groups in ${effectiveCategory} yet — check back soon.`}</p>
                 </div>
               ) : (
                 <div className="grid-2">
