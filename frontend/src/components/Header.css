@@ -105,13 +105,21 @@
 
   .hamburger-btn { display: flex; }
 
+  /* `.header` has backdrop-filter, which makes it a new containing block for
+     its `position: fixed` descendants — so `bottom: 0` here would resolve
+     against the ~64px header box instead of the real viewport, collapsing
+     this to almost no height. Use a viewport-relative height instead, which
+     isn't affected by that and reliably covers the full screen below the
+     header so a tap anywhere outside the panel closes it. */
   .nav-backdrop {
     display: block;
     position: fixed;
-    inset: 64px 0 0 0;
-    background: rgba(0,0,0,0.5);
+    top: 64px; left: 0; right: 0;
+    height: 100vh;
+    background: rgba(0,0,0,0.55);
     z-index: 150;
     animation: fadeIn 0.15s ease;
+    cursor: pointer;
   }
 
   .nav {
