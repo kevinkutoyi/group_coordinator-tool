@@ -112,9 +112,9 @@ export default function GroupCard({ group, onClick }) {
         {/* Price block */}
         <div className="gc-price-block">
           <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text)", lineHeight: 1.2 }}>
+            <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--text)", lineHeight: 1.2, whiteSpace: "nowrap" }}>
               <span style={{ color: "var(--accent)" }}>USD {group.pricePerSlot}</span>
-              <span style={{ fontSize: "0.9rem", fontWeight: 400, color: "var(--muted)", margin: "0 8px" }}>·</span>
+              <span style={{ fontSize: "0.75rem", fontWeight: 400, color: "var(--muted)", margin: "0 6px" }}>·</span>
               <span style={{ color: "var(--accent2)" }}>KES {kes(group.pricePerSlot)}</span>
             </div>
             <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 3 }}>
