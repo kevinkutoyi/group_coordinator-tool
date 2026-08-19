@@ -154,12 +154,14 @@ model Payment {
   memberName     String
   months         Int      @default(1)
   amount         Float                         // total paid by member (USD)
-  platformFee    Float
-  moderatorOwed  Float
+  platformFee    Float                         // NET — already reduced by any SplitCoins funded from the platform's cut
+  moderatorOwed  Float                         // NET — already reduced by any SplitCoins paid to the owner instead of cash
+  grossPlatformFee   Float?                    // pre-SplitCoins platformFee, kept for gross-vs-net audit/display
+  grossModeratorOwed Float?                    // pre-SplitCoins moderatorOwed, kept for gross-vs-net audit/display
   organizerGets  Float    @default(0)          // alias for moderatorOwed
   moderatorId    String?
   method         String   @default("pesapal")
-  pesapalOrderId String?
+  pesapalOrderId String?  @unique               // one Payment per confirmed order reference — closes the race where a duplicate webhook/verify call could otherwise record (and pay out) the same purchase twice
   payoutStatus   String   @default("pending")  // pending | paid
   paidAt         DateTime?
   paidBy         String?

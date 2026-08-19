@@ -1162,6 +1162,9 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
 //  webhook can't double-mint, since both would share the same reference.
 // ═══════════════════════════════════════════════════════════════════════════
 const SPLITCOIN_PLATFORM_WALLET = "platform";
+const PURCHASE_COINS_KES = 20; // 2 coins per confirmed purchase: 1 buyer + 0.5 owner + 0.5 platform
+const REFERRAL_COINS_KES = 30; // 3 coins on a referred user's first confirmed purchase: 2 referrer + 1 platform
+const OWNER_COIN_KES     = 5;  // the group owner's 0.5-coin slice of PURCHASE_COINS_KES
 
 async function mintSplitCoin(reference, reason, sourceType, recipientId, amount, relatedUserId = null) {
   try {
@@ -1188,48 +1191,63 @@ async function awardPurchaseSplitCoins(payment) {
   }
 }
 
-async function awardReferralSplitCoinsIfEligible(payment) {
-  // Fires once — on the referred user's FIRST ever confirmed payment across
-  // any group: 2 SplitCoins to the referrer, 1 to the platform.
-  //
-  // Eligibility is "is THIS reference the user's chronologically-earliest
-  // payment" rather than "does the user currently have exactly one Payment
-  // row". The latter looked equivalent but isn't: Payment.pesapalOrderId has
-  // no DB unique constraint, so a raced duplicate webhook/verify call can
-  // create two Payment rows for the SAME reference before either finishes —
-  // a plain row-count check then sees count===2 for BOTH calls and silently
-  // skips the referral entirely, permanently losing it with no error raised.
-  // Comparing references instead is immune to that: two duplicate rows for
-  // the same order share the same pesapalOrderId, so either one still
-  // correctly reads as "yes, this is their first payment". The ledger's
-  // unique (sourcePaymentId, reason) constraint still backstops the actual
-  // mint against double-crediting either way.
-  const buyer = await prisma.user.findUnique({ where: { id: payment.userId } });
-  if (!buyer?.referredBy) return;
-
+// Fires once — on the referred user's FIRST ever confirmed payment across any
+// group: 2 SplitCoins to the referrer, 1 to the platform. `referrerId` is
+// precomputed by determineReferralEligibility() BEFORE the Payment row is
+// created (see confirmOrder) and threaded through here, rather than
+// re-derived independently — so the fee deduction applied to this same
+// payment and the coins actually minted can never disagree with each other.
+async function awardReferralSplitCoinsIfEligible(payment, referrerId) {
+  if (!referrerId) return;
   const ref = payment.pesapalOrderId;
-  const earliest = await prisma.payment.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: "asc" } });
-  if (!earliest || earliest.pesapalOrderId !== ref) return; // not their first-ever confirmed payment
-
-  await mintSplitCoin(ref, "referral_referrer", "referral", buyer.referredBy, 2, payment.userId);
+  await mintSplitCoin(ref, "referral_referrer", "referral", referrerId, 2, payment.userId);
   await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
 }
 
+// Is the user about to receive their first-ever confirmed Payment, and do
+// they have a referrer? Checked BEFORE the new Payment row is created (see
+// confirmOrder) so a raced duplicate webhook/verify call for the same
+// reference sees the identical answer on both concurrent attempts — neither
+// has created its row yet, so both count 0 prior payments and agree. That
+// keeps the fee deduction and the eventual referral mint from ever drifting
+// apart, and the DB unique constraint on Payment.pesapalOrderId (migration
+// 0014) plus the ledger's own unique (sourcePaymentId, reason) constraint
+// are what actually prevent double-crediting if both attempts proceed.
+async function determineReferralEligibility(userId) {
+  const buyer = await prisma.user.findUnique({ where: { id: userId } });
+  if (!buyer?.referredBy) return null;
+  const priorPayments = await prisma.payment.count({ where: { userId } });
+  if (priorPayments > 0) return null;
+  return buyer.referredBy;
+}
+
 // ── SplitCoins accounting: gross-vs-net revenue ─────────────────────────────
-// Both the Admin Dashboard and the Moderator Dashboard call THESE two
-// functions (never re-derive the math independently) so the two views can
-// never drift apart or show conflicting numbers for the same underlying
-// ledger. "Net" always means: gross cash figure minus the KES value of
-// whatever SplitCoins were minted out of that same pool. e.g. a KES 1,000
-// referred first purchase mints KES 30 of SplitCoins (2 to the referrer +
-// 1 to the platform) — that KES 30 is no longer clean, undiverted revenue,
-// so it comes off the relevant gross figure before anything is labelled "net".
+// SplitCoins are a REAL deduction, not a display estimate: their KES value
+// (converted to USD at the live platform rate) is subtracted from the actual
+// platformFee/moderatorOwed stored on the Payment row at confirmation time —
+// see confirmOrder. The buyer's and the platform's own coin(s) always come
+// out of platformFee (the platform funds its own loyalty program from its
+// own cut, including the full referral cost); the group owner's 0.5 coin
+// comes out of THEIR moderatorOwed specifically, since it's paid to them
+// in lieu of cash. If the group is platform-owned there's no separate
+// moderator, so the owner's share also comes out of platformFee instead.
+// Both the Admin Dashboard and Moderator Dashboard read the resulting
+// Payment.platformFee/moderatorOwed directly — there's only one real number,
+// not two dashboards independently estimating a "net" figure.
+function computeSplitCoinsDeduction({ moderatorId, referrerId }, kesRate) {
+  const isPlatformOwned = !moderatorId || moderatorId === "superadmin";
+  const platformKes = (isPlatformOwned ? PURCHASE_COINS_KES : PURCHASE_COINS_KES - OWNER_COIN_KES)
+    + (referrerId ? REFERRAL_COINS_KES : 0);
+  const ownerKes = isPlatformOwned ? 0 : OWNER_COIN_KES;
+  const rate = kesRate || DEFAULT_KES_PER_USD;
+  return {
+    platformFeeDeductionUsd:   +(platformKes / rate).toFixed(4),
+    moderatorOwedDeductionUsd: +(ownerKes / rate).toFixed(4),
+  };
+}
 async function getSplitCoinsKesValue(where = {}) {
   const rows = await prisma.splitCoinTransaction.findMany({ where });
   return +(rows.reduce((sum, r) => sum + r.amount, 0) * 10).toFixed(2);
-}
-function netOfSplitCoins(gross, coinsKes) {
-  return +((gross || 0) - (coinsKes || 0)).toFixed(2);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1260,33 +1278,64 @@ async function confirmOrder(reference) {
 
     const alreadyRecorded = await prisma.payment.findFirst({ where: { pesapalOrderId: reference } });
     if (!alreadyRecorded) {
-      const paymentRow = await prisma.payment.create({
-        data: {
-          groupId: order.groupId, memberId: order.memberId, userId: order.userId,
-          memberName: order.memberName, months: order.months, amount: order.memberPays,
-          platformFee: order.platformFee, moderatorOwed: order.moderatorOwed,
-          organizerGets: order.moderatorOwed, moderatorId: order.moderatorId,
-          method: "paystack", pesapalOrderId: reference, currency: order.currency,
-          confirmedAt, payoutStatus: "pending",
-        },
-      });
-      await prisma.platformEarning.create({
-        data: { orderId: reference, groupId: order.groupId, fee: order.platformFee, currency: order.currency, earnedAt: confirmedAt },
-      });
+      // Decide referral eligibility and the resulting SplitCoins deduction
+      // BEFORE creating the Payment row (see determineReferralEligibility /
+      // computeSplitCoinsDeduction above for why) — the buyer still pays the
+      // full sticker price via Paystack; this only changes how the already-
+      // collected revenue is allocated between platformFee/moderatorOwed and
+      // the SplitCoins ledger.
+      const referrerId = await determineReferralEligibility(order.userId);
+      const kesRate = await getPlatformKesRate();
+      const { platformFeeDeductionUsd, moderatorOwedDeductionUsd } = computeSplitCoinsDeduction(
+        { moderatorId: order.moderatorId, referrerId }, kesRate
+      );
+      const adjustedPlatformFee   = Math.max(0, +(order.platformFee - platformFeeDeductionUsd).toFixed(2));
+      const adjustedModeratorOwed = Math.max(0, +(order.moderatorOwed - moderatorOwedDeductionUsd).toFixed(2));
 
-      // SplitCoins — only ever runs for a confirmed, newly-recorded payment.
-      await awardPurchaseSplitCoins(paymentRow);
-      await awardReferralSplitCoinsIfEligible(paymentRow);
+      let paymentRow, justCreated = true;
+      try {
+        paymentRow = await prisma.payment.create({
+          data: {
+            groupId: order.groupId, memberId: order.memberId, userId: order.userId,
+            memberName: order.memberName, months: order.months, amount: order.memberPays,
+            platformFee: adjustedPlatformFee, moderatorOwed: adjustedModeratorOwed,
+            grossPlatformFee: order.platformFee, grossModeratorOwed: order.moderatorOwed,
+            organizerGets: adjustedModeratorOwed, moderatorId: order.moderatorId,
+            method: "paystack", pesapalOrderId: reference, currency: order.currency,
+            confirmedAt, payoutStatus: "pending",
+          },
+        });
+      } catch (err) {
+        if (err.code !== "P2002") throw err;
+        // A concurrent duplicate webhook/verify call for this exact
+        // reference won the race and already recorded it (the DB unique
+        // constraint on pesapalOrderId — migration 0014 — is what actually
+        // closes this, not just the alreadyRecorded check above). Don't
+        // re-record, re-earn, re-mint, or re-email; just pick up the row
+        // the winner created.
+        paymentRow = await prisma.payment.findFirst({ where: { pesapalOrderId: reference } });
+        justCreated = false;
+      }
 
-      // Emails
-      const [grp, mem] = await Promise.all([
-        prisma.group.findUnique({ where: { id: order.groupId } }),
-        prisma.groupMember.findUnique({ where: { id: order.memberId } }),
-      ]);
-      if (grp && mem) {
-        const creds = await prisma.groupCredential.findUnique({ where: { groupId: grp.id } });
-        if (creds) emailService.sendCredentialsUpdated({ to: mem.email, memberName: mem.name, groupName: `${grp.serviceName} ${grp.planName}`, serviceName: grp.serviceName }).catch(() => {});
-        emailService.sendWelcome({ to: mem.email, memberName: mem.name, groupName: `${grp.serviceName} ${grp.planName}`, serviceName: grp.serviceName, planName: grp.planName, billingCycle: grp.billingCycle, pricePerSlot: grp.pricePerSlot, memberPays: order.memberPays, currency: order.currency, expiresAt: mem.expiresAt, organizerName: grp.organizerName }).catch(() => {});
+      if (justCreated && paymentRow) {
+        await prisma.platformEarning.create({
+          data: { orderId: reference, groupId: order.groupId, fee: adjustedPlatformFee, currency: order.currency, earnedAt: confirmedAt },
+        });
+
+        // SplitCoins — only ever runs for a confirmed, newly-recorded payment.
+        await awardPurchaseSplitCoins(paymentRow);
+        await awardReferralSplitCoinsIfEligible(paymentRow, referrerId);
+
+        // Emails
+        const [grp, mem] = await Promise.all([
+          prisma.group.findUnique({ where: { id: order.groupId } }),
+          prisma.groupMember.findUnique({ where: { id: order.memberId } }),
+        ]);
+        if (grp && mem) {
+          const creds = await prisma.groupCredential.findUnique({ where: { groupId: grp.id } });
+          if (creds) emailService.sendCredentialsUpdated({ to: mem.email, memberName: mem.name, groupName: `${grp.serviceName} ${grp.planName}`, serviceName: grp.serviceName }).catch(() => {});
+          emailService.sendWelcome({ to: mem.email, memberName: mem.name, groupName: `${grp.serviceName} ${grp.planName}`, serviceName: grp.serviceName, planName: grp.planName, billingCycle: grp.billingCycle, pricePerSlot: grp.pricePerSlot, memberPays: order.memberPays, currency: order.currency, expiresAt: mem.expiresAt, organizerName: grp.organizerName }).catch(() => {});
+        }
       }
     }
 
@@ -1736,17 +1785,23 @@ app.get("/api/admin/earnings", requireSuperAdmin, async (req, res) => {
     prisma.payment.findMany({ where: { payoutStatus: "pending" } }),
   ]);
 
-  // SplitCoins deduction — every SplitCoin ever minted (to any recipient:
-  // buyer, group owner, referrer, or the platform itself) represents value
-  // diverted away from clean platform revenue, so it comes off the gross
-  // total before anything is shown as "net". Same helper the Moderator
-  // Dashboard uses, just scoped to the whole ledger instead of one user.
+  // SplitCoins deduction is now REAL, not estimated: `total` above (summed
+  // from PlatformEarning.fee) is already the NET figure, because
+  // confirmOrder() writes the SplitCoins-adjusted platformFee into both
+  // PlatformEarning.fee and Payment.platformFee at the moment a payment is
+  // recorded. The pre-deduction GROSS figure is preserved separately on
+  // each Payment row (grossPlatformFee) specifically so it can still be
+  // shown for transparency, per Payment.grossPlatformFee. splitCoinsKesTotal
+  // is read straight from the ledger (independent of the two sums below) as
+  // an authoritative cross-check that gross - net ≈ coins minted × KES 10.
+  const grossPayments = await prisma.payment.findMany({ select: { grossPlatformFee: true } });
+  const grossEarned = grossPayments.reduce((a, p) => a + (p.grossPlatformFee ?? 0), 0);
+  const netEarned = +total.toFixed(2);
   const splitCoinsKesTotal = await getSplitCoinsKesValue({});
-  const netEarned = netOfSplitCoins(+total.toFixed(2), splitCoinsKesTotal);
 
   res.json({
-    totalEarned: +total.toFixed(2), feePercent,
-    splitCoinsKesTotal, netEarned, // gross platform fee revenue minus all SplitCoins ever allocated
+    totalEarned: +grossEarned.toFixed(2), feePercent, // GROSS platform fee revenue, before SplitCoins
+    netEarned, splitCoinsKesTotal, // NET (real, already fee-adjusted) and the ledger's own KES total for cross-checking
     totalPendingPayouts: +pendingPayments.reduce((a, p) => a + p.moderatorOwed, 0).toFixed(2),
     earningsCount: allEarnings.length, pendingOrders, completedOrders,
     totalGroups, totalUsers, totalCustomers, pendingModerators,
