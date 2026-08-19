@@ -1167,7 +1167,7 @@ const SPLITCOIN_PLATFORM_WALLET = "platform";
 // whether they were referred:
 //   - Repeat purchase (not their first ever):        2 coins / KES 20 — 1 buyer + 0.5 owner + 0.5 platform (unchanged, original reward)
 //   - First-ever purchase, WITH a referrer:           3 coins / KES 30 — 1.5 referrer + 1 platform + 0.5 buyer, and NOTHING else (no separate purchase coins at all — the referral reward IS the reward)
-//   - First-ever purchase, NO referrer (organic signup): 1 coin / KES 10 — 0.25 buyer + 0.75 platform, no owner share
+//   - First-ever purchase, NO referrer (organic signup): 1 coin / KES 10 — 0.25 buyer + 0.25 owner + 0.5 platform
 const PURCHASE_COINS_KES       = 20; // repeat purchase
 const FIRST_PURCHASE_COINS_KES = 10; // first-ever purchase, no referral
 const REFERRAL_COINS_KES       = 30; // first-ever purchase, WITH a referral (replaces the purchase reward entirely)
@@ -1196,9 +1196,17 @@ async function awardPurchaseSplitCoins(payment, context) {
   }
 
   if (context.isFirstPurchase) {
-    // First-ever purchase, no referrer: a smaller, owner-free reward.
+    // First-ever purchase, no referrer: a smaller reward, still split with
+    // the group owner (same platform-owned fallback as the repeat-purchase
+    // tier below — if the owner IS the platform, it just gets both shares).
+    const ownerId = payment.moderatorId;
     await mintSplitCoin(ref, "first_purchase_buyer", "purchase", payment.userId, 0.25);
-    await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.75);
+    if (!ownerId || ownerId === "superadmin") {
+      await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.75);
+    } else {
+      await mintSplitCoin(ref, "first_purchase_owner", "purchase", ownerId, 0.25);
+      await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.5);
+    }
     return;
   }
 

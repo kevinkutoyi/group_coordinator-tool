@@ -96,7 +96,7 @@ const SPLITCOIN_PLATFORM_WALLET = "platform";
 // whether they were referred:
 //   - Repeat purchase (not their first ever):        2 coins / KES 20 — 1 buyer + 0.5 owner + 0.5 platform (unchanged, original reward)
 //   - First-ever purchase, WITH a referrer:           3 coins / KES 30 — 1.5 referrer + 1 platform + 0.5 buyer, and NOTHING else (no separate purchase coins at all — the referral reward IS the reward)
-//   - First-ever purchase, NO referrer (organic signup): 1 coin / KES 10 — 0.25 buyer + 0.75 platform, no owner share
+//   - First-ever purchase, NO referrer (organic signup): 1 coin / KES 10 — 0.25 buyer + 0.25 owner + 0.5 platform
 const PURCHASE_COINS_KES       = 20; // repeat purchase
 const FIRST_PURCHASE_COINS_KES = 10; // first-ever purchase, no referral
 const REFERRAL_COINS_KES       = 30; // first-ever purchase, WITH a referral (replaces the purchase reward entirely)
@@ -126,9 +126,17 @@ async function awardPurchaseSplitCoins(payment, context) {
   }
 
   if (context.isFirstPurchase) {
-    // First-ever purchase, no referrer: a smaller, owner-free reward.
+    // First-ever purchase, no referrer: a smaller reward, still split with
+    // the group owner (same platform-owned fallback as the repeat-purchase
+    // tier below — if the owner IS the platform, it just gets both shares).
+    const ownerId = payment.moderatorId;
     await mintSplitCoin(ref, "first_purchase_buyer", "purchase", payment.userId, 0.25);
-    await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.75);
+    if (!ownerId || ownerId === "superadmin") {
+      await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.75);
+    } else {
+      await mintSplitCoin(ref, "first_purchase_owner", "purchase", ownerId, 0.25);
+      await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.5);
+    }
     return;
   }
 
@@ -334,7 +342,7 @@ async function run() {
   check("buyer gets the normal 1-coin repeat purchase reward on top of their earlier 0.5 welcome bonus", balanceOf("referred3") === 0.5 + 1);
   check("owner (mod3) got their 0.5 owner coin on the 2nd purchase", balanceOf("mod3") === 0.5);
 
-  console.log("\n=== 5. First-ever purchase, NO referrer (organic signup): KES10 / 0.25 buyer + 0.75 platform, no owner share ===");
+  console.log("\n=== 5. First-ever purchase, NO referrer (organic signup): KES10 / 0.25 buyer + 0.25 owner + 0.5 platform ===");
   resetDb();
   db.users.organic5 = { id: "organic5", referredBy: null };
   // netMemberPays = 100 - 10/130 = 99.9231 -> 99.92 ; platformFee = 99.92*0.08=7.9936->7.99 ; moderatorOwed=91.93
@@ -342,19 +350,30 @@ async function run() {
   check("context correctly identifies this as a first purchase with NO referrer", c5.isFirstPurchase === true && c5.referrerId === null);
   check("deduction is only KES10 (smallest tier)", approx(p5.platformFee, 7.99));
   check("moderatorOwed reflects the KES10 (not KES20 or KES30) deduction", approx(p5.moderatorOwed, 91.93));
-  check("buyer got exactly 0.25, platform got exactly 0.75, owner (mod5) got NOTHING",
-    balanceOf("organic5") === 0.25 && balanceOf(SPLITCOIN_PLATFORM_WALLET) === 0.75 && balanceOf("mod5") === 0);
-  check("reasons used are first_purchase_buyer/first_purchase_platform, not purchase_buyer/purchase_owner",
+  check("buyer got exactly 0.25, owner (mod5) got exactly 0.25, platform got exactly 0.5",
+    balanceOf("organic5") === 0.25 && balanceOf("mod5") === 0.25 && balanceOf(SPLITCOIN_PLATFORM_WALLET) === 0.5);
+  check("reasons used are first_purchase_buyer/first_purchase_owner/first_purchase_platform",
     db.splitCoinTransactions.some(r => r.reason === "first_purchase_buyer") &&
+    db.splitCoinTransactions.some(r => r.reason === "first_purchase_owner") &&
     db.splitCoinTransactions.some(r => r.reason === "first_purchase_platform") &&
     !db.splitCoinTransactions.some(r => r.reason === "purchase_owner"));
-  check("ledger has exactly 2 rows total for REF-5", db.splitCoinTransactions.filter(r => r.sourcePaymentId === "REF-5").length === 2);
+  check("ledger has exactly 3 rows total for REF-5", db.splitCoinTransactions.filter(r => r.sourcePaymentId === "REF-5").length === 3);
 
-  console.log("\n=== 5b. Same organic buyer's 2nd purchase reverts to the normal repeat-purchase reward ===");
-  const { context: c5b } = await simulateConfirmedPayment({ reference: "REF-5B", userId: "organic5", moderatorId: "mod5", memberPays: 100, platformFee: 8, kesRate: 130 });
-  check("context now correctly identifies this as NOT a first purchase", c5b.isFirstPurchase === false);
+  console.log("\n=== 5a. Same organic buyer's 2nd purchase reverts to the normal repeat-purchase reward ===");
+  const { context: c5a } = await simulateConfirmedPayment({ reference: "REF-5B", userId: "organic5", moderatorId: "mod5", memberPays: 100, platformFee: 8, kesRate: 130 });
+  check("context now correctly identifies this as NOT a first purchase", c5a.isFirstPurchase === false);
   check("buyer balance grew by the normal 1 coin (0.25 + 1 = 1.25)", balanceOf("organic5") === 1.25);
-  check("owner (mod5) now gets their 0.5 owner coin on the 2nd purchase", balanceOf("mod5") === 0.5);
+  check("owner (mod5) now gets their 0.5 owner coin on the 2nd purchase (on top of the 0.25 first-purchase owner coin = 0.75)", balanceOf("mod5") === 0.75);
+
+  console.log("\n=== 5b. First-ever purchase, NO referrer, PLATFORM-owned group: platform gets both the owner and platform shares ===");
+  resetDb();
+  db.users.organic5b = { id: "organic5b", referredBy: null };
+  const { paymentRow: p5b } = await simulateConfirmedPayment({ reference: "REF-5C", userId: "organic5b", moderatorId: "superadmin", memberPays: 100, platformFee: 8, kesRate: 130 });
+  check("deduction still only KES10", approx(p5b.platformFee, 7.99));
+  check("buyer got 0.25, platform got the full 0.75 (owner share folds into platform), no separate owner row",
+    balanceOf("organic5b") === 0.25 && balanceOf(SPLITCOIN_PLATFORM_WALLET) === 0.75);
+  check("no first_purchase_owner row exists for a platform-owned group",
+    db.splitCoinTransactions.some(r => r.sourcePaymentId === "REF-5C" && r.reason === "first_purchase_owner") === false);
 
   console.log("\n=== 6. Failed / pending / cancelled / refunded payments never reach the split/mint path ===");
   resetDb();
