@@ -113,7 +113,7 @@ export default function AdminDashboardPage({ navigate }) {
   const [emailModalMsg, setEmailModalMsg] = useState(null);
 
   useEffect(() => {
-    if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
+    if (!session.isSuperAdmin()) { navigate("login"); return; }
     loadAll();
   }, []);
 
@@ -184,7 +184,7 @@ export default function AdminDashboardPage({ navigate }) {
       setFeePercent(fee); setFeeInput(String(fee));
       const rate = as_?.kesPerUsd ?? 130;
       setRateValue(rate); setRateInput(String(rate));
-    } catch { navigate("admin-login"); }
+    } catch { navigate("login"); }
     finally { setLoading(false); }
   }, [navigate]);
 

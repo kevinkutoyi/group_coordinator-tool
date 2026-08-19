@@ -323,8 +323,22 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "email and password required" });
+    const cleanEmail = email.toLowerCase().trim();
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    // Superadmin signs in through this same email/password form — no
+    // separate admin login page or username field. Credentials are checked
+    // against ADMIN_USERNAME/ADMIN_PASSWORD (configure ADMIN_USERNAME as the
+    // admin's email address), not a User row, but the resulting session
+    // carries the same superadmin rights as before.
+    const adminIdentity = (process.env.ADMIN_USERNAME || "admin@splitsubs.com").toLowerCase().trim();
+    if (cleanEmail === adminIdentity) {
+      if (password !== (process.env.ADMIN_PASSWORD || "admin"))
+        return res.status(401).json({ error: "Invalid credentials" });
+      const token = signToken({ id: "superadmin", role: "superadmin", name: "Super Admin" }, "24h");
+      return res.json({ token, user: { id: "superadmin", name: "Super Admin", role: "superadmin" } });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -350,18 +364,10 @@ app.post("/api/auth/refresh", requireAuth, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SUPER ADMIN AUTH
+//  SUPER ADMIN AUTH — superadmin now signs in through /api/auth/login above,
+//  using the same email/password form as everyone else. This standalone
+//  admin/login route (separate username field, no User row) is retired.
 // ═══════════════════════════════════════════════════════════════════════════
-
-app.post("/api/admin/login", authLimiter, (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "username and password required" });
-  if (username !== (process.env.ADMIN_USERNAME || "superadmin") ||
-      password !== (process.env.ADMIN_PASSWORD || "admin"))
-    return res.status(401).json({ error: "Invalid credentials" });
-  const token = signToken({ id: "superadmin", role: "superadmin", name: "Super Admin" }, "24h");
-  res.json({ token, role: "superadmin" });
-});
 
 app.get("/api/admin/refresh", requireSuperAdmin, (req, res) => {
   res.json({ token: signToken({ id: "superadmin", role: "superadmin", name: "Super Admin" }, "24h") });

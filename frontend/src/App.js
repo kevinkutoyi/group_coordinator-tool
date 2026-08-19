@@ -10,7 +10,6 @@ import SignupPage from "./pages/SignupPage";
 import LoginPage from "./pages/LoginPage";
 import BlogEditorPage from "./pages/BlogEditorPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import EarningsPage from "./pages/EarningsPage";
 import PaymentCallbackPage from "./pages/PaymentCallbackPage";
@@ -56,7 +55,7 @@ console.log("SplitSubs build", "1778098971");
 
 // ── URL <-> page mapping ──────────────────────────────────────────────────
 const SIMPLE_PAGES = [
-  "home", "groups", "create", "signup", "login", "admin-login", "blog-editor", "forgot-password",
+  "home", "groups", "create", "signup", "login", "blog-editor", "forgot-password",
   "admin", "earnings", "my-groups", "mod-dash", "mod-settings",
   "payment-callback", "unsubscribe", "blog",
   "terms", "privacy", "refund-policy", "data-protection",
@@ -165,12 +164,12 @@ export default function App() {
       window.history.pushState({}, "", "/login"); return;
     }
     if (target === "earnings"  && role !== "superadmin")  {
-      setPage("admin-login"); setParam(null);
-      window.history.pushState({}, "", "/admin-login"); return;
+      setPage("login"); setParam(null);
+      window.history.pushState({}, "", "/login"); return;
     }
     if (target === "admin"     && role !== "superadmin")  {
-      setPage("admin-login"); setParam(null);
-      window.history.pushState({}, "", "/admin-login"); return;
+      setPage("login"); setParam(null);
+      window.history.pushState({}, "", "/login"); return;
     }
 
     setPage(target);
@@ -194,7 +193,6 @@ export default function App() {
         {page === "login"            && <LoginPage            navigate={navigate} params={pageParam} />}
         {page === "blog-editor"      && <BlogEditorPage      navigate={navigate} />}
         {page === "forgot-password"  && <ForgotPasswordPage  navigate={navigate} />}
-        {page === "admin-login"      && <AdminLoginPage       navigate={navigate} />}
         {page === "admin"            && <AdminDashboardPage   navigate={navigate} />}
         {page === "earnings"         && <EarningsPage         navigate={navigate} />}
         {page === "my-groups"        && <MyGroupsPage         navigate={navigate} user={user} />}

@@ -13,15 +13,15 @@ export default function EarningsPage({ navigate }) {
     api.getEarnings()
       .then(setData)
       .catch((err) => {
-        // Any auth failure → redirect to admin login
+        // Any auth failure → redirect to login
         session.clear();
-        navigate("admin-login");
+        navigate("login");
       })
       .finally(() => setLoading(false));
   }, [navigate]);
 
   useEffect(() => {
-    if (!session.isSuperAdmin()) { navigate("admin-login"); return; }
+    if (!session.isSuperAdmin()) { navigate("login"); return; }
     load();
   }, [load, navigate]);
 

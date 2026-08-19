@@ -55,9 +55,6 @@ export default function LoginPage({ navigate, params }) {
         <p className="auth-switch">
           No account? <button className="link-btn" onClick={() => navigate("signup")}>Create one free</button>
         </p>
-        <p className="auth-switch" style={{marginTop:4}}>
-          Admin? <button className="link-btn" onClick={() => navigate("admin-login")}>Super-admin login</button>
-        </p>
       </div>
     </div>
   );
