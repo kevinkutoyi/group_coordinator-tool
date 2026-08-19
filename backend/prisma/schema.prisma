@@ -24,6 +24,7 @@ model User {
   rejectionNote String?
   approvedAt   DateTime?
   approvedBy   String?
+  referredBy   String?                       // User.id of the referrer, captured at signup (?ref=<userId>)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -36,6 +37,30 @@ model User {
   reviews           GroupReview[]
 
   @@map("users")
+}
+
+// ─── SplitCoins ───────────────────────────────────────────────────────────
+// Append-only rewards ledger. Balance for any recipient = SUM(amount) over
+// their rows — never cached, always derived, so it can never drift from the
+// ledger. recipientId is a plain unconstrained string (matches the existing
+// PaystackOrder.userId / Payment.moderatorId precedent of not hard-FK'ing
+// user-identifying strings) so it can hold either a real User.id or the
+// reserved "platform" sentinel (the platform has no own User row — distinct
+// from the "superadmin" JWT-identity sentinel used for auth elsewhere).
+model SplitCoinTransaction {
+  id              String   @id @default(uuid())
+  recipientId     String                        // User.id, or "platform"
+  amount          Float                         // SplitCoins earned, always > 0 (supports fractions e.g. 0.5)
+  reason          String                        // purchase_buyer | purchase_owner | purchase_platform | referral_referrer | referral_platform
+  sourceType      String                        // purchase | referral
+  sourcePaymentId String                         // Payment.id this reward was derived from — the idempotency key
+  relatedUserId   String?                       // referral rows: the id of the newly-referred user
+  createdAt       DateTime @default(now())
+
+  @@unique([sourcePaymentId, reason])
+  @@index([recipientId])
+  @@index([sourcePaymentId])
+  @@map("splitcoin_transactions")
 }
 
 // ─── Groups ───────────────────────────────────────────────────────────────

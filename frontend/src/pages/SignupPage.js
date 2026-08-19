@@ -39,6 +39,7 @@ export default function SignupPage({ navigate, params }) {
       await api.signup({
         name: form.name, email: form.email, phone: form.phone,
         password: form.password, role: form.role, newsletter: form.newsletter,
+        ref: params?.ref || "",
       });
       setStep("otp");
       setSuccess(`Verification code sent to ${form.email}. Check your inbox.`);

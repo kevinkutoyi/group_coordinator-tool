@@ -21,6 +21,7 @@ import UnsubscribePage from "./pages/UnsubscribePage";
 import BlogPage from "./pages/BlogPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import LegalPage from "./pages/LegalPage";
+import SplitCoinsPage from "./pages/SplitCoinsPage";
 import WelcomeModal from "./components/WelcomeModal";
 import Footer from "./components/Footer";
 import "./App.css";
@@ -56,7 +57,7 @@ console.log("SplitSubs build", "1778098971");
 // ── URL <-> page mapping ──────────────────────────────────────────────────
 const SIMPLE_PAGES = [
   "home", "groups", "create", "signup", "login", "blog-editor", "forgot-password",
-  "admin", "earnings", "my-groups", "mod-dash", "mod-settings",
+  "admin", "earnings", "my-groups", "mod-dash", "mod-settings", "splitcoins",
   "payment-callback", "unsubscribe", "blog",
   "terms", "privacy", "refund-policy", "data-protection",
 ];
@@ -163,6 +164,10 @@ export default function App() {
       setPage("login"); setParam(null);
       window.history.pushState({}, "", "/login"); return;
     }
+    if (target === "splitcoins" && !session.isLoggedIn()) {
+      setPage("login"); setParam({ redirect:"splitcoins" });
+      window.history.pushState({}, "", "/login"); return;
+    }
     if (target === "earnings"  && role !== "superadmin")  {
       setPage("login"); setParam(null);
       window.history.pushState({}, "", "/login"); return;
@@ -196,6 +201,7 @@ export default function App() {
         {page === "admin"            && <AdminDashboardPage   navigate={navigate} />}
         {page === "earnings"         && <EarningsPage         navigate={navigate} />}
         {page === "my-groups"        && <MyGroupsPage         navigate={navigate} user={user} />}
+        {page === "splitcoins"       && <SplitCoinsPage       navigate={navigate} user={user} />}
         {page === "group-emails"     && <GroupEmailPage      groupId={pageParam}  navigate={navigate} />}
         {page === "mod-dash"         && <ModeratorDashboardPage navigate={navigate} />}
         {page === "mod-settings"     && <ModeratorSettingsPage  navigate={navigate} />}

@@ -184,7 +184,7 @@ function genOtp() { return Math.floor(100000 + Math.random() * 900000).toString(
 
 app.post("/api/auth/signup", authLimiter, async (req, res) => {
   try {
-    const { name, email, password, role = "customer", phone = "", newsletter = true } = req.body;
+    const { name, email, password, role = "customer", phone = "", newsletter = true, ref = "" } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: "name, email and password are required" });
     if (!["customer", "moderator"].includes(role)) return res.status(400).json({ error: "role must be customer or moderator" });
     if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
@@ -196,6 +196,15 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     const exists = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (exists) return res.status(409).json({ error: "Email already registered" });
 
+    // Referral code is just the referrer's own User.id (?ref=<userId> on the
+    // signup link) — only stored if it actually resolves to a real user, so
+    // a bad/forged value silently just means no referral, not an error.
+    let referredBy = null;
+    if (ref && typeof ref === "string") {
+      const referrer = await prisma.user.findUnique({ where: { id: ref.trim() } });
+      if (referrer) referredBy = referrer.id;
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
     const code = genOtp();
     const codeHash = await bcrypt.hash(code, 8);
@@ -204,7 +213,7 @@ app.post("/api/auth/signup", authLimiter, async (req, res) => {
     await prisma.emailOtp.create({
       data: {
         email: cleanEmail, codeHash, purpose: "signup",
-        payload: { name: name.trim(), passwordHash, phone: (phone || "").trim(), role, newsletter: newsletter !== false },
+        payload: { name: name.trim(), passwordHash, phone: (phone || "").trim(), role, newsletter: newsletter !== false, referredBy },
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
@@ -242,6 +251,7 @@ app.post("/api/auth/verify-signup", authLimiter, async (req, res) => {
         passwordHash: p.passwordHash, role: p.role,
         status: p.role === "moderator" ? "pending" : "active",
         newsletter: p.newsletter !== false,
+        referredBy: p.referredBy || null,
       },
     });
     await prisma.emailOtp.update({ where: { id: otp.id }, data: { used: true } });
@@ -361,6 +371,27 @@ app.get("/api/auth/me", requireAuth, async (req, res) => {
 
 app.post("/api/auth/refresh", requireAuth, (req, res) => {
   res.json({ token: signToken({ id: req.user.id, role: req.user.role, name: req.user.name }) });
+});
+
+// ─── SplitCoins ───────────────────────────────────────────────────────────
+// 1 SplitCoin = KES 10. Balance is always derived (SUM(amount)), never
+// cached — a user who's never earned coins simply has zero ledger rows,
+// which naturally reduces to 0 SplitCoins / KES 0.
+app.get("/api/splitcoins/me", requireAuth, async (req, res) => {
+  const recipientId = req.user.role === "superadmin" ? SPLITCOIN_PLATFORM_WALLET : req.user.id;
+  const [rows, history] = await Promise.all([
+    prisma.splitCoinTransaction.findMany({ where: { recipientId } }),
+    prisma.splitCoinTransaction.findMany({ where: { recipientId }, orderBy: { createdAt: "desc" }, take: 100 }),
+  ]);
+  const balance = rows.reduce((sum, r) => sum + r.amount, 0);
+  const earnedFromPurchases = rows.filter(r => r.sourceType === "purchase").reduce((sum, r) => sum + r.amount, 0);
+  const earnedFromReferrals = rows.filter(r => r.sourceType === "referral").reduce((sum, r) => sum + r.amount, 0);
+  res.json({
+    balance, kesValue: Math.round(balance * 10 * 100) / 100,
+    earnedFromPurchases, earnedFromReferrals,
+    referralCode: req.user.role === "superadmin" ? null : req.user.id,
+    history,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1114,6 +1145,62 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SPLITCOINS — rewards ledger
+//  1 SplitCoin = KES 10. The ledger is append-only; a balance is always
+//  SUM(amount) over a recipient's rows, never cached, so it can't drift.
+//  recipientId holds either a real User.id or the reserved "platform"
+//  sentinel (the platform has no own User row — distinct from the
+//  "superadmin" JWT-identity sentinel used for auth elsewhere).
+//  Every mint is keyed to (sourcePaymentId, reason) via a DB unique
+//  constraint, using the Paystack reference (not the Payment row id) as
+//  sourcePaymentId — that way even a duplicate Payment row from a raced
+//  webhook can't double-mint, since both would share the same reference.
+// ═══════════════════════════════════════════════════════════════════════════
+const SPLITCOIN_PLATFORM_WALLET = "platform";
+
+async function mintSplitCoin(reference, reason, sourceType, recipientId, amount, relatedUserId = null) {
+  try {
+    await prisma.splitCoinTransaction.create({
+      data: { sourcePaymentId: reference, reason, sourceType, recipientId, amount, relatedUserId },
+    });
+  } catch (err) {
+    if (err.code !== "P2002") throw err; // P2002 = unique constraint hit, already minted — safe no-op
+  }
+}
+
+async function awardPurchaseSplitCoins(payment) {
+  // 2 SplitCoins per confirmed purchase: 1 to the buyer, 0.5 to the group
+  // owner, 0.5 to the platform. If the owner IS the platform itself
+  // (Group.organizerId === "superadmin"), the platform gets the full 1.0.
+  const ref = payment.pesapalOrderId;
+  const ownerId = payment.moderatorId;
+  await mintSplitCoin(ref, "purchase_buyer", "purchase", payment.userId, 1);
+  if (!ownerId || ownerId === "superadmin") {
+    await mintSplitCoin(ref, "purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 1);
+  } else {
+    await mintSplitCoin(ref, "purchase_owner", "purchase", ownerId, 0.5);
+    await mintSplitCoin(ref, "purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.5);
+  }
+}
+
+async function awardReferralSplitCoinsIfEligible(payment) {
+  // Fires once — on the referred user's FIRST ever confirmed payment across
+  // any group: 2 SplitCoins to the referrer, 1 to the platform. Guarded by
+  // (a) only checking when this is the buyer's first confirmed Payment row,
+  // and (b) the ledger's unique (sourcePaymentId, reason) constraint, which
+  // makes the insert itself idempotent no matter how many times this runs.
+  const buyer = await prisma.user.findUnique({ where: { id: payment.userId } });
+  if (!buyer?.referredBy) return;
+
+  const confirmedCount = await prisma.payment.count({ where: { userId: payment.userId } });
+  if (confirmedCount !== 1) return; // not their first confirmed payment
+
+  const ref = payment.pesapalOrderId;
+  await mintSplitCoin(ref, "referral_referrer", "referral", buyer.referredBy, 2, payment.userId);
+  await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Shared order-confirmation logic (used by both verify + IPN)
 async function confirmOrder(reference) {
   const order = await prisma.paystackOrder.findUnique({ where: { id: reference } });
@@ -1141,7 +1228,7 @@ async function confirmOrder(reference) {
 
     const alreadyRecorded = await prisma.payment.findFirst({ where: { pesapalOrderId: reference } });
     if (!alreadyRecorded) {
-      await prisma.payment.create({
+      const paymentRow = await prisma.payment.create({
         data: {
           groupId: order.groupId, memberId: order.memberId, userId: order.userId,
           memberName: order.memberName, months: order.months, amount: order.memberPays,
@@ -1154,6 +1241,10 @@ async function confirmOrder(reference) {
       await prisma.platformEarning.create({
         data: { orderId: reference, groupId: order.groupId, fee: order.platformFee, currency: order.currency, earnedAt: confirmedAt },
       });
+
+      // SplitCoins — only ever runs for a confirmed, newly-recorded payment.
+      await awardPurchaseSplitCoins(paymentRow);
+      await awardReferralSplitCoinsIfEligible(paymentRow);
 
       // Emails
       const [grp, mem] = await Promise.all([
@@ -1619,6 +1710,29 @@ app.get("/api/admin/earnings", requireSuperAdmin, async (req, res) => {
     earningsCount: allEarnings.length, pendingOrders, completedOrders,
     totalGroups, totalUsers, totalCustomers, pendingModerators,
     byGroup, monthlyEarnings, recentEarnings: allEarnings.slice(-20).reverse(),
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ADMIN — SPLITCOINS
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get("/api/admin/splitcoins", requireSuperAdmin, async (req, res) => {
+  const [platformRows, allRows, history] = await Promise.all([
+    prisma.splitCoinTransaction.findMany({ where: { recipientId: SPLITCOIN_PLATFORM_WALLET } }),
+    prisma.splitCoinTransaction.findMany(),
+    prisma.splitCoinTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
+  ]);
+
+  const platformBalance = platformRows.reduce((sum, r) => sum + r.amount, 0);
+  const totalMinted      = allRows.reduce((sum, r) => sum + r.amount, 0); // all coins ever minted, any recipient
+  const byReason = {};
+  for (const r of allRows) byReason[r.reason] = +(byReason[r.reason] || 0) + r.amount;
+
+  res.json({
+    platformBalance, platformKesValue: +(platformBalance * 10).toFixed(2),
+    totalMinted, totalKesValue: +(totalMinted * 10).toFixed(2),
+    transactionCount: allRows.length, byReason, history,
   });
 });
 

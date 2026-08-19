@@ -84,6 +84,7 @@ export default function Header({ page, navigate, user }) {
               {menuOpen && (
                 <div className="user-dropdown" onClick={() => setMenuOpen(false)}>
                   <button onClick={() => go("my-groups")}>📋 My Groups</button>
+                  <button onClick={() => go("splitcoins")}>🪙 SplitCoins</button>
                   {session.isModerator() && <button onClick={() => go("mod-dash")}>📊 Moderator Dashboard</button>}
                   {session.isModerator() && <button onClick={() => go("mod-settings")}>⚙️ Settings & PesaPal</button>}
                   <button onClick={() => go("login")} className="divider">⚙️ Account</button>

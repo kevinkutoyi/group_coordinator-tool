@@ -61,6 +61,10 @@ export const api = {
   me:           ()           => req("/auth/me"),
   refreshToken: ()           => req("/auth/refresh",       { method: "POST" }),
 
+  // SplitCoins
+  getMySplitCoins:    ()     => req("/splitcoins/me"),
+  getAdminSplitCoins: ()     => req("/admin/splitcoins"),
+
   // Super admin — signs in via the regular login() call above now.
   adminRefresh: ()           => req("/admin/refresh"),
   getEarnings:  ()           => req("/admin/earnings"),
