@@ -67,17 +67,19 @@ export default function SplitCoinsPage({ navigate }) {
   return (
     <div className="fade-in" style={{ maxWidth:920, margin:"0 auto", padding:"32px 20px 64px" }}>
       <h1 className="page-title">🪙 SplitCoins</h1>
-      <p className="page-sub">1 SplitCoin = KES 10 — earned from successful purchases and successful referrals.</p>
+      <p className="page-sub">Earned from successful purchases and successful referrals.</p>
 
       <div className="stats-row" style={{ marginBottom:28 }}>
         <div className="stat-card">
           <div className="stat-value" style={{ color:"var(--accent3)" }}>{fmtCoins(data.balance)}</div>
           <div className="stat-label">SplitCoins {isSuperAdmin ? "(Platform)" : "Balance"}</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">KES {data.kesValue.toLocaleString()}</div>
-          <div className="stat-label">Value</div>
-        </div>
+        {isSuperAdmin && (
+          <div className="stat-card">
+            <div className="stat-value">KES {data.kesValue.toLocaleString()}</div>
+            <div className="stat-label">Value</div>
+          </div>
+        )}
         <div className="stat-card">
           <div className="stat-value" style={{ color:"var(--success)" }}>{fmtCoins(data.earnedFromPurchases)}</div>
           <div className="stat-label">From Purchases</div>
@@ -92,7 +94,7 @@ export default function SplitCoinsPage({ navigate }) {
         <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:14, padding:"18px 20px", marginBottom:28 }}>
           <div style={{ fontWeight:700, marginBottom:6 }}>Invite friends, earn SplitCoins</div>
           <p style={{ color:"var(--muted)", fontSize:"0.85rem", margin:"0 0 12px" }}>
-            When someone signs up with your link and completes their first purchase, you earn 2 SplitCoins (KES 20).
+            When someone signs up with your link and completes their first purchase, you earn 2 SplitCoins.
           </p>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <input readOnly value={referralLink} onFocus={e => e.target.select()}
@@ -130,7 +132,7 @@ export default function SplitCoinsPage({ navigate }) {
                 <th style={{ padding:"8px 10px" }}>Date</th>
                 <th style={{ padding:"8px 10px" }}>Reason</th>
                 <th style={{ padding:"8px 10px", textAlign:"right" }}>Coins</th>
-                <th style={{ padding:"8px 10px", textAlign:"right" }}>KES</th>
+                {isSuperAdmin && <th style={{ padding:"8px 10px", textAlign:"right" }}>KES</th>}
               </tr>
             </thead>
             <tbody>
@@ -139,7 +141,7 @@ export default function SplitCoinsPage({ navigate }) {
                   <td style={{ padding:"8px 10px", color:"var(--muted)" }}>{new Date(row.createdAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}</td>
                   <td style={{ padding:"8px 10px" }}>{REASON_LABEL[row.reason] || row.reason}</td>
                   <td style={{ padding:"8px 10px", textAlign:"right", fontWeight:600, color:"var(--success)" }}>+{fmtCoins(row.amount)}</td>
-                  <td style={{ padding:"8px 10px", textAlign:"right", color:"var(--muted)" }}>{(row.amount * 10).toLocaleString()}</td>
+                  {isSuperAdmin && <td style={{ padding:"8px 10px", textAlign:"right", color:"var(--muted)" }}>{(row.amount * 10).toLocaleString()}</td>}
                 </tr>
               ))}
             </tbody>

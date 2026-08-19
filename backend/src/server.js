@@ -386,10 +386,15 @@ app.get("/api/splitcoins/me", requireAuth, async (req, res) => {
   const balance = rows.reduce((sum, r) => sum + r.amount, 0);
   const earnedFromPurchases = rows.filter(r => r.sourceType === "purchase").reduce((sum, r) => sum + r.amount, 0);
   const earnedFromReferrals = rows.filter(r => r.sourceType === "referral").reduce((sum, r) => sum + r.amount, 0);
+  const isSuperAdmin = req.user.role === "superadmin";
   res.json({
-    balance, kesValue: Math.round(balance * 10 * 100) / 100,
+    balance,
+    // KES value is admin-only for now — regular users/moderators should not
+    // learn the coin-to-KES exchange rate, so this field is simply omitted
+    // (not sent as 0/null) rather than hidden client-side only.
+    ...(isSuperAdmin ? { kesValue: Math.round(balance * 10 * 100) / 100 } : {}),
     earnedFromPurchases, earnedFromReferrals,
-    referralCode: req.user.role === "superadmin" ? null : req.user.id,
+    referralCode: isSuperAdmin ? null : req.user.id,
     history,
   });
 });
@@ -2037,19 +2042,14 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), async (req, res) =
 
   const totalOwed = +groupStats.reduce((a, g) => a + g.modOwed, 0).toFixed(2);
 
-  // SplitCoins — same shared helpers the Admin Dashboard uses. Only the
-  // "purchase_owner" coins minted TO this moderator come out of their own
-  // payout figure (those are the coins earned in lieu of part of their
-  // cash cut); buyer/platform/referral coins belong to other pools entirely
-  // and never touch a moderator's own net-earnings number.
-  const [coinRows, moderatorCoinsKes] = await Promise.all([
-    prisma.splitCoinTransaction.findMany({ where: { recipientId: uid } }),
-    getSplitCoinsKesValue({ recipientId: uid, reason: "purchase_owner" }),
-  ]);
-  const coinBalance = coinRows.reduce((sum, r) => sum + r.amount, 0);
+  // SplitCoins — coin counts only, no KES value. The coin-to-KES exchange
+  // rate is admin-only for now, so this response deliberately never
+  // includes a kesValue/netOwed-style field for a moderator's own view
+  // (the real cash payout figures below — totalOwed/totalPaid/totalPending —
+  // are unaffected by SplitCoins; coins are additive, not deducted from them).
+  const coinRows = await prisma.splitCoinTransaction.findMany({ where: { recipientId: uid } });
   const splitCoins = {
-    balance: coinBalance,
-    kesValue: +(coinBalance * 10).toFixed(2),
+    balance: coinRows.reduce((sum, r) => sum + r.amount, 0),
     earnedFromPurchases: coinRows.filter(r => r.sourceType === "purchase").reduce((sum, r) => sum + r.amount, 0),
     earnedFromReferrals: coinRows.filter(r => r.sourceType === "referral").reduce((sum, r) => sum + r.amount, 0),
   };
@@ -2065,8 +2065,6 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), async (req, res) =
       totalMembers:   groupStats.reduce((a, g) => a + g.confirmedMembers, 0),
       totalCollected: +groupStats.reduce((a, g) => a + g.totalCollected, 0).toFixed(2),
       totalOwed,
-      splitCoinsKesTotal: moderatorCoinsKes,
-      netOwed: netOfSplitCoins(totalOwed, moderatorCoinsKes), // totalOwed minus coins paid to you in SplitCoins instead of cash
       totalPaid:      +groupStats.reduce((a, g) => a + g.modPaid, 0).toFixed(2),
       totalPending:   +groupStats.reduce((a, g) => a + g.modPending, 0).toFixed(2),
       totalProfit:    +groupStats.reduce((a, g) => a + g.profit, 0).toFixed(2),

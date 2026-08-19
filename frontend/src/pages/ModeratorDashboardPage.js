@@ -127,16 +127,6 @@ export default function ModeratorDashboardPage({ navigate }) {
             <span>Total earned ({modKeeps}% of gross, lifetime)</span>
             <span style={{ color:"var(--accent3)" }}>KES {kes(summary.totalOwed)} · ${(summary.totalOwed ?? 0).toFixed(2)}</span>
           </div>
-          {summary.splitCoinsKesTotal > 0 && (
-            <div className="mod-earn-row mod-earn-split">
-              <span>Paid to you as SplitCoins instead of cash</span>
-              <span style={{ color:"var(--muted)" }}>− KES {kes(summary.splitCoinsKesTotal)}</span>
-            </div>
-          )}
-          <div className="mod-earn-row">
-            <span>Net cash earned (after SplitCoins)</span>
-            <span style={{ color: summary.netOwed < 0 ? "var(--error)" : "var(--accent3)" }}>KES {kes(summary.netOwed)} · ${(summary.netOwed ?? 0).toFixed(2)}</span>
-          </div>
           <div className="mod-earn-row">
             <span>Already paid to you</span>
             <span style={{ color:"var(--success)" }}>KES {kes(summary.totalPaid)} · ${(summary.totalPaid ?? 0).toFixed(2)}</span>
@@ -146,7 +136,7 @@ export default function ModeratorDashboardPage({ navigate }) {
             <span style={{ color:"var(--warning)" }}>KES {kes(summary.totalPending)} · ${(summary.totalPending ?? 0).toFixed(2)}</span>
           </div>
           <p style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:12 }}>
-            All payments land in the platform account. The admin reviews the payout queue and pays out your {modKeeps}% share to your registered payout account. Part of your share is paid as SplitCoins rather than cash — see the SplitCoins panel below.
+            All payments land in the platform account. The admin reviews the payout queue and pays out your {modKeeps}% share to your registered payout account.
           </p>
         </div>
       )}
@@ -159,10 +149,6 @@ export default function ModeratorDashboardPage({ navigate }) {
             <div className="mod-kpi-card">
               <div className="mod-kpi-label">Current Balance</div>
               <div className="mod-kpi-val">{fmtCoins(data.splitCoins.balance)}</div>
-            </div>
-            <div className="mod-kpi-card">
-              <div className="mod-kpi-label">KES Value</div>
-              <div className="mod-kpi-val" style={{ whiteSpace:"nowrap" }}>KES {kes(data.splitCoins.kesValue)}</div>
             </div>
             <div className="mod-kpi-card">
               <div className="mod-kpi-label">Total Earned</div>
