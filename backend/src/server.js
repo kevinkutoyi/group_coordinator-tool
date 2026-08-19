@@ -326,11 +326,11 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
     const cleanEmail = email.toLowerCase().trim();
 
     // Superadmin signs in through this same email/password form — no
-    // separate admin login page or username field. Credentials are checked
-    // against ADMIN_USERNAME/ADMIN_PASSWORD (configure ADMIN_USERNAME as the
-    // admin's email address), not a User row, but the resulting session
-    // carries the same superadmin rights as before.
-    const adminIdentity = (process.env.ADMIN_USERNAME || "admin@splitsubs.com").toLowerCase().trim();
+    // separate admin login page or username field. Identity is ADMIN_EMAIL
+    // (falls back to ADMIN_USERNAME for older configs that only set that),
+    // password is ADMIN_PASSWORD — checked against env vars, not a User
+    // row, but the resulting session carries the same superadmin rights.
+    const adminIdentity = (process.env.ADMIN_EMAIL || process.env.ADMIN_USERNAME || "admin@splitsubs.com").toLowerCase().trim();
     if (cleanEmail === adminIdentity) {
       if (password !== (process.env.ADMIN_PASSWORD || "admin"))
         return res.status(401).json({ error: "Invalid credentials" });
