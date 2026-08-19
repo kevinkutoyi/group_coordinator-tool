@@ -1185,17 +1185,27 @@ async function awardPurchaseSplitCoins(payment) {
 
 async function awardReferralSplitCoinsIfEligible(payment) {
   // Fires once — on the referred user's FIRST ever confirmed payment across
-  // any group: 2 SplitCoins to the referrer, 1 to the platform. Guarded by
-  // (a) only checking when this is the buyer's first confirmed Payment row,
-  // and (b) the ledger's unique (sourcePaymentId, reason) constraint, which
-  // makes the insert itself idempotent no matter how many times this runs.
+  // any group: 2 SplitCoins to the referrer, 1 to the platform.
+  //
+  // Eligibility is "is THIS reference the user's chronologically-earliest
+  // payment" rather than "does the user currently have exactly one Payment
+  // row". The latter looked equivalent but isn't: Payment.pesapalOrderId has
+  // no DB unique constraint, so a raced duplicate webhook/verify call can
+  // create two Payment rows for the SAME reference before either finishes —
+  // a plain row-count check then sees count===2 for BOTH calls and silently
+  // skips the referral entirely, permanently losing it with no error raised.
+  // Comparing references instead is immune to that: two duplicate rows for
+  // the same order share the same pesapalOrderId, so either one still
+  // correctly reads as "yes, this is their first payment". The ledger's
+  // unique (sourcePaymentId, reason) constraint still backstops the actual
+  // mint against double-crediting either way.
   const buyer = await prisma.user.findUnique({ where: { id: payment.userId } });
   if (!buyer?.referredBy) return;
 
-  const confirmedCount = await prisma.payment.count({ where: { userId: payment.userId } });
-  if (confirmedCount !== 1) return; // not their first confirmed payment
-
   const ref = payment.pesapalOrderId;
+  const earliest = await prisma.payment.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: "asc" } });
+  if (!earliest || earliest.pesapalOrderId !== ref) return; // not their first-ever confirmed payment
+
   await mintSplitCoin(ref, "referral_referrer", "referral", buyer.referredBy, 2, payment.userId);
   await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
 }
