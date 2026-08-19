@@ -6,6 +6,7 @@ const REASON_LABEL = {
   purchase_owner:    "Group owner reward",
   purchase_platform: "Platform share (purchase)",
   referral_referrer: "Referral bonus",
+  referral_buyer:    "Referral welcome bonus",
   referral_platform: "Platform share (referral)",
 };
 

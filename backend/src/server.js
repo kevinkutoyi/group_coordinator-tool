@@ -1163,8 +1163,7 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
 // ═══════════════════════════════════════════════════════════════════════════
 const SPLITCOIN_PLATFORM_WALLET = "platform";
 const PURCHASE_COINS_KES = 20; // 2 coins per confirmed purchase: 1 buyer + 0.5 owner + 0.5 platform
-const REFERRAL_COINS_KES = 30; // 3 coins on a referred user's first confirmed purchase: 2 referrer + 1 platform
-const OWNER_COIN_KES     = 5;  // the group owner's 0.5-coin slice of PURCHASE_COINS_KES
+const REFERRAL_COINS_KES = 30; // 3 coins on a referred user's first confirmed purchase: 1.5 referrer + 1 platform + 0.5 buyer
 
 async function mintSplitCoin(reference, reason, sourceType, recipientId, amount, relatedUserId = null) {
   try {
@@ -1192,15 +1191,19 @@ async function awardPurchaseSplitCoins(payment) {
 }
 
 // Fires once — on the referred user's FIRST ever confirmed payment across any
-// group: 2 SplitCoins to the referrer, 1 to the platform. `referrerId` is
-// precomputed by determineReferralEligibility() BEFORE the Payment row is
+// group: 1.5 SplitCoins to the referrer, 1 to the platform, and 0.5 to the
+// referred buyer themselves (on top of their normal 1-coin purchase reward
+// from awardPurchaseSplitCoins) — still 3 coins / KES 30 total, just with
+// 0.5 of the referrer's original cut redirected to the buyer. `referrerId`
+// is precomputed by determineReferralEligibility() BEFORE the Payment row is
 // created (see confirmOrder) and threaded through here, rather than
 // re-derived independently — so the fee deduction applied to this same
 // payment and the coins actually minted can never disagree with each other.
 async function awardReferralSplitCoinsIfEligible(payment, referrerId) {
   if (!referrerId) return;
   const ref = payment.pesapalOrderId;
-  await mintSplitCoin(ref, "referral_referrer", "referral", referrerId, 2, payment.userId);
+  await mintSplitCoin(ref, "referral_referrer", "referral", referrerId, 1.5, payment.userId);
+  await mintSplitCoin(ref, "referral_buyer", "referral", payment.userId, 0.5, payment.userId);
   await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
 }
 
@@ -1222,28 +1225,31 @@ async function determineReferralEligibility(userId) {
 }
 
 // ── SplitCoins accounting: gross-vs-net revenue ─────────────────────────────
-// SplitCoins are a REAL deduction, not a display estimate: their KES value
-// (converted to USD at the live platform rate) is subtracted from the actual
-// platformFee/moderatorOwed stored on the Payment row at confirmation time —
-// see confirmOrder. The buyer's and the platform's own coin(s) always come
-// out of platformFee (the platform funds its own loyalty program from its
-// own cut, including the full referral cost); the group owner's 0.5 coin
-// comes out of THEIR moderatorOwed specifically, since it's paid to them
-// in lieu of cash. If the group is platform-owned there's no separate
-// moderator, so the owner's share also comes out of platformFee instead.
+// SplitCoins are a REAL deduction, not a display estimate, and they come off
+// the TOP of what the buyer paid (memberPays) — not carved out of the
+// platform's fee after the fact. e.g. a buyer paying KES 1,000 with KES 50
+// of SplitCoins minted on that transaction only has KES 950 actually split
+// between platformFee/moderatorOwed at the normal fee percentage; both sides
+// shrink together, proportionally, rather than the platform absorbing the
+// whole cost. This also means platform-owned groups need no special case
+// here: moderatorOwed is still computed the same way even when there's no
+// separate moderator to pay it out to (the payout queue already tracks that
+// as "ownAccount" revenue rather than an external transfer).
 // Both the Admin Dashboard and Moderator Dashboard read the resulting
 // Payment.platformFee/moderatorOwed directly — there's only one real number,
 // not two dashboards independently estimating a "net" figure.
-function computeSplitCoinsDeduction({ moderatorId, referrerId }, kesRate) {
-  const isPlatformOwned = !moderatorId || moderatorId === "superadmin";
-  const platformKes = (isPlatformOwned ? PURCHASE_COINS_KES : PURCHASE_COINS_KES - OWNER_COIN_KES)
-    + (referrerId ? REFERRAL_COINS_KES : 0);
-  const ownerKes = isPlatformOwned ? 0 : OWNER_COIN_KES;
+function computeSplitCoinsSplit(order, referrerId, kesRate) {
+  const totalCoinsKes = PURCHASE_COINS_KES + (referrerId ? REFERRAL_COINS_KES : 0);
   const rate = kesRate || DEFAULT_KES_PER_USD;
-  return {
-    platformFeeDeductionUsd:   +(platformKes / rate).toFixed(4),
-    moderatorOwedDeductionUsd: +(ownerKes / rate).toFixed(4),
-  };
+  const totalDeductionUsd = +(totalCoinsKes / rate).toFixed(4);
+  const netMemberPays = Math.max(0, +(order.memberPays - totalDeductionUsd).toFixed(2));
+  // Preserve the exact fee ratio this order was originally quoted at
+  // (rather than re-fetching the live platform fee percent, which may have
+  // changed since initiate-time) and apply it to the reduced base.
+  const feeRatio = order.memberPays > 0 ? order.platformFee / order.memberPays : 0;
+  const platformFee   = Math.max(0, +(netMemberPays * feeRatio).toFixed(2));
+  const moderatorOwed = Math.max(0, +(netMemberPays - platformFee).toFixed(2));
+  return { platformFee, moderatorOwed, totalDeductionUsd };
 }
 async function getSplitCoinsKesValue(where = {}) {
   const rows = await prisma.splitCoinTransaction.findMany({ where });
@@ -1278,19 +1284,16 @@ async function confirmOrder(reference) {
 
     const alreadyRecorded = await prisma.payment.findFirst({ where: { pesapalOrderId: reference } });
     if (!alreadyRecorded) {
-      // Decide referral eligibility and the resulting SplitCoins deduction
-      // BEFORE creating the Payment row (see determineReferralEligibility /
-      // computeSplitCoinsDeduction above for why) — the buyer still pays the
+      // Decide referral eligibility and the resulting SplitCoins split BEFORE
+      // creating the Payment row (see determineReferralEligibility /
+      // computeSplitCoinsSplit above for why) — the buyer still pays the
       // full sticker price via Paystack; this only changes how the already-
-      // collected revenue is allocated between platformFee/moderatorOwed and
-      // the SplitCoins ledger.
+      // collected memberPays is allocated between platformFee/moderatorOwed
+      // and the SplitCoins ledger.
       const referrerId = await determineReferralEligibility(order.userId);
       const kesRate = await getPlatformKesRate();
-      const { platformFeeDeductionUsd, moderatorOwedDeductionUsd } = computeSplitCoinsDeduction(
-        { moderatorId: order.moderatorId, referrerId }, kesRate
-      );
-      const adjustedPlatformFee   = Math.max(0, +(order.platformFee - platformFeeDeductionUsd).toFixed(2));
-      const adjustedModeratorOwed = Math.max(0, +(order.moderatorOwed - moderatorOwedDeductionUsd).toFixed(2));
+      const { platformFee: adjustedPlatformFee, moderatorOwed: adjustedModeratorOwed } =
+        computeSplitCoinsSplit(order, referrerId, kesRate);
 
       let paymentRow, justCreated = true;
       try {
