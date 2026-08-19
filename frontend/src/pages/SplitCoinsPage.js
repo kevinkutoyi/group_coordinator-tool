@@ -2,12 +2,14 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api, session } from "../api";
 
 const REASON_LABEL = {
-  purchase_buyer:    "Purchase reward",
-  purchase_owner:    "Group owner reward",
-  purchase_platform: "Platform share (purchase)",
-  referral_referrer: "Referral bonus",
-  referral_buyer:    "Referral welcome bonus",
-  referral_platform: "Platform share (referral)",
+  purchase_buyer:         "Purchase reward",
+  purchase_owner:         "Group owner reward",
+  purchase_platform:      "Platform share (purchase)",
+  first_purchase_buyer:   "First purchase welcome bonus",
+  first_purchase_platform:"Platform share (first purchase)",
+  referral_referrer:      "Referral bonus",
+  referral_buyer:         "Referral welcome bonus",
+  referral_platform:      "Platform share (referral)",
 };
 
 function fmtCoins(n) {

@@ -1162,8 +1162,15 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
 //  webhook can't double-mint, since both would share the same reference.
 // ═══════════════════════════════════════════════════════════════════════════
 const SPLITCOIN_PLATFORM_WALLET = "platform";
-const PURCHASE_COINS_KES = 20; // 2 coins per confirmed purchase: 1 buyer + 0.5 owner + 0.5 platform
-const REFERRAL_COINS_KES = 30; // 3 coins on a referred user's first confirmed purchase: 1.5 referrer + 1 platform + 0.5 buyer
+// Three different purchase-reward tiers, keyed off whether this is the
+// buyer's first-ever confirmed payment (across any group) and, if so,
+// whether they were referred:
+//   - Repeat purchase (not their first ever):        2 coins / KES 20 — 1 buyer + 0.5 owner + 0.5 platform (unchanged, original reward)
+//   - First-ever purchase, WITH a referrer:           3 coins / KES 30 — 1.5 referrer + 1 platform + 0.5 buyer, and NOTHING else (no separate purchase coins at all — the referral reward IS the reward)
+//   - First-ever purchase, NO referrer (organic signup): 1 coin / KES 10 — 0.25 buyer + 0.75 platform, no owner share
+const PURCHASE_COINS_KES       = 20; // repeat purchase
+const FIRST_PURCHASE_COINS_KES = 10; // first-ever purchase, no referral
+const REFERRAL_COINS_KES       = 30; // first-ever purchase, WITH a referral (replaces the purchase reward entirely)
 
 async function mintSplitCoin(reference, reason, sourceType, recipientId, amount, relatedUserId = null) {
   try {
@@ -1175,11 +1182,29 @@ async function mintSplitCoin(reference, reason, sourceType, recipientId, amount,
   }
 }
 
-async function awardPurchaseSplitCoins(payment) {
-  // 2 SplitCoins per confirmed purchase: 1 to the buyer, 0.5 to the group
-  // owner, 0.5 to the platform. If the owner IS the platform itself
-  // (Group.organizerId === "superadmin"), the platform gets the full 1.0.
+// `context` is precomputed once by determinePurchaseContext() BEFORE the
+// Payment row is created (see confirmOrder), and is the single source of
+// truth both this function and the fee-split calculation (computeSplitCoinsSplit)
+// read from — so they can never disagree about which reward tier applies.
+async function awardPurchaseSplitCoins(payment, context) {
   const ref = payment.pesapalOrderId;
+
+  if (context.isFirstPurchase && context.referrerId) {
+    // Referred first purchase: awardReferralSplitCoinsIfEligible() below is
+    // the entire reward for this transaction — no separate purchase coins.
+    return;
+  }
+
+  if (context.isFirstPurchase) {
+    // First-ever purchase, no referrer: a smaller, owner-free reward.
+    await mintSplitCoin(ref, "first_purchase_buyer", "purchase", payment.userId, 0.25);
+    await mintSplitCoin(ref, "first_purchase_platform", "purchase", SPLITCOIN_PLATFORM_WALLET, 0.75);
+    return;
+  }
+
+  // Repeat purchase: the original 2-coin reward. If the owner IS the
+  // platform itself (Group.organizerId === "superadmin"), the platform
+  // gets the full 1.0 instead of splitting with a separate owner.
   const ownerId = payment.moderatorId;
   await mintSplitCoin(ref, "purchase_buyer", "purchase", payment.userId, 1);
   if (!ownerId || ownerId === "superadmin") {
@@ -1190,15 +1215,11 @@ async function awardPurchaseSplitCoins(payment) {
   }
 }
 
-// Fires once — on the referred user's FIRST ever confirmed payment across any
-// group: 1.5 SplitCoins to the referrer, 1 to the platform, and 0.5 to the
-// referred buyer themselves (on top of their normal 1-coin purchase reward
-// from awardPurchaseSplitCoins) — still 3 coins / KES 30 total, just with
-// 0.5 of the referrer's original cut redirected to the buyer. `referrerId`
-// is precomputed by determineReferralEligibility() BEFORE the Payment row is
-// created (see confirmOrder) and threaded through here, rather than
-// re-derived independently — so the fee deduction applied to this same
-// payment and the coins actually minted can never disagree with each other.
+// Fires only when context.referrerId is set (i.e. this is the referred
+// user's first-ever confirmed payment): 1.5 SplitCoins to the referrer, 1 to
+// the platform, and 0.5 to the referred buyer themselves — 3 coins / KES 30
+// total, and the ONLY purchase-related reward on this transaction (see
+// awardPurchaseSplitCoins above, which mints nothing when this fires).
 async function awardReferralSplitCoinsIfEligible(payment, referrerId) {
   if (!referrerId) return;
   const ref = payment.pesapalOrderId;
@@ -1207,28 +1228,30 @@ async function awardReferralSplitCoinsIfEligible(payment, referrerId) {
   await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
 }
 
-// Is the user about to receive their first-ever confirmed Payment, and do
-// they have a referrer? Checked BEFORE the new Payment row is created (see
-// confirmOrder) so a raced duplicate webhook/verify call for the same
-// reference sees the identical answer on both concurrent attempts — neither
-// has created its row yet, so both count 0 prior payments and agree. That
-// keeps the fee deduction and the eventual referral mint from ever drifting
+// Is the user about to receive their first-ever confirmed Payment, and if
+// so, do they have a referrer? Checked BEFORE the new Payment row is
+// created (see confirmOrder) so a raced duplicate webhook/verify call for
+// the same reference sees the identical answer on both concurrent attempts
+// — neither has created its row yet, so both count 0 prior payments and
+// agree. That keeps the fee split and the eventual mint from ever drifting
 // apart, and the DB unique constraint on Payment.pesapalOrderId (migration
 // 0014) plus the ledger's own unique (sourcePaymentId, reason) constraint
 // are what actually prevent double-crediting if both attempts proceed.
-async function determineReferralEligibility(userId) {
-  const buyer = await prisma.user.findUnique({ where: { id: userId } });
-  if (!buyer?.referredBy) return null;
-  const priorPayments = await prisma.payment.count({ where: { userId } });
-  if (priorPayments > 0) return null;
-  return buyer.referredBy;
+async function determinePurchaseContext(userId) {
+  const [buyer, priorPayments] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.payment.count({ where: { userId } }),
+  ]);
+  const isFirstPurchase = priorPayments === 0;
+  const referrerId = (isFirstPurchase && buyer?.referredBy) ? buyer.referredBy : null;
+  return { isFirstPurchase, referrerId };
 }
 
 // ── SplitCoins accounting: gross-vs-net revenue ─────────────────────────────
 // SplitCoins are a REAL deduction, not a display estimate, and they come off
 // the TOP of what the buyer paid (memberPays) — not carved out of the
-// platform's fee after the fact. e.g. a buyer paying KES 1,000 with KES 50
-// of SplitCoins minted on that transaction only has KES 950 actually split
+// platform's fee after the fact. e.g. a buyer paying KES 1,000 on a repeat
+// purchase (KES 20 of SplitCoins minted) only has KES 980 actually split
 // between platformFee/moderatorOwed at the normal fee percentage; both sides
 // shrink together, proportionally, rather than the platform absorbing the
 // whole cost. This also means platform-owned groups need no special case
@@ -1238,8 +1261,10 @@ async function determineReferralEligibility(userId) {
 // Both the Admin Dashboard and Moderator Dashboard read the resulting
 // Payment.platformFee/moderatorOwed directly — there's only one real number,
 // not two dashboards independently estimating a "net" figure.
-function computeSplitCoinsSplit(order, referrerId, kesRate) {
-  const totalCoinsKes = PURCHASE_COINS_KES + (referrerId ? REFERRAL_COINS_KES : 0);
+function computeSplitCoinsSplit(order, context, kesRate) {
+  const totalCoinsKes = context.isFirstPurchase && context.referrerId ? REFERRAL_COINS_KES
+    : context.isFirstPurchase ? FIRST_PURCHASE_COINS_KES
+    : PURCHASE_COINS_KES;
   const rate = kesRate || DEFAULT_KES_PER_USD;
   const totalDeductionUsd = +(totalCoinsKes / rate).toFixed(4);
   const netMemberPays = Math.max(0, +(order.memberPays - totalDeductionUsd).toFixed(2));
@@ -1284,16 +1309,16 @@ async function confirmOrder(reference) {
 
     const alreadyRecorded = await prisma.payment.findFirst({ where: { pesapalOrderId: reference } });
     if (!alreadyRecorded) {
-      // Decide referral eligibility and the resulting SplitCoins split BEFORE
-      // creating the Payment row (see determineReferralEligibility /
-      // computeSplitCoinsSplit above for why) — the buyer still pays the
-      // full sticker price via Paystack; this only changes how the already-
-      // collected memberPays is allocated between platformFee/moderatorOwed
-      // and the SplitCoins ledger.
-      const referrerId = await determineReferralEligibility(order.userId);
+      // Decide the purchase context (first-ever purchase? referred?) and the
+      // resulting SplitCoins split BEFORE creating the Payment row (see
+      // determinePurchaseContext / computeSplitCoinsSplit above for why) —
+      // the buyer still pays the full sticker price via Paystack; this only
+      // changes how the already-collected memberPays is allocated between
+      // platformFee/moderatorOwed and the SplitCoins ledger.
+      const purchaseContext = await determinePurchaseContext(order.userId);
       const kesRate = await getPlatformKesRate();
       const { platformFee: adjustedPlatformFee, moderatorOwed: adjustedModeratorOwed } =
-        computeSplitCoinsSplit(order, referrerId, kesRate);
+        computeSplitCoinsSplit(order, purchaseContext, kesRate);
 
       let paymentRow, justCreated = true;
       try {
@@ -1326,8 +1351,8 @@ async function confirmOrder(reference) {
         });
 
         // SplitCoins — only ever runs for a confirmed, newly-recorded payment.
-        await awardPurchaseSplitCoins(paymentRow);
-        await awardReferralSplitCoinsIfEligible(paymentRow, referrerId);
+        await awardPurchaseSplitCoins(paymentRow, purchaseContext);
+        await awardReferralSplitCoinsIfEligible(paymentRow, purchaseContext.referrerId);
 
         // Emails
         const [grp, mem] = await Promise.all([
