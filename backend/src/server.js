@@ -1200,6 +1200,23 @@ async function awardReferralSplitCoinsIfEligible(payment) {
   await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
 }
 
+// ── SplitCoins accounting: gross-vs-net revenue ─────────────────────────────
+// Both the Admin Dashboard and the Moderator Dashboard call THESE two
+// functions (never re-derive the math independently) so the two views can
+// never drift apart or show conflicting numbers for the same underlying
+// ledger. "Net" always means: gross cash figure minus the KES value of
+// whatever SplitCoins were minted out of that same pool. e.g. a KES 1,000
+// referred first purchase mints KES 30 of SplitCoins (2 to the referrer +
+// 1 to the platform) — that KES 30 is no longer clean, undiverted revenue,
+// so it comes off the relevant gross figure before anything is labelled "net".
+async function getSplitCoinsKesValue(where = {}) {
+  const rows = await prisma.splitCoinTransaction.findMany({ where });
+  return +(rows.reduce((sum, r) => sum + r.amount, 0) * 10).toFixed(2);
+}
+function netOfSplitCoins(gross, coinsKes) {
+  return +((gross || 0) - (coinsKes || 0)).toFixed(2);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Shared order-confirmation logic (used by both verify + IPN)
 async function confirmOrder(reference) {
@@ -1704,8 +1721,17 @@ app.get("/api/admin/earnings", requireSuperAdmin, async (req, res) => {
     prisma.payment.findMany({ where: { payoutStatus: "pending" } }),
   ]);
 
+  // SplitCoins deduction — every SplitCoin ever minted (to any recipient:
+  // buyer, group owner, referrer, or the platform itself) represents value
+  // diverted away from clean platform revenue, so it comes off the gross
+  // total before anything is shown as "net". Same helper the Moderator
+  // Dashboard uses, just scoped to the whole ledger instead of one user.
+  const splitCoinsKesTotal = await getSplitCoinsKesValue({});
+  const netEarned = netOfSplitCoins(+total.toFixed(2), splitCoinsKesTotal);
+
   res.json({
     totalEarned: +total.toFixed(2), feePercent,
+    splitCoinsKesTotal, netEarned, // gross platform fee revenue minus all SplitCoins ever allocated
     totalPendingPayouts: +pendingPayments.reduce((a, p) => a + p.moderatorOwed, 0).toFixed(2),
     earningsCount: allEarnings.length, pendingOrders, completedOrders,
     totalGroups, totalUsers, totalCustomers, pendingModerators,
@@ -1726,12 +1752,21 @@ app.get("/api/admin/splitcoins", requireSuperAdmin, async (req, res) => {
 
   const platformBalance = platformRows.reduce((sum, r) => sum + r.amount, 0);
   const totalMinted      = allRows.reduce((sum, r) => sum + r.amount, 0); // all coins ever minted, any recipient
+  const totalFromPurchases = allRows.filter(r => r.sourceType === "purchase").reduce((sum, r) => sum + r.amount, 0);
+  const totalFromReferrals = allRows.filter(r => r.sourceType === "referral").reduce((sum, r) => sum + r.amount, 0);
   const byReason = {};
   for (const r of allRows) byReason[r.reason] = +(byReason[r.reason] || 0) + r.amount;
 
   res.json({
+    // "Total SplitCoins existing" / "Total KES value"
+    totalExisting: totalMinted, totalKesValue: +(totalMinted * 10).toFixed(2),
+    // "Total earned through purchases" / "Total earned through referrals"
+    totalFromPurchases, totalFromPurchasesKes: +(totalFromPurchases * 10).toFixed(2),
+    totalFromReferrals, totalFromReferralsKes: +(totalFromReferrals * 10).toFixed(2),
+    // "Platform's SplitCoins"
     platformBalance, platformKesValue: +(platformBalance * 10).toFixed(2),
-    totalMinted, totalKesValue: +(totalMinted * 10).toFixed(2),
+    // legacy alias, kept so any existing caller of totalMinted keeps working
+    totalMinted,
     transactionCount: allRows.length, byReason, history,
   });
 });
@@ -1990,16 +2025,38 @@ app.get("/api/moderator/dashboard", requireRole("moderator"), async (req, res) =
     return { id: g.id, serviceName: g.serviceName, serviceIcon: g.serviceIcon, planName: g.planName, status: g.status, reviewStatus: g.reviewStatus, billingCycle: g.billingCycle, maxSlots: g.maxSlots, confirmedMembers: confirmed, totalSlots: g.maxSlots, totalCollected: +totalCollected.toFixed(2), platformFees: +platformFees.toFixed(2), modOwed: +modOwed.toFixed(2), modPaid: +modPaid.toFixed(2), modPending: +modPending.toFixed(2), subscriptionCost: g.subscriptionCost || 0, monthlyRevenue, profit, createdAt: g.createdAt };
   });
 
+  const totalOwed = +groupStats.reduce((a, g) => a + g.modOwed, 0).toFixed(2);
+
+  // SplitCoins — same shared helpers the Admin Dashboard uses. Only the
+  // "purchase_owner" coins minted TO this moderator come out of their own
+  // payout figure (those are the coins earned in lieu of part of their
+  // cash cut); buyer/platform/referral coins belong to other pools entirely
+  // and never touch a moderator's own net-earnings number.
+  const [coinRows, moderatorCoinsKes] = await Promise.all([
+    prisma.splitCoinTransaction.findMany({ where: { recipientId: uid } }),
+    getSplitCoinsKesValue({ recipientId: uid, reason: "purchase_owner" }),
+  ]);
+  const coinBalance = coinRows.reduce((sum, r) => sum + r.amount, 0);
+  const splitCoins = {
+    balance: coinBalance,
+    kesValue: +(coinBalance * 10).toFixed(2),
+    earnedFromPurchases: coinRows.filter(r => r.sourceType === "purchase").reduce((sum, r) => sum + r.amount, 0),
+    earnedFromReferrals: coinRows.filter(r => r.sourceType === "referral").reduce((sum, r) => sum + r.amount, 0),
+  };
+
   res.json({
     groups: groupStats,
     payoutHistory,
+    splitCoins,
     summary: {
       totalGroups: myGroups.length,
       activeGroups: myGroups.filter(g => g.status === "open" || g.status === "full").length,
       pendingReview: myGroups.filter(g => g.reviewStatus === "pending").length,
       totalMembers:   groupStats.reduce((a, g) => a + g.confirmedMembers, 0),
       totalCollected: +groupStats.reduce((a, g) => a + g.totalCollected, 0).toFixed(2),
-      totalOwed:      +groupStats.reduce((a, g) => a + g.modOwed, 0).toFixed(2),
+      totalOwed,
+      splitCoinsKesTotal: moderatorCoinsKes,
+      netOwed: netOfSplitCoins(totalOwed, moderatorCoinsKes), // totalOwed minus coins paid to you in SplitCoins instead of cash
       totalPaid:      +groupStats.reduce((a, g) => a + g.modPaid, 0).toFixed(2),
       totalPending:   +groupStats.reduce((a, g) => a + g.modPending, 0).toFixed(2),
       totalProfit:    +groupStats.reduce((a, g) => a + g.profit, 0).toFixed(2),
@@ -3170,6 +3227,18 @@ app.get("/api/admin/users/:id/profile", requireSuperAdmin, async (req, res) => {
     take: 20,
   });
 
+  // SplitCoins — every user's full balance/earnings, 0 if they've never
+  // earned any (empty ledger naturally reduces to 0 rows → 0 everything).
+  const coinRows = await prisma.splitCoinTransaction.findMany({ where: { recipientId: user.id } });
+  const coinBalance = coinRows.reduce((sum, r) => sum + r.amount, 0);
+  const splitCoins = {
+    balance: coinBalance,
+    kesValue: +(coinBalance * 10).toFixed(2),
+    earnedFromPurchases: coinRows.filter(r => r.sourceType === "purchase").reduce((sum, r) => sum + r.amount, 0),
+    earnedFromReferrals: coinRows.filter(r => r.sourceType === "referral").reduce((sum, r) => sum + r.amount, 0),
+    history: coinRows.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50),
+  };
+
   res.json({
     id:          user.id,
     name:        user.name,
@@ -3206,6 +3275,7 @@ app.get("/api/admin/users/:id/profile", requireSuperAdmin, async (req, res) => {
       months:      p.months,
     })),
     totalSpent: paystackPayments.reduce((a, p) => a + (p.memberPays || 0), 0),
+    splitCoins,
   });
 });
 

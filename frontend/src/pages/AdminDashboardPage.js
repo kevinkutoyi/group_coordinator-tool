@@ -4,6 +4,11 @@ import { kes, kesRaw, useKesRate, refreshRate } from "../currency";
 import "./AdminDashboardPage.css";
 import "./EarningsPage.css";
 
+function fmtCoins(n) {
+  const v = Number(n) || 0;
+  return (Math.round(v * 100) / 100).toString().replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
 const SIDEBAR_SECTIONS = [
   { items: [
       { key: "dashboard", icon: "🏠", label: "Dashboard" },
@@ -1632,6 +1637,27 @@ This will initiate a real transfer.`
                     ))}
                   </>
                 )}
+
+                {/* SplitCoins */}
+                <h4 style={{ margin:"16px 0 10px", fontSize:"0.88rem", color:"var(--muted)", textTransform:"uppercase", letterSpacing:1 }}>🪙 SplitCoins</h4>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
+                  <div style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ fontSize:"0.7rem", color:"var(--muted)", marginBottom:3 }}>Balance</div>
+                    <div style={{ fontWeight:600, fontSize:"0.88rem" }}>{fmtCoins(profileData.splitCoins.balance)}</div>
+                  </div>
+                  <div style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ fontSize:"0.7rem", color:"var(--muted)", marginBottom:3 }}>KES Value</div>
+                    <div style={{ fontWeight:600, fontSize:"0.88rem" }}>KES {kes(profileData.splitCoins.kesValue)}</div>
+                  </div>
+                  <div style={{ background:"var(--bg3)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ fontSize:"0.7rem", color:"var(--muted)", marginBottom:3 }}>Total Earned</div>
+                    <div style={{ fontWeight:600, fontSize:"0.88rem" }}>{fmtCoins(profileData.splitCoins.balance)}</div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:16, fontSize:"0.78rem", color:"var(--muted)", marginBottom:8 }}>
+                  <span>From purchases: <strong style={{ color:"var(--text)" }}>{fmtCoins(profileData.splitCoins.earnedFromPurchases)}</strong></span>
+                  <span>From referrals: <strong style={{ color:"var(--text)" }}>{fmtCoins(profileData.splitCoins.earnedFromReferrals)}</strong></span>
+                </div>
               </div>
             ) : null}
 
@@ -1932,12 +1958,15 @@ function timeAgo(ts) {
 // ── Platform Earnings view — ported from the old standalone /earnings page ──
 function EarningsView() {
   const [data, setData]       = useState(null);
+  const [sc, setSc]           = useState(null);
   const [loading, setLoading] = useState(true);
   const [schedMsg, setSchedMsg] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.getEarnings().then(setData).finally(() => setLoading(false));
+    Promise.all([api.getEarnings(), api.getAdminSplitCoins()])
+      .then(([earnings, splitcoins]) => { setData(earnings); setSc(splitcoins); })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -1975,9 +2004,15 @@ function EarningsView() {
       <div className="admin-kpi-grid" style={{ marginBottom:24 }}>
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(23,166,115,0.14)", color:"var(--accent3)" }}>💰</div>
-          <div className="admin-kpi-label">Total Earned</div>
+          <div className="admin-kpi-label">Gross Fee Revenue</div>
           <div className="admin-kpi-value" style={{ whiteSpace:"nowrap" }}>KES {kes(data.totalEarned)}</div>
           <div className="admin-kpi-delta">${(data.totalEarned || 0).toFixed(2)}</div>
+        </div>
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-icon" style={{ background:"rgba(124,106,255,0.14)", color:"var(--accent)" }}>🪙</div>
+          <div className="admin-kpi-label">Net Revenue (after SplitCoins)</div>
+          <div className="admin-kpi-value" style={{ whiteSpace:"nowrap", color: data.netEarned < 0 ? "var(--error)" : undefined }}>KES {kes(data.netEarned)}</div>
+          <div className="admin-kpi-delta">−KES {kes(data.splitCoinsKesTotal)} allocated</div>
         </div>
         <div className="admin-kpi-card">
           <div className="admin-kpi-icon" style={{ background:"rgba(22,163,74,0.14)", color:"var(--success)" }}>✅</div>
@@ -2018,6 +2053,34 @@ function EarningsView() {
           ))}
         </div>
       </div>
+
+      {sc && (
+        <div className="card" style={{ marginBottom:20 }}>
+          <h2 className="section-h2" style={{ marginBottom:16 }}>🪙 SplitCoins</h2>
+          <div className="admin-kpi-grid">
+            <div className="admin-kpi-card">
+              <div className="admin-kpi-label">Total SplitCoins Existing</div>
+              <div className="admin-kpi-value">{fmtCoins(sc.totalExisting)}</div>
+              <div className="admin-kpi-delta">KES {kes(sc.totalKesValue)}</div>
+            </div>
+            <div className="admin-kpi-card">
+              <div className="admin-kpi-label">Earned Through Purchases</div>
+              <div className="admin-kpi-value">{fmtCoins(sc.totalFromPurchases)}</div>
+              <div className="admin-kpi-delta">KES {kes(sc.totalFromPurchasesKes)}</div>
+            </div>
+            <div className="admin-kpi-card">
+              <div className="admin-kpi-label">Earned Through Referrals</div>
+              <div className="admin-kpi-value">{fmtCoins(sc.totalFromReferrals)}</div>
+              <div className="admin-kpi-delta">KES {kes(sc.totalFromReferralsKes)}</div>
+            </div>
+            <div className="admin-kpi-card">
+              <div className="admin-kpi-label">Platform's SplitCoins</div>
+              <div className="admin-kpi-value">{fmtCoins(sc.platformBalance)}</div>
+              <div className="admin-kpi-delta">KES {kes(sc.platformKesValue)}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="earnings-grid">
         <div className="card">

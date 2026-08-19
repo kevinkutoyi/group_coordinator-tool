@@ -3,6 +3,11 @@ import { api, session } from "../api";
 import { kes, useKesRate } from "../currency";
 import "./ModeratorDashboardPage.css";
 
+function fmtCoins(n) {
+  const v = Number(n) || 0;
+  return (Math.round(v * 100) / 100).toString().replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
 const STATUS_COLORS = { open:"var(--success)", full:"var(--warning)", closed:"var(--muted)", pending_review:"var(--accent)" };
 const STATUS_LABELS = { open:"Open", full:"Full", closed:"Closed", pending_review:"⏳ Pending Approval" };
 const REVIEW_LABELS = { approved:"✅ Live", pending:"⏳ Under Review", rejected:"❌ Rejected" };
@@ -122,6 +127,16 @@ export default function ModeratorDashboardPage({ navigate }) {
             <span>Total earned ({modKeeps}% of gross, lifetime)</span>
             <span style={{ color:"var(--accent3)" }}>KES {kes(summary.totalOwed)} · ${(summary.totalOwed ?? 0).toFixed(2)}</span>
           </div>
+          {summary.splitCoinsKesTotal > 0 && (
+            <div className="mod-earn-row mod-earn-split">
+              <span>Paid to you as SplitCoins instead of cash</span>
+              <span style={{ color:"var(--muted)" }}>− KES {kes(summary.splitCoinsKesTotal)}</span>
+            </div>
+          )}
+          <div className="mod-earn-row">
+            <span>Net cash earned (after SplitCoins)</span>
+            <span style={{ color: summary.netOwed < 0 ? "var(--error)" : "var(--accent3)" }}>KES {kes(summary.netOwed)} · ${(summary.netOwed ?? 0).toFixed(2)}</span>
+          </div>
           <div className="mod-earn-row">
             <span>Already paid to you</span>
             <span style={{ color:"var(--success)" }}>KES {kes(summary.totalPaid)} · ${(summary.totalPaid ?? 0).toFixed(2)}</span>
@@ -131,8 +146,30 @@ export default function ModeratorDashboardPage({ navigate }) {
             <span style={{ color:"var(--warning)" }}>KES {kes(summary.totalPending)} · ${(summary.totalPending ?? 0).toFixed(2)}</span>
           </div>
           <p style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:12 }}>
-            All payments land in the platform account. The admin reviews the payout queue and pays out your {modKeeps}% share to your registered payout account.
+            All payments land in the platform account. The admin reviews the payout queue and pays out your {modKeeps}% share to your registered payout account. Part of your share is paid as SplitCoins rather than cash — see the SplitCoins panel below.
           </p>
+        </div>
+      )}
+
+      {/* SplitCoins */}
+      {data.splitCoins && (
+        <div className="card" style={{ marginBottom:24 }}>
+          <h2 className="section-h2" style={{ marginBottom:16 }}>🪙 SplitCoins</h2>
+          <div className="mod-kpis" style={{ marginBottom:0 }}>
+            <div className="mod-kpi-card">
+              <div className="mod-kpi-label">Current Balance</div>
+              <div className="mod-kpi-val">{fmtCoins(data.splitCoins.balance)}</div>
+            </div>
+            <div className="mod-kpi-card">
+              <div className="mod-kpi-label">KES Value</div>
+              <div className="mod-kpi-val" style={{ whiteSpace:"nowrap" }}>KES {kes(data.splitCoins.kesValue)}</div>
+            </div>
+            <div className="mod-kpi-card">
+              <div className="mod-kpi-label">Total Earned</div>
+              <div className="mod-kpi-val">{fmtCoins(data.splitCoins.balance)}</div>
+            </div>
+          </div>
+          <button className="btn btn-outline btn-sm" style={{ marginTop:14 }} onClick={() => navigate("splitcoins")}>View full history →</button>
         </div>
       )}
 
