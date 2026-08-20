@@ -188,27 +188,38 @@ export default function GroupDetailPage({ id, navigate, user }) {
   async function handlePay(member) {
     setPayingId(member.id);
     try {
-      const res = await api.initiatePay({ groupId: id, memberId: member.id, redeemSplitCoins });
+      // Only actually apply the redemption if the box is checked AND the
+      // balance qualifies — checking the box with an insufficient balance is
+      // a no-op at payment time (the inline message already explained why),
+      // not a blocking error.
+      const canRedeem = redeemSplitCoins && splitCoinsBalance !== null && splitCoinsBalance >= 2;
+      const res = await api.initiatePay({ groupId: id, memberId: member.id, redeemSplitCoins: canRedeem });
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
   }
 
-  // SplitCoins "redeem at checkout" control — a buyer needs at least 2
-  // SplitCoins to redeem, and checking the box redeems their ENTIRE balance
-  // for a same-value KES discount on this purchase (the server re-validates
-  // the balance and locks in the actual redeemed amount at initiate-time,
-  // this is just the UI toggle).
+  // SplitCoins "redeem at checkout" control — the checkbox is always shown;
+  // checking it with fewer than 2 SplitCoins just surfaces a message instead
+  // of hiding the option outright. Checking it when eligible redeems the
+  // buyer's ENTIRE balance for a same-value KES discount on this purchase
+  // (the server re-validates the balance and locks in the actual redeemed
+  // amount at initiate-time, this is just the UI toggle).
   function renderRedeemCoins() {
     if (splitCoinsBalance === null) return null;
-    if (splitCoinsBalance < 2) {
-      return <div style={{ fontSize:"0.7rem", color:"var(--muted)" }}>You must have 2 or more SplitCoins to redeem</div>;
-    }
+    const eligible = splitCoinsBalance >= 2;
     const coinsLabel = (Math.round(splitCoinsBalance * 100) / 100).toString();
     return (
-      <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
-        <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} />
-        Redeem my {coinsLabel} SplitCoins for a KES {(splitCoinsBalance * 10).toLocaleString()} discount
-      </label>
+      <div>
+        <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
+          <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} />
+          {eligible
+            ? `Redeem my ${coinsLabel} SplitCoins for a KES ${(splitCoinsBalance * 10).toLocaleString()} discount`
+            : "Redeem my SplitCoins for a discount"}
+        </label>
+        {redeemSplitCoins && !eligible && (
+          <div style={{ fontSize:"0.68rem", color:"var(--error)", marginTop:2 }}>You must have 2 or more SplitCoins to redeem</div>
+        )}
+      </div>
     );
   }
 
