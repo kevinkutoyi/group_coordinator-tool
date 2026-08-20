@@ -208,15 +208,20 @@ export default function GroupDetailPage({ id, navigate, user }) {
     if (splitCoinsBalance === null) return null;
     const eligible = splitCoinsBalance >= 2;
     const coinsLabel = (Math.round(splitCoinsBalance * 100) / 100).toString();
+    // Plain (non-flex) label so the checkbox and text lay out like normal
+    // inline content — a flex row here was computing its width from the
+    // UNWRAPPED text first (max-content sizing) before being squeezed down
+    // by whichever flex/column ancestor it landed in (e.g. the organizer
+    // member-list's align-items:flex-end column), which is what made the
+    // checkbox look far from the text once the text wrapped. An explicit
+    // width cap sidesteps that shrink-to-fit computation entirely.
     return (
-      <div>
-        <label style={{ display:"flex", alignItems:"flex-start", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
-          <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} style={{ flexShrink:0, margin:"2px 0 0" }} />
-          <span>
-            {eligible
-              ? `Redeem my ${coinsLabel} SplitCoins for a KES ${(splitCoinsBalance * 10).toLocaleString()} discount`
-              : "Redeem my SplitCoins for a discount"}
-          </span>
+      <div style={{ width:200, maxWidth:"100%" }}>
+        <label style={{ fontSize:"0.72rem", color:"var(--text)", cursor:"pointer", lineHeight:1.4 }}>
+          <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} style={{ verticalAlign:"middle", marginRight:6 }} />
+          {eligible
+            ? `Redeem my ${coinsLabel} SplitCoins for a KES ${(splitCoinsBalance * 10).toLocaleString()} discount`
+            : "Redeem my SplitCoins for a discount"}
         </label>
         {redeemSplitCoins && !eligible && (
           <div style={{ fontSize:"0.68rem", color:"var(--error)", marginTop:2 }}>You must have 2 or more SplitCoins to redeem</div>
