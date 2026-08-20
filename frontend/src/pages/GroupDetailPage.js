@@ -696,7 +696,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   )}
                 </div>
                 {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) && (
-                  <div style={{ padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
+                  <div style={{ display:"flex", justifyContent:"flex-end", padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
                 )}
                 </>
               ) : !session.isLoggedIn() ? (
