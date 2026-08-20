@@ -209,8 +209,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
     const eligible = splitCoinsBalance >= 2;
     const coinsLabel = (Math.round(splitCoinsBalance * 100) / 100).toString();
     return (
-      <div style={{ maxWidth:260 }}>
-        <label style={{ display:"inline-flex", alignItems:"flex-start", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
+      <div>
+        <label style={{ display:"flex", alignItems:"flex-start", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
           <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} style={{ flexShrink:0, margin:"2px 0 0" }} />
           <span>
             {eligible
@@ -691,7 +691,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   )}
                 </div>
                 {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) && (
-                  <div style={{ display:"flex", justifyContent:"flex-end", padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
+                  <div style={{ padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
                 )}
                 </>
               ) : !session.isLoggedIn() ? (
