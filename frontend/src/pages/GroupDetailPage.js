@@ -210,11 +210,13 @@ export default function GroupDetailPage({ id, navigate, user }) {
     const coinsLabel = (Math.round(splitCoinsBalance * 100) / 100).toString();
     return (
       <div>
-        <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
+        <label style={{ display:"inline-flex", width:"fit-content", alignItems:"center", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
+          <span>
+            {eligible
+              ? `Redeem my ${coinsLabel} SplitCoins for a KES ${(splitCoinsBalance * 10).toLocaleString()} discount`
+              : "Redeem my SplitCoins for a discount"}
+          </span>
           <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} />
-          {eligible
-            ? `Redeem my ${coinsLabel} SplitCoins for a KES ${(splitCoinsBalance * 10).toLocaleString()} discount`
-            : "Redeem my SplitCoins for a discount"}
         </label>
         {redeemSplitCoins && !eligible && (
           <div style={{ fontSize:"0.68rem", color:"var(--error)", marginTop:2 }}>You must have 2 or more SplitCoins to redeem</div>
