@@ -40,6 +40,8 @@ export default function GroupDetailPage({ id, navigate, user }) {
   const [adminOverviewOpen, setAdminOverviewOpen] = useState(false);
   const [paymentLogOpen, setPaymentLogOpen]       = useState(false);
   const [selectedMonths, setSelectedMonths] = useState(1);
+  const [splitCoinsBalance, setSplitCoinsBalance] = useState(null); // null = not loaded / not logged in
+  const [redeemSplitCoins, setRedeemSplitCoins]   = useState(false);
 
   // ── Credential vault state lifted here so reload() doesn't reset it ────
   const [creds, setCreds]         = useState(null);
@@ -71,6 +73,13 @@ export default function GroupDetailPage({ id, navigate, user }) {
   useEffect(() => {
     reload().finally(() => setLoading(false));
     loadCreds();
+  }, [id]);
+
+  // SplitCoins balance, for the "redeem at checkout" checkbox. Superadmin
+  // never pays for a slot, so there's no redemption UI to feed there anyway.
+  useEffect(() => {
+    if (!session.isLoggedIn() || session.isSuperAdmin()) return;
+    api.getMySplitCoins().then(d => setSplitCoinsBalance(d.balance)).catch(() => {});
   }, [id]);
 
   // "Customers who joined this group also joined" — other open groups with
@@ -179,9 +188,28 @@ export default function GroupDetailPage({ id, navigate, user }) {
   async function handlePay(member) {
     setPayingId(member.id);
     try {
-      const res = await api.initiatePay({ groupId: id, memberId: member.id });
+      const res = await api.initiatePay({ groupId: id, memberId: member.id, redeemSplitCoins });
       window.location.href = res.redirectUrl;
     } catch (err) { setMsg({ type: "err", text: err.message }); setPayingId(null); }
+  }
+
+  // SplitCoins "redeem at checkout" control — a buyer needs at least 2
+  // SplitCoins to redeem, and checking the box redeems their ENTIRE balance
+  // for a same-value KES discount on this purchase (the server re-validates
+  // the balance and locks in the actual redeemed amount at initiate-time,
+  // this is just the UI toggle).
+  function renderRedeemCoins() {
+    if (splitCoinsBalance === null) return null;
+    if (splitCoinsBalance < 2) {
+      return <div style={{ fontSize:"0.7rem", color:"var(--muted)" }}>You must have 2 or more SplitCoins to redeem</div>;
+    }
+    const coinsLabel = (Math.round(splitCoinsBalance * 100) / 100).toString();
+    return (
+      <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
+        <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} />
+        Redeem my {coinsLabel} SplitCoins for a KES {(splitCoinsBalance * 10).toLocaleString()} discount
+      </label>
+    );
   }
 
   // Renewing an already-active subscription: flip back to pending (recalcs
@@ -587,6 +615,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                 ) : (
                   <span className={`tag tag-${m.paymentStatus}`}>{m.paymentStatus}</span>
                 )}
+                {m.userId === currentUserId && ["pending", "expired", "confirmed"].includes(m.paymentStatus) && renderRedeemCoins()}
                 {m.userId === currentUserId && m.paymentStatus === "pending" && (
                   <button className="btn btn-sm pay-btn pay-pulse" onClick={() => handleRenewAndPay(m)} disabled={payingId === m.id}>
                     {payingId === m.id ? <><span className="spinner" /> Redirecting…</> : `🔒 Pay Now — KES ${kes(durationPrice(group.pricePerSlot, selectedMonths))}`}
@@ -614,6 +643,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
             <div>
               {/* Customer view — only show their own membership status */}
               {myMember ? (
+                <>
                 <div className="member-row" style={{ background: "rgba(124,106,255,0.06)", borderRadius: 10, padding: "12px 16px" }}>
                   <div className="member-avatar">{myMember.name?.[0]?.toUpperCase()}</div>
                   <div className="member-info">
@@ -647,6 +677,10 @@ export default function GroupDetailPage({ id, navigate, user }) {
                     </button>
                   )}
                 </div>
+                {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) && (
+                  <div style={{ padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
+                )}
+                </>
               ) : !session.isLoggedIn() ? (
                 <div style={{ textAlign: "center", padding: "16px 0" }}>
                   <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>👥</div>
@@ -668,6 +702,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                       KES {kes(durationPrice(group.pricePerSlot, selectedMonths))} · ${durationPrice(group.pricePerSlot, selectedMonths).toFixed(2)}
                     </span>
                   </div>
+                  <div style={{ display:"flex", justifyContent:"center", marginBottom: 10 }}>{renderRedeemCoins()}</div>
                   <button className="btn pesapal-btn pay-pulse" disabled={busy} onClick={handleJoinAndPay}>
                     {busy ? <><span className="spinner" /> Joining…</> : "🔒 Join & Pay Now"}
                   </button>

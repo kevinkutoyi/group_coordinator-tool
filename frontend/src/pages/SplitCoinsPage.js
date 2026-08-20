@@ -11,6 +11,9 @@ const REASON_LABEL = {
   referral_referrer:      "Referral bonus",
   referral_buyer:         "Referral welcome bonus",
   referral_platform:      "Platform share (referral)",
+  redeem_buyer:           "Redeemed at checkout",
+  redeem_moderator:       "Redeemed by a buyer (group owner share)",
+  redeem_platform:        "Redeemed by a buyer (platform share)",
 };
 
 function fmtCoins(n) {
@@ -144,7 +147,9 @@ export default function SplitCoinsPage({ navigate }) {
                 <tr key={row.id} style={{ borderBottom:"1px solid var(--border)" }}>
                   <td style={{ padding:"8px 10px", color:"var(--muted)" }}>{new Date(row.createdAt).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}</td>
                   <td style={{ padding:"8px 10px" }}>{REASON_LABEL[row.reason] || row.reason}</td>
-                  <td style={{ padding:"8px 10px", textAlign:"right", fontWeight:600, color:"var(--success)" }}>+{fmtCoins(row.amount)}</td>
+                  <td style={{ padding:"8px 10px", textAlign:"right", fontWeight:600, color: row.amount < 0 ? "var(--error)" : "var(--success)" }}>
+                    {row.amount < 0 ? "" : "+"}{fmtCoins(row.amount)}
+                  </td>
                   {isSuperAdmin && <td style={{ padding:"8px 10px", textAlign:"right", color:"var(--muted)" }}>{(row.amount * 10).toLocaleString()}</td>}
                 </tr>
               ))}

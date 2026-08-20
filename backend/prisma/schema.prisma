@@ -50,8 +50,8 @@ model User {
 model SplitCoinTransaction {
   id              String   @id @default(uuid())
   recipientId     String                        // User.id, or "platform"
-  amount          Float                         // SplitCoins earned, always > 0 (supports fractions e.g. 0.5)
-  reason          String                        // purchase_buyer | purchase_owner | purchase_platform | referral_referrer | referral_platform
+  amount          Float                         // positive for earn/receive rows (supports fractions e.g. 0.5); NEGATIVE for a buyer's "redeem_buyer" debit row — balance is always SUM(amount), so a debit is just a negative row, not a separate mechanism
+  reason          String                        // purchase_buyer | purchase_owner | purchase_platform | first_purchase_buyer | first_purchase_owner | first_purchase_platform | referral_referrer | referral_buyer | referral_platform | redeem_buyer | redeem_moderator | redeem_platform
   sourceType      String                        // purchase | referral
   sourcePaymentId String                         // Payment.id this reward was derived from — the idempotency key
   relatedUserId   String?                       // referral rows: the id of the newly-referred user
@@ -158,6 +158,8 @@ model Payment {
   moderatorOwed  Float                         // NET — already reduced by any SplitCoins paid to the owner instead of cash
   grossPlatformFee   Float?                    // pre-SplitCoins platformFee, kept for gross-vs-net audit/display
   grossModeratorOwed Float?                    // pre-SplitCoins moderatorOwed, kept for gross-vs-net audit/display
+  redeemedSplitCoins Float    @default(0)      // coins the buyer redeemed for a checkout discount on THIS purchase (locked in at initiate-time)
+  grossMemberPays    Float?                    // pre-redemption sticker price; `amount` above is already net of the redemption discount
   organizerGets  Float    @default(0)          // alias for moderatorOwed
   moderatorId    String?
   method         String   @default("pesapal")
@@ -461,6 +463,8 @@ model PaystackOrder {
   organizerGets  Float
   moderatorId    String
   memberPays     Float
+  redeemedSplitCoins Float @default(0)         // coins locked in for redemption at initiate-time; memberPays above is already net of the discount
+  grossMemberPays    Float?                    // pre-redemption sticker price, for audit
   currency       String    @default("USD")
   paystackStatus String?
   status         String    @default("PENDING")

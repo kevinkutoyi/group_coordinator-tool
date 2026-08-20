@@ -101,6 +101,11 @@ const PURCHASE_COINS_KES       = 20; // repeat purchase
 const FIRST_PURCHASE_COINS_KES = 10; // first-ever purchase, no referral
 const REFERRAL_COINS_KES       = 30; // first-ever purchase, WITH a referral (replaces the purchase reward entirely)
 const DEFAULT_KES_PER_USD = 130;
+// Redeem-at-checkout: a buyer with 2+ coins can check a box to redeem their
+// ENTIRE balance for a same-value KES discount on that purchase. The
+// redeemed coins are reassigned 50/50 to the group's moderator and the
+// platform (or entirely to the platform if platform-owned).
+const SPLITCOIN_REDEEM_MIN = 2;
 
 async function mintSplitCoin(reference, reason, sourceType, recipientId, amount, relatedUserId = null) {
   try {
@@ -185,6 +190,53 @@ async function determinePurchaseContext(userId) {
   return { isFirstPurchase, referrerId };
 }
 
+async function getSplitCoinsBalance(recipientId) {
+  const rows = await prisma.splitCoinTransaction.findMany({ where: { recipientId } });
+  return rows.reduce((sum, r) => sum + r.amount, 0);
+}
+
+// Debits a buyer's ledger for coins they chose to redeem at checkout (locked
+// in at initiate-time) and reassigns them 50/50 to the group's moderator and
+// the platform. Re-checks the buyer's CURRENT balance at confirm-time and
+// caps the debit at whatever is actually available, so a race between two
+// concurrently-confirming redemption-locked orders for the same buyer can
+// never drive their ledger balance negative.
+async function debitRedeemedSplitCoinsIfAny(payment, order) {
+  const redeemed = order.redeemedSplitCoins || 0;
+  if (redeemed <= 0) return;
+  const ref = payment.pesapalOrderId;
+  const currentBalance = await getSplitCoinsBalance(payment.userId);
+  const amount = Math.min(redeemed, Math.max(0, currentBalance));
+  if (amount <= 0) return;
+
+  await mintSplitCoin(ref, "redeem_buyer", "redeem", payment.userId, -amount);
+  const ownerId = payment.moderatorId;
+  if (!ownerId || ownerId === "superadmin") {
+    await mintSplitCoin(ref, "redeem_platform", "redeem", SPLITCOIN_PLATFORM_WALLET, amount);
+  } else {
+    await mintSplitCoin(ref, "redeem_moderator", "redeem", ownerId, amount / 2);
+    await mintSplitCoin(ref, "redeem_platform", "redeem", SPLITCOIN_PLATFORM_WALLET, amount / 2);
+  }
+}
+
+// Redeem-at-checkout discount (called at initiate-time, BEFORE Paystack is
+// charged). `member` is the GroupMember row (baseAmount/platformFee/
+// memberPays as calcFee() computed them). `redeemedCoins` is the buyer's
+// full balance, locked in by the caller (0 if not redeeming).
+function computeRedemptionDiscount(member, redeemedCoins, kesRate) {
+  const grossMemberPays = member.memberPays;
+  if (!(redeemedCoins > 0)) {
+    return { memberPays: grossMemberPays, platformFee: member.platformFee, moderatorOwed: member.moderatorOwed, grossMemberPays };
+  }
+  const rate = kesRate || DEFAULT_KES_PER_USD;
+  const redeemedValueUsd = +((redeemedCoins * 10) / rate).toFixed(4);
+  const memberPays = Math.max(0, +(grossMemberPays - redeemedValueUsd).toFixed(2));
+  const feeRatio   = grossMemberPays > 0 ? member.platformFee / grossMemberPays : 0;
+  const platformFee   = +(memberPays * feeRatio).toFixed(2);
+  const moderatorOwed = +(memberPays - platformFee).toFixed(2);
+  return { memberPays, platformFee, moderatorOwed, grossMemberPays };
+}
+
 // ── SplitCoins accounting: gross-vs-net revenue ─────────────────────────────
 // SplitCoins are a REAL deduction, not a display estimate, and they come off
 // the TOP of what the buyer paid (memberPays) — not carved out of the
@@ -229,8 +281,22 @@ async function getSplitCoinsKesValue(where = {}) {
 // Payment row (racing attempts fall back to the winner's row via the
 // pesapalOrderId unique constraint), then mint — the same sequence
 // confirmOrder() runs today.
-async function simulateConfirmedPayment({ reference, userId, moderatorId, memberPays = 100, platformFee = 8, kesRate = 130 }) {
-  const order = { memberPays, platformFee, moderatorOwed: memberPays - platformFee };
+async function simulateConfirmedPayment({ reference, userId, moderatorId, memberPays = 100, platformFee = 8, kesRate = 130, redeemSplitCoins = false }) {
+  // Mirrors /api/paystack/initiate: lock in a redemption discount (if any)
+  // against the buyer's CURRENT balance before the earn-side deduction ever
+  // runs — the two deductions stack, same as production.
+  const member = { memberPays, platformFee, moderatorOwed: memberPays - platformFee };
+  let redeemedCoins = 0;
+  if (redeemSplitCoins) {
+    const balance = await getSplitCoinsBalance(userId);
+    if (balance >= SPLITCOIN_REDEEM_MIN) redeemedCoins = balance;
+  }
+  const discounted = computeRedemptionDiscount(member, redeemedCoins, kesRate);
+  const order = {
+    memberPays: discounted.memberPays, platformFee: discounted.platformFee, moderatorOwed: discounted.moderatorOwed,
+    redeemedSplitCoins: redeemedCoins, grossMemberPays: discounted.grossMemberPays,
+  };
+
   const context = await determinePurchaseContext(userId);
   const { platformFee: adjustedPlatformFee, moderatorOwed: adjustedModeratorOwed } = computeSplitCoinsSplit(order, context, kesRate);
 
@@ -240,6 +306,7 @@ async function simulateConfirmedPayment({ reference, userId, moderatorId, member
       data: { pesapalOrderId: reference, userId, moderatorId,
         platformFee: adjustedPlatformFee, moderatorOwed: adjustedModeratorOwed,
         grossPlatformFee: order.platformFee, grossModeratorOwed: order.moderatorOwed,
+        redeemedSplitCoins: order.redeemedSplitCoins, grossMemberPays: order.grossMemberPays,
         memberPays: order.memberPays },
     });
   } catch (err) {
@@ -251,8 +318,9 @@ async function simulateConfirmedPayment({ reference, userId, moderatorId, member
   if (justCreated && paymentRow) {
     await awardPurchaseSplitCoins(paymentRow, context);
     await awardReferralSplitCoinsIfEligible(paymentRow, context.referrerId);
+    await debitRedeemedSplitCoinsIfAny(paymentRow, order);
   }
-  return { created: justCreated, paymentRow, context };
+  return { created: justCreated, paymentRow, context, redeemedCoins };
 }
 
 // Simulates two racing webhook/verify calls landing on the SAME reference —
@@ -476,6 +544,87 @@ async function run() {
   db.splitCoinTransactions.push({ id: "sc_correction_1", sourcePaymentId: "REF-13", reason: "purchase_buyer_reversal", sourceType: "correction", recipientId: "buyer13", amount: -1, relatedUserId: null, createdAt: new Date() });
   check("original mint rows are untouched byte-for-byte after a correction", JSON.stringify(ledgerBefore) === JSON.stringify(db.splitCoinTransactions.slice(0, ledgerBefore.length)));
   check("post-correction balance nets to 0 via SUM, all original rows still present", balanceOf("buyer13") === 0 && db.splitCoinTransactions.filter(r=>r.sourcePaymentId==="REF-13").length === 4);
+
+  console.log("\n=== 14. Redeem-at-checkout: buyer redeems their FULL balance for a discount, coins reassigned 50/50 to moderator/platform ===");
+  resetDb();
+  db.users.buyer14 = { id: "buyer14", referredBy: null };
+  db.payments.push({ id: "pay_prime14", pesapalOrderId: "REF-0e", userId: "buyer14", moderatorId: "mod14", platformFee: 8, moderatorOwed: 92, grossPlatformFee: 8, grossModeratorOwed: 92, memberPays: 100 });
+  db.splitCoinTransactions.push({ id: "sc_seed14", sourcePaymentId: "REF-0e", reason: "purchase_buyer", sourceType: "purchase", recipientId: "buyer14", amount: 3, relatedUserId: null, createdAt: new Date() });
+  check("buyer14 starts with a 3-coin balance (seeded)", balanceOf("buyer14") === 3);
+
+  const { paymentRow: p14, redeemedCoins: rc14 } = await simulateConfirmedPayment({ reference: "REF-14", userId: "buyer14", moderatorId: "mod14", memberPays: 100, platformFee: 8, kesRate: 130, redeemSplitCoins: true });
+  check("locked in the buyer's full 3-coin balance for redemption", rc14 === 3);
+  check("Payment row records redeemedSplitCoins=3 and preserves the pre-discount grossMemberPays=100", p14.redeemedSplitCoins === 3 && p14.grossMemberPays === 100);
+  check("the discount actually reduced what was charged (memberPays < grossMemberPays)", p14.memberPays < p14.grossMemberPays);
+  // p14.memberPays is post-redemption-discount but PRE-earn-deduction (what
+  // Paystack actually charged); platformFee+moderatorOwed are further
+  // reduced on top by this purchase's own earn-tier deduction (KES20, same
+  // as scenario 1) -- so they're strictly less than memberPays, not equal.
+  check("platformFee + moderatorOwed is less than memberPays by roughly the earn-tier deduction (KES20)",
+    approx(p14.memberPays - (p14.platformFee + p14.moderatorOwed), 20 / 130, 0.02));
+  check("a redeem_buyer debit row of -3 was minted", db.splitCoinTransactions.some(r => r.sourcePaymentId === "REF-14" && r.reason === "redeem_buyer" && r.amount === -3));
+  check("buyer14's final balance: 3 (seed) - 3 (redeemed) + 1 (repeat-purchase reward) = 1", balanceOf("buyer14") === 1);
+  check("moderator (mod14) got 0.5 (repeat-purchase owner coin) + 1.5 (half of the 3 redeemed coins) = 2.0", balanceOf("mod14") === 2);
+  check("platform got 0.5 (repeat-purchase share) + 1.5 (half of the 3 redeemed coins) = 2.0", balanceOf(SPLITCOIN_PLATFORM_WALLET) === 2);
+
+  console.log("\n=== 15. Redeem-at-checkout on a PLATFORM-owned group: the platform gets the entire redeemed amount, no moderator split ===");
+  resetDb();
+  db.users.buyer15 = { id: "buyer15", referredBy: null };
+  db.payments.push({ id: "pay_prime15", pesapalOrderId: "REF-0f", userId: "buyer15", moderatorId: "superadmin", platformFee: 8, moderatorOwed: 92, grossPlatformFee: 8, grossModeratorOwed: 92, memberPays: 100 });
+  db.splitCoinTransactions.push({ id: "sc_seed15", sourcePaymentId: "REF-0f", reason: "purchase_buyer", sourceType: "purchase", recipientId: "buyer15", amount: 2, relatedUserId: null, createdAt: new Date() });
+  check("buyer15 starts with a 2-coin balance", balanceOf("buyer15") === 2);
+
+  const { redeemedCoins: rc15 } = await simulateConfirmedPayment({ reference: "REF-15", userId: "buyer15", moderatorId: "superadmin", memberPays: 100, platformFee: 8, kesRate: 130, redeemSplitCoins: true });
+  check("locked in the buyer's full 2-coin balance", rc15 === 2);
+  check("no redeem_moderator row exists for a platform-owned group", db.splitCoinTransactions.some(r => r.sourcePaymentId === "REF-15" && r.reason === "redeem_moderator") === false);
+  check("buyer15's final balance: 2 (seed) - 2 (redeemed) + 1 (repeat-purchase reward) = 1", balanceOf("buyer15") === 1);
+  check("platform got the full 1 (repeat-purchase share, since owner IS platform) + 2 (full redeemed amount) = 3", balanceOf(SPLITCOIN_PLATFORM_WALLET) === 3);
+
+  console.log("\n=== 16. Redemption below the 2-coin minimum is silently NOT applied (balance stays untouched) ===");
+  resetDb();
+  db.users.buyer16 = { id: "buyer16", referredBy: null };
+  db.payments.push({ id: "pay_prime16", pesapalOrderId: "REF-0g", userId: "buyer16", moderatorId: "mod16", platformFee: 8, moderatorOwed: 92, grossPlatformFee: 8, grossModeratorOwed: 92, memberPays: 100 });
+  db.splitCoinTransactions.push({ id: "sc_seed16", sourcePaymentId: "REF-0g", reason: "purchase_buyer", sourceType: "purchase", recipientId: "buyer16", amount: 1.5, relatedUserId: null, createdAt: new Date() });
+  check("buyer16 starts with a below-minimum 1.5-coin balance", balanceOf("buyer16") === 1.5);
+
+  const { redeemedCoins: rc16, paymentRow: p16 } = await simulateConfirmedPayment({ reference: "REF-16", userId: "buyer16", moderatorId: "mod16", memberPays: 100, platformFee: 8, kesRate: 130, redeemSplitCoins: true });
+  check("redemption did NOT apply (below SPLITCOIN_REDEEM_MIN)", rc16 === 0);
+  check("no discount applied: grossMemberPays equals the un-discounted sticker price", p16.grossMemberPays === 100);
+  check("no redeem_* ledger rows exist for this payment", db.splitCoinTransactions.some(r => r.sourcePaymentId === "REF-16" && r.sourceType === "redeem") === false);
+  check("buyer16's balance only grew by the normal 1-coin repeat-purchase reward: 1.5 + 1 = 2.5", balanceOf("buyer16") === 2.5);
+
+  console.log("\n=== 17. Race safety: two orders lock in redemption against the SAME starting balance; the second debit is capped, never goes negative ===");
+  resetDb();
+  db.users.buyerFloor = { id: "buyerFloor", referredBy: null };
+  db.splitCoinTransactions.push({ id: "sc_seedFloor", sourcePaymentId: "SEED-FLOOR", reason: "purchase_buyer", sourceType: "purchase", recipientId: "buyerFloor", amount: 2, relatedUserId: null, createdAt: new Date() });
+  // Both "orders" locked in redeemedSplitCoins=2 against this SAME starting
+  // balance, exactly as two concurrent /api/paystack/initiate calls would
+  // (each reads the buyer's balance before either has confirmed).
+  const payF1 = await prisma.payment.create({ data: { pesapalOrderId: "REF-F1", userId: "buyerFloor", moderatorId: "modF",
+    platformFee: 7.99, moderatorOwed: 91.86, grossPlatformFee: 7.99, grossModeratorOwed: 91.86,
+    redeemedSplitCoins: 2, grossMemberPays: 100, memberPays: 99.85 } });
+  await debitRedeemedSplitCoinsIfAny(payF1, { redeemedSplitCoins: 2 });
+  check("first order's redemption succeeds in full: balance 2 -> 0", balanceOf("buyerFloor") === 0);
+  check("modF/platform each got 1 (half of the 2 redeemed coins)", balanceOf("modF") === 1 && balanceOf(SPLITCOIN_PLATFORM_WALLET) === 1);
+
+  const payF2 = await prisma.payment.create({ data: { pesapalOrderId: "REF-F2", userId: "buyerFloor", moderatorId: "modF",
+    platformFee: 7.99, moderatorOwed: 91.86, grossPlatformFee: 7.99, grossModeratorOwed: 91.86,
+    redeemedSplitCoins: 2, grossMemberPays: 100, memberPays: 99.85 } });
+  await debitRedeemedSplitCoinsIfAny(payF2, { redeemedSplitCoins: 2 });
+  check("second order's redemption is capped at the (now zero) available balance -- never goes negative", balanceOf("buyerFloor") === 0);
+  check("no redeem_buyer row was minted for the second, fully-capped order", db.splitCoinTransactions.some(r => r.sourcePaymentId === "REF-F2" && r.reason === "redeem_buyer") === false);
+  check("modF/platform balances unchanged by the second (capped) order", balanceOf("modF") === 1 && balanceOf(SPLITCOIN_PLATFORM_WALLET) === 1);
+
+  console.log("\n=== 18. Conservation: redemption is a value-neutral reassignment, it doesn't inflate the total coins in circulation ===");
+  resetDb();
+  db.users.buyer18 = { id: "buyer18", referredBy: null };
+  db.payments.push({ id: "pay_prime18", pesapalOrderId: "REF-0i", userId: "buyer18", moderatorId: "mod18", platformFee: 8, moderatorOwed: 92, grossPlatformFee: 8, grossModeratorOwed: 92, memberPays: 100 });
+  db.splitCoinTransactions.push({ id: "sc_seed18", sourcePaymentId: "REF-0i", reason: "purchase_buyer", sourceType: "purchase", recipientId: "buyer18", amount: 4, relatedUserId: null, createdAt: new Date() });
+  const totalBefore18 = db.splitCoinTransactions.reduce((s, r) => s + r.amount, 0);
+  await simulateConfirmedPayment({ reference: "REF-18", userId: "buyer18", moderatorId: "mod18", memberPays: 100, platformFee: 8, kesRate: 130, redeemSplitCoins: true });
+  const totalAfter18 = db.splitCoinTransactions.reduce((s, r) => s + r.amount, 0);
+  check("total coins in circulation only grew by the NEW purchase-tier mint (2 coins), the redemption itself nets to zero (-4 buyer +2 mod +2 platform)",
+    approx(totalAfter18 - totalBefore18, 2, 0.001));
 
   console.log(`\n=== RESULTS: ${pass} passed, ${fail} failed ===`);
   if (fail > 0) {

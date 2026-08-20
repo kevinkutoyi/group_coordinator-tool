@@ -1106,7 +1106,7 @@ app.get("/api/paystack/banks", requireAuth, async (req, res) => {
 });
 
 app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superadmin"), async (req, res) => {
-  const { groupId, memberId } = req.body;
+  const { groupId, memberId, redeemSplitCoins } = req.body;
   if (!groupId || !memberId) return res.status(400).json({ error: "groupId and memberId required" });
 
   const [group, member] = await Promise.all([
@@ -1125,8 +1125,28 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
 
   try {
     const kesRate = await getPlatformKesRate();
+
+    // Redeem-at-checkout: locks in the buyer's ENTIRE current balance (must
+    // be >= SPLITCOIN_REDEEM_MIN) as a same-value KES discount on this
+    // order. Re-validated here server-side even though the checkbox is
+    // already gated client-side, since a client that lies can't be trusted.
+    // The coins themselves aren't debited until the payment actually
+    // confirms (see debitRedeemedSplitCoinsIfAny in confirmOrder) — this
+    // only reserves the discount amount into the order.
+    let redeemedCoins = 0;
+    if (redeemSplitCoins) {
+      const balance = await getSplitCoinsBalance(req.user.id);
+      if (balance < SPLITCOIN_REDEEM_MIN) {
+        return res.status(400).json({ error: `You must have ${SPLITCOIN_REDEEM_MIN} or more SplitCoins to redeem.` });
+      }
+      redeemedCoins = balance;
+    }
+
+    const { memberPays, platformFee, moderatorOwed, grossMemberPays } =
+      computeRedemptionDiscount(member, redeemedCoins, kesRate);
+
     const { authorizationUrl } = await paystack.initializeTransaction({
-      email: user.email, amount: member.memberPays,
+      email: user.email, amount: memberPays,
       reference, callbackUrl, kesRate,
       metadata: { groupId, memberId, groupName: group.serviceName + " " + group.planName, memberName: member.name, months: member.months },
     });
@@ -1136,13 +1156,13 @@ app.post("/api/paystack/initiate", requireRole("customer", "moderator", "superad
         id: reference, reference, groupId, memberId,
         userId: req.user.id, memberName: member.name, memberEmail: user.email,
         months: member.months, baseAmount: member.baseAmount,
-        platformFee: member.platformFee, moderatorOwed: member.moderatorOwed,
-        organizerGets: member.moderatorOwed, moderatorId: group.organizerId,
-        memberPays: member.memberPays, currency: "USD",
+        platformFee, moderatorOwed,
+        organizerGets: moderatorOwed, moderatorId: group.organizerId,
+        memberPays, grossMemberPays, redeemedSplitCoins: redeemedCoins, currency: "USD",
       },
     });
 
-    res.json({ redirectUrl: authorizationUrl, reference, memberPays: member.memberPays });
+    res.json({ redirectUrl: authorizationUrl, reference, memberPays, redeemedSplitCoins: redeemedCoins });
   } catch (err) {
     console.error("Paystack initiate:", err.message);
     res.status(502).json({ error: "Payment gateway error: " + err.message });
@@ -1171,6 +1191,15 @@ const SPLITCOIN_PLATFORM_WALLET = "platform";
 const PURCHASE_COINS_KES       = 20; // repeat purchase
 const FIRST_PURCHASE_COINS_KES = 10; // first-ever purchase, no referral
 const REFERRAL_COINS_KES       = 30; // first-ever purchase, WITH a referral (replaces the purchase reward entirely)
+
+// Redeeming SplitCoins at checkout: a buyer with 2+ coins can check a box to
+// redeem their ENTIRE balance for a same-value KES discount on that
+// purchase (1 coin = KES 10, same fixed rate used everywhere else). The
+// redeemed coins are then reassigned — not destroyed — 50/50 to the group's
+// moderator and the platform (or entirely to the platform if the group is
+// platform-owned), so the discount the buyer receives is effectively funded
+// by the moderator/platform accepting coins instead of the equivalent cash.
+const SPLITCOIN_REDEEM_MIN = 2; // minimum balance required to redeem at all
 
 async function mintSplitCoin(reference, reason, sourceType, recipientId, amount, relatedUserId = null) {
   try {
@@ -1236,6 +1265,44 @@ async function awardReferralSplitCoinsIfEligible(payment, referrerId) {
   await mintSplitCoin(ref, "referral_platform", "referral", SPLITCOIN_PLATFORM_WALLET, 1, payment.userId);
 }
 
+async function getSplitCoinsBalance(recipientId) {
+  const rows = await prisma.splitCoinTransaction.findMany({ where: { recipientId } });
+  return rows.reduce((sum, r) => sum + r.amount, 0);
+}
+
+// Debits a buyer's ledger for coins they chose to redeem at checkout (locked
+// in at initiate-time, see /api/paystack/initiate) and reassigns them 50/50
+// to the group's moderator and the platform. The buyer's KES discount was
+// already applied to order.memberPays before Paystack ever charged the
+// card — this function only moves the COINS, it doesn't touch cash.
+//
+// Re-checks the buyer's CURRENT balance at confirm-time (rather than
+// trusting order.redeemedSplitCoins blindly) and caps the debit at whatever
+// is actually available. This is a deliberate safety net, not the common
+// case: it only matters if the same buyer somehow had two redemption-locked
+// orders confirm around the same time, which would otherwise be able to
+// drive their ledger balance negative. If that happens the buyer still keeps
+// the cash discount they were already given on both orders — only the
+// second redemption's coin reassignment to the moderator/platform shrinks
+// (or disappears) to keep the ledger honest.
+async function debitRedeemedSplitCoinsIfAny(payment, order) {
+  const redeemed = order.redeemedSplitCoins || 0;
+  if (redeemed <= 0) return;
+  const ref = payment.pesapalOrderId;
+  const currentBalance = await getSplitCoinsBalance(payment.userId);
+  const amount = Math.min(redeemed, Math.max(0, currentBalance));
+  if (amount <= 0) return;
+
+  await mintSplitCoin(ref, "redeem_buyer", "redeem", payment.userId, -amount);
+  const ownerId = payment.moderatorId;
+  if (!ownerId || ownerId === "superadmin") {
+    await mintSplitCoin(ref, "redeem_platform", "redeem", SPLITCOIN_PLATFORM_WALLET, amount);
+  } else {
+    await mintSplitCoin(ref, "redeem_moderator", "redeem", ownerId, amount / 2);
+    await mintSplitCoin(ref, "redeem_platform", "redeem", SPLITCOIN_PLATFORM_WALLET, amount / 2);
+  }
+}
+
 // Is the user about to receive their first-ever confirmed Payment, and if
 // so, do they have a referrer? Checked BEFORE the new Payment row is
 // created (see confirmOrder) so a raced duplicate webhook/verify call for
@@ -1289,6 +1356,27 @@ async function getSplitCoinsKesValue(where = {}) {
   return +(rows.reduce((sum, r) => sum + r.amount, 0) * 10).toFixed(2);
 }
 
+// Redeem-at-checkout discount (called at initiate-time, BEFORE Paystack is
+// charged, so the buyer's card is only ever charged the already-discounted
+// amount). `member` is the GroupMember row (baseAmount/platformFee/
+// memberPays as calcFee() computed them). `redeemedCoins` is the buyer's
+// full balance, locked in by the caller (0 if not redeeming). Mirrors
+// computeSplitCoinsSplit's approach of preserving the exact fee ratio
+// against a reduced base rather than re-deriving the platform fee percent.
+function computeRedemptionDiscount(member, redeemedCoins, kesRate) {
+  const grossMemberPays = member.memberPays;
+  if (!(redeemedCoins > 0)) {
+    return { memberPays: grossMemberPays, platformFee: member.platformFee, moderatorOwed: member.moderatorOwed, grossMemberPays };
+  }
+  const rate = kesRate || DEFAULT_KES_PER_USD;
+  const redeemedValueUsd = +((redeemedCoins * 10) / rate).toFixed(4);
+  const memberPays = Math.max(0, +(grossMemberPays - redeemedValueUsd).toFixed(2));
+  const feeRatio   = grossMemberPays > 0 ? member.platformFee / grossMemberPays : 0;
+  const platformFee   = +(memberPays * feeRatio).toFixed(2);
+  const moderatorOwed = +(memberPays - platformFee).toFixed(2);
+  return { memberPays, platformFee, moderatorOwed, grossMemberPays };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Shared order-confirmation logic (used by both verify + IPN)
 async function confirmOrder(reference) {
@@ -1336,6 +1424,7 @@ async function confirmOrder(reference) {
             memberName: order.memberName, months: order.months, amount: order.memberPays,
             platformFee: adjustedPlatformFee, moderatorOwed: adjustedModeratorOwed,
             grossPlatformFee: order.platformFee, grossModeratorOwed: order.moderatorOwed,
+            redeemedSplitCoins: order.redeemedSplitCoins || 0, grossMemberPays: order.grossMemberPays || order.memberPays,
             organizerGets: adjustedModeratorOwed, moderatorId: order.moderatorId,
             method: "paystack", pesapalOrderId: reference, currency: order.currency,
             confirmedAt, payoutStatus: "pending",
@@ -1361,6 +1450,7 @@ async function confirmOrder(reference) {
         // SplitCoins — only ever runs for a confirmed, newly-recorded payment.
         await awardPurchaseSplitCoins(paymentRow, purchaseContext);
         await awardReferralSplitCoinsIfEligible(paymentRow, purchaseContext.referrerId);
+        await debitRedeemedSplitCoinsIfAny(paymentRow, order);
 
         // Emails
         const [grp, mem] = await Promise.all([
