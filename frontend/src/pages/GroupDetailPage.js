@@ -211,12 +211,12 @@ export default function GroupDetailPage({ id, navigate, user }) {
     return (
       <div>
         <label style={{ display:"inline-flex", width:"fit-content", alignItems:"center", gap:6, fontSize:"0.72rem", color:"var(--text)", cursor:"pointer" }}>
+          <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} />
           <span>
             {eligible
               ? `Redeem my ${coinsLabel} SplitCoins for a KES ${(splitCoinsBalance * 10).toLocaleString()} discount`
               : "Redeem my SplitCoins for a discount"}
           </span>
-          <input type="checkbox" checked={redeemSplitCoins} onChange={e => setRedeemSplitCoins(e.target.checked)} />
         </label>
         {redeemSplitCoins && !eligible && (
           <div style={{ fontSize:"0.68rem", color:"var(--error)", marginTop:2 }}>You must have 2 or more SplitCoins to redeem</div>
@@ -691,7 +691,7 @@ export default function GroupDetailPage({ id, navigate, user }) {
                   )}
                 </div>
                 {["pending", "confirmed", "expired"].includes(myMember.paymentStatus) && (
-                  <div style={{ padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
+                  <div style={{ display:"flex", justifyContent:"flex-end", padding: "8px 16px 0" }}>{renderRedeemCoins()}</div>
                 )}
                 </>
               ) : !session.isLoggedIn() ? (
